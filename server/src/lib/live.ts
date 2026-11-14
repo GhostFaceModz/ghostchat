@@ -14,6 +14,10 @@ export type LiveSettings = {
   misses: number;
   status: "online" | "away";
   agent_name: string | null;
+  /** Minutes a handoff may wait for someone to claim/answer before falling back. */
+  claim_timeout_min: number;
+  /** What happens when nobody joins in time: the AI carries on, or the visitor gets the email form. */
+  timeout_fallback: "ai" | "form";
 };
 export type LiveStatus = "waiting" | "human" | "bot" | "closed";
 export type Conversation = {
@@ -21,6 +25,8 @@ export type Conversation = {
   reason: string | null; agent_name: string | null; page_url: string | null;
   telegram_chat_id: string | null; telegram_thread_id: number | null; discord_thread_id: string | null;
   last_visitor_at: string | null; last_agent_at: string | null; created_at: string; updated_at: string;
+  discord_channel_id?: string | null; discord_message_id?: string | null;
+  claimed_by_id?: string | null; claimed_by_name?: string | null; claimed_at?: string | null; waiting_since?: string | null;
 };
 
 export const LIVE_PLANS = new Set(["pro", "business"]);
@@ -34,7 +40,16 @@ export function liveSettings(site: Pick<Site, "live_chat">): LiveSettings {
     misses: Math.min(5, Math.max(1, Math.round(Number(raw.misses) || 2))),
     status: raw.status === "away" ? "away" : "online",
     agent_name: typeof raw.agent_name === "string" && raw.agent_name.trim() ? raw.agent_name.trim().slice(0, 40) : null,
+    claim_timeout_min: Math.min(30, Math.max(1, Math.round(Number(raw.claim_timeout_min) || 5))),
+    timeout_fallback: raw.timeout_fallback === "form" ? "form" : "ai",
   };
+}
+
+/** Has a waiting handoff run out of time? (nobody claimed or replied) */
+export function handoffTimedOut(conv: Pick<Conversation, "status" | "waiting_since" | "updated_at" | "last_agent_at">, settings: Pick<LiveSettings, "claim_timeout_min">, now = Date.now()): boolean {
+  if (conv.status !== "waiting") return false;
+  const since = Date.parse(conv.waiting_since || conv.updated_at);
+  return Number.isFinite(since) && now - since > settings.claim_timeout_min * 60_000;
 }
 
 export function normalizeLiveSettings(input: unknown, current: LiveSettings): LiveSettings {
@@ -46,6 +61,8 @@ export function normalizeLiveSettings(input: unknown, current: LiveSettings): Li
       misses: b.misses ?? current.misses,
       status: b.status ?? current.status,
       agent_name: typeof b.agent_name === "string" ? b.agent_name : current.agent_name,
+      claim_timeout_min: b.claim_timeout_min ?? current.claim_timeout_min,
+      timeout_fallback: b.timeout_fallback ?? current.timeout_fallback,
     },
   } as never);
 }

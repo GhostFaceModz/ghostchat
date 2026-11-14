@@ -94,9 +94,9 @@ export async function announceHandoff(site: Site, conv: Conversation, recent: Ar
       } else if (ch.kind === "discord" && discordReady()) {
         const channelId = String(ch.config.channel_id || "");
         if (!channelId) continue;
-        const thread = await discord<{ id: string }>("POST", `/channels/${channelId}/threads`, { name: clip(`💬 ${site.name} · ${conv.session_id.slice(-6)}`, 95), type: 11, auto_archive_duration: 1440 });
-        await discord("POST", `/channels/${thread.id}/messages`, { content: clip(`🔔 **Live chat on ${site.name}** (${why})\n${lines.join("\n")}\n\nReply in this thread to answer the visitor. Type \`!back\` to hand the chat back to the AI.`, 1900), allowed_mentions: { parse: [] } });
-        await updateConversation(conv.id, { discord_thread_id: thread.id });
+        // Claimable ticket: an embed with a Claim button; the thread opens when someone claims it.
+        const { postClaimMessage } = await import("./discordClaim.js");
+        await postClaimMessage(site, conv, channelId);
         delivered.push("discord");
       }
     } catch (err) {

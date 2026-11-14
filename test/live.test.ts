@@ -12,7 +12,7 @@ const pro = (live_chat: Record<string, unknown>) => ({ plan: "pro" as const, liv
 
 test("live settings normalise and default safely", () => {
   const s = live.liveSettings({ live_chat: { enabled: true, trigger: "weird", misses: 99, status: "x", agent_name: "  Zane  " } } as never);
-  assert.deepEqual(s, { enabled: true, trigger: "ask_or_misses", misses: 5, status: "online", agent_name: "Zane" });
+  assert.deepEqual(s, { enabled: true, trigger: "ask_or_misses", misses: 5, status: "online", agent_name: "Zane", claim_timeout_min: 5, timeout_fallback: "ai" });
   assert.equal(live.liveSettings({ live_chat: null } as never).enabled, false);
   const next = live.normalizeLiveSettings({ status: "away" }, s);
   assert.equal(next.status, "away");

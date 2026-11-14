@@ -28,14 +28,14 @@ export async function startHandoff(site: Site, sessionId: string, reason: "asked
   if (existing) {
     const fresh = existing.status === "bot" || existing.status === "closed";
     const patch: Partial<Conversation> = { status: fresh ? status : existing.status === "waiting" && reason === "manual" ? "human" : existing.status, reason, agent_name: agent, page_url: pageUrl ?? existing.page_url };
-    if (fresh) Object.assign(patch, { telegram_chat_id: null, telegram_thread_id: null, discord_thread_id: null });
+    if (fresh) Object.assign(patch, { telegram_chat_id: null, telegram_thread_id: null, discord_thread_id: null, discord_channel_id: null, discord_message_id: null, claimed_by_id: null, claimed_by_name: null, claimed_at: null, waiting_since: new Date().toISOString(), last_agent_at: null });
     await updateConversation(existing.id, patch);
     conv = { ...existing, ...patch } as Conversation;
     if (!fresh) return conv;
   } else {
     const { data, error } = await getDb().from("ghostchat_live_conversations").insert({
       site_id: site.id, owner_id: site.owner_id, session_id: sessionId, status, reason, agent_name: agent, page_url: pageUrl ?? null,
-      last_visitor_at: new Date().toISOString(),
+      last_visitor_at: new Date().toISOString(), waiting_since: new Date().toISOString(),
     }).select("*").single();
     if (error) {
       // a concurrent insert won the unique (site_id, session_id) race
@@ -62,6 +62,12 @@ export async function agentReply(conv: Conversation, text: string, via: "dashboa
   const site = await loadSite(conv.site_id);
   if (!site) return null;
   const agent = name || conv.agent_name || (await agentNameFor(site));
+  if (conv.status === "waiting") {
+    await addLog({ site_id: site.id, session_id: conv.session_id, role: "system", message: `${agent} joined the chat` });
+    if (conv.discord_message_id && !conv.claimed_by_id && via !== "discord") {
+      import("./discordClaim.js").then((m) => m.editClaimMessage({ ...conv, status: "human" }, "claimed", null)).catch(() => {});
+    }
+  }
   const id = await addLog({ site_id: site.id, session_id: conv.session_id, role: "agent", message: text.slice(0, 4000), agent_name: agent });
   await updateConversation(conv.id, { status: "human", agent_name: agent, last_agent_at: new Date().toISOString() });
   if (via === "dashboard") echoToChannels(conv, `🧑 ${agent} (dashboard): ${text}`).catch(() => {});
