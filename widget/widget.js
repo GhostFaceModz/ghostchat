@@ -23,6 +23,8 @@
     return window.location.origin;
   })();
 
+  var DEFAULT_PRIMARY = "#8b5cf6"; // premium violet; ring blends it towards electric cyan with a gold glint
+  var LEGACY_PRIMARY = "#a78bfa"; // the old default stored on older sites: treat it as "not customised"
   var attr = function (name, fallback) {
     var v = script && script.getAttribute(name);
     return v == null || v === "" ? fallback : v;
@@ -33,7 +35,7 @@
     sound: attr("data-sound", "") === "true",
     themeMode: attr("data-theme", "dark"),
     voiceAttr: attr("data-voice", ""),
-    primary: attr("data-primary", "#a78bfa"),
+    primary: attr("data-primary", DEFAULT_PRIMARY),
     greeting: attr("data-greeting", ""),
     delay: parseInt(attr("data-delay", ""), 10),
     name: "GhostChat",
@@ -108,29 +110,47 @@
   var css = [
     ":host, .gc-root { all: initial; }",
     ".gc-root { font-family: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif; color: var(--gc-text); }",
-    ".gc-root { --gc-primary: #a78bfa; --gc-bg: rgba(16,10,28,.78); --gc-text: #f5f3ff; --gc-muted: #c4b5fd; --gc-line: rgba(196,181,253,.18); --gc-user: #2a1848; --gc-bubble: #110818; --gc-panel: rgba(12,8,20,.78); }",
+    ".gc-root { --gc-primary: #8b5cf6; --gc-bg: rgba(16,10,28,.78); --gc-text: #f5f3ff; --gc-muted: #c4b5fd; --gc-line: rgba(196,181,253,.18); --gc-user: #2a1848; --gc-bubble: #110818; --gc-panel: rgba(12,8,20,.78); }",
     ".gc-root[data-mode='light'] { --gc-bg: rgba(255,255,255,.86); --gc-text: #1e1133; --gc-muted: #6b528c; --gc-line: rgba(88,40,140,.14); --gc-user: #efe7ff; --gc-bubble: #f7f2ff; --gc-panel: rgba(255,255,255,.8); }",
     ".gc-root { --gc-size: 52px; --gc-ease: cubic-bezier(.2,.8,.2,1); --gc-spring: cubic-bezier(.34,1.4,.5,1); }",
     "@media (max-width: 600px) { .gc-root { --gc-size: 48px; } }",
     ".gc-root svg { display: block; }",
     ".gc-root button:focus-visible, .gc-root a:focus-visible, .gc-root textarea:focus-visible, .gc-root input:focus-visible { outline: 2px solid var(--gc-primary); outline-offset: 2px; }",
-    ".gc-launcher { position: fixed; right: var(--gc-offset-right, 22px); bottom: var(--gc-offset-bottom, 22px); z-index: var(--gc-z, 2147483000); width: var(--gc-size); height: var(--gc-size); padding: 0; border: 0; border-radius: 50%; cursor: pointer; color: #fff; background: radial-gradient(120% 120% at 30% 15%, color-mix(in srgb, var(--gc-primary) 92%, #fff) 0%, var(--gc-primary) 38%, var(--gc-accent, #7c3aed) 100%); box-shadow: 0 10px 24px -6px color-mix(in srgb, var(--gc-accent, #7c3aed) 55%, transparent), 0 2px 6px rgba(8,4,20,.35), inset 0 1px 0 rgba(255,255,255,.35), inset 0 -2px 6px rgba(0,0,0,.18); display: grid; place-items: center; -webkit-tap-highlight-color: transparent; transition: transform .28s var(--gc-spring), box-shadow .28s var(--gc-ease); isolation: isolate; }",
-    ".gc-launcher::before { content: ''; position: absolute; inset: 1px; border-radius: inherit; background: linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,0) 52%); pointer-events: none; }",
-    ".gc-launcher::after { content: ''; position: absolute; inset: -6px; border-radius: inherit; z-index: -1; background: radial-gradient(closest-side, color-mix(in srgb, var(--gc-primary) 45%, transparent), transparent); filter: blur(6px); opacity: .55; animation: gc-breathe 3.6s ease-in-out infinite; pointer-events: none; }",
-    ".gc-launcher:hover { transform: translateY(-2px) scale(1.05); box-shadow: 0 16px 32px -8px color-mix(in srgb, var(--gc-accent, #7c3aed) 65%, transparent), 0 3px 8px rgba(8,4,20,.35), inset 0 1px 0 rgba(255,255,255,.4), inset 0 -2px 6px rgba(0,0,0,.18); }",
+    ".gc-root { --gc-cyan: #22d3ee; --gc-gold: #fbbf24; --gc-ring-a: var(--gc-primary); --gc-ring-b: color-mix(in srgb, var(--gc-primary) 30%, var(--gc-cyan)); --gc-core: #0d0820; }",
+    ".gc-launcher { position: fixed; right: var(--gc-offset-right, 22px); bottom: var(--gc-offset-bottom, 22px); z-index: var(--gc-z, 2147483000); width: var(--gc-size); height: var(--gc-size); padding: 0; border: 0; border-radius: 50%; cursor: pointer; color: #fff; background: transparent; display: grid; place-items: center; -webkit-tap-highlight-color: transparent; isolation: isolate; box-shadow: 0 10px 26px -8px color-mix(in srgb, var(--gc-ring-a) 70%, transparent), 0 3px 8px rgba(6,3,16,.45); transition: transform .3s var(--gc-spring), box-shadow .3s var(--gc-ease); animation: gc-float 4.8s ease-in-out infinite; }",
+    ".gc-ring { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; pointer-events: none; }",
+    ".gc-ring::before { content: ''; position: absolute; inset: -30%; background: conic-gradient(from 0deg, var(--gc-ring-a), var(--gc-ring-b) 28%, var(--gc-gold) 36%, var(--gc-ring-b) 44%, var(--gc-ring-a) 62%, color-mix(in srgb, var(--gc-ring-a) 55%, #fff) 80%, var(--gc-ring-a)); animation: gc-spin 7s linear infinite; }",
+    ".gc-core { position: absolute; inset: 2.5px; border-radius: 50%; overflow: hidden; background: radial-gradient(90% 90% at 35% 25%, color-mix(in srgb, var(--gc-ring-a) 38%, var(--gc-core)) 0%, var(--gc-core) 70%); box-shadow: inset 0 1px 0 rgba(255,255,255,.18), inset 0 -6px 12px rgba(0,0,0,.45); }",
+    ".gc-core::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(160deg, rgba(255,255,255,.22), rgba(255,255,255,0) 45%); pointer-events: none; }",
+    ".gc-launcher::after { content: ''; position: absolute; inset: -7px; border-radius: 50%; z-index: -1; background: radial-gradient(closest-side, color-mix(in srgb, var(--gc-ring-b) 55%, transparent), color-mix(in srgb, var(--gc-ring-a) 25%, transparent) 60%, transparent); filter: blur(5px); opacity: .55; animation: gc-breathe 3.6s ease-in-out infinite; pointer-events: none; }",
+    ".gc-launcher:hover { transform: translateY(-3px) scale(1.06); box-shadow: 0 16px 34px -8px color-mix(in srgb, var(--gc-ring-b) 70%, transparent), 0 4px 10px rgba(6,3,16,.45); animation-play-state: paused; }",
+    ".gc-launcher:hover::after { opacity: .95; }",
+    ".gc-launcher:hover .gc-ring::before { animation-duration: 2.4s; }",
     ".gc-launcher:active { transform: scale(.92); transition-duration: .12s; }",
-    ".gc-launcher .gc-li { position: absolute; inset: 0; display: grid; place-items: center; transition: transform .38s var(--gc-spring), opacity .22s var(--gc-ease); }",
+    ".gc-launcher .gc-li { position: absolute; inset: 0; display: grid; place-items: center; transition: transform .42s var(--gc-spring), opacity .24s var(--gc-ease); }",
+    ".gc-launcher .gc-li img { width: 74%; height: 74%; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(10,4,30,.55)); animation: gc-bob 3.6s ease-in-out infinite; user-select: none; -webkit-user-drag: none; }",
     ".gc-launcher .gc-li svg { width: 50%; height: 50%; filter: drop-shadow(0 1px 1.5px rgba(20,8,40,.35)); }",
+    ".gc-launcher .gc-li-ghost svg { display: none; animation: gc-bob 3.6s ease-in-out infinite; }",
+    ".gc-launcher[data-img='off'] .gc-li-ghost svg { display: block; } .gc-launcher[data-img='off'] .gc-li-ghost img { display: none; }",
     ".gc-launcher .gc-li-close svg { width: 38%; height: 38%; }",
-    ".gc-li-close { opacity: 0; transform: rotate(-90deg) scale(.5); }",
-    ".gc-root[data-open='true'] .gc-li-ghost { opacity: 0; transform: rotate(90deg) scale(.5); }",
+    ".gc-li-close { opacity: 0; transform: rotate(-135deg) scale(.4); }",
+    ".gc-root[data-open='true'] .gc-li-ghost { opacity: 0; transform: rotate(135deg) scale(.4); }",
     ".gc-root[data-open='true'] .gc-li-close { opacity: 1; transform: none; }",
+    ".gc-root[data-open='true'] .gc-launcher { animation: none; }",
     ".gc-root[data-open='true'] .gc-launcher::after { animation: none; opacity: .3; }",
-    ".gc-li-ghost svg { animation: gc-bob 3.6s ease-in-out infinite; }",
-    ".gc-root[data-thinking='true'] .gc-li-ghost svg { animation: gc-bob .9s ease-in-out infinite; }",
-    ".gc-dot { position: absolute; top: 1px; right: 1px; width: 11px; height: 11px; border-radius: 50%; background: #ff4d6d; box-shadow: 0 0 0 2px #fff, 0 2px 6px rgba(255,77,109,.6); transform: scale(0); transition: transform .3s var(--gc-spring); pointer-events: none; }",
+    ".gc-root[data-open='true'] .gc-ring::before { animation-duration: 16s; }",
+    ".gc-root[data-thinking='true'] .gc-li-ghost img, .gc-root[data-thinking='true'] .gc-li-ghost svg { animation: gc-bob .9s ease-in-out infinite; }",
+    ".gc-root[data-thinking='true'] .gc-ring::before { animation-duration: 1.6s; }",
+    ".gc-launcher.gc-hello { animation: gc-hello .9s var(--gc-ease) 1, gc-float 4.8s ease-in-out .9s infinite; }",
+    ".gc-dot { position: absolute; top: 0; right: 0; width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ff8fa3, #f43f5e 60%); box-shadow: 0 0 0 2px var(--gc-core), 0 2px 6px rgba(244,63,94,.6); transform: scale(0); transition: transform .3s var(--gc-spring); pointer-events: none; z-index: 2; }",
+    ".gc-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: #f43f5e; opacity: 0; }",
     ".gc-root[data-unread='true'] .gc-dot { transform: scale(1); }",
+    ".gc-root[data-unread='true'] .gc-dot::after { animation: gc-ping 1.8s cubic-bezier(0,0,.2,1) infinite; }",
     ".gc-root[data-open='true'] .gc-dot { transform: scale(0); }",
+    "@keyframes gc-spin { to { transform: rotate(360deg); } }",
+    "@keyframes gc-float { 0%,100% { translate: 0 0; } 50% { translate: 0 -2px; } }",
+    "@keyframes gc-hello { 0% { rotate: 0deg; scale: 1; } 15% { rotate: -14deg; scale: 1.08; } 30% { rotate: 11deg; } 45% { rotate: -8deg; } 60% { rotate: 5deg; } 75% { rotate: -2deg; } 100% { rotate: 0deg; scale: 1; } }",
+    "@keyframes gc-ping { 0% { transform: scale(1); opacity: .7; } 80%,100% { transform: scale(2.4); opacity: 0; } }",
     "@keyframes gc-breathe { 0%,100% { transform: scale(.92); opacity: .35; } 50% { transform: scale(1.08); opacity: .7; } }",
     "@keyframes gc-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }",
     "@keyframes gc-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }",
@@ -139,6 +159,8 @@
     ".gc-head { display: flex; align-items: center; gap: 10px; padding: 12px 10px 12px 14px; border-bottom: 1px solid var(--gc-line); background: linear-gradient(180deg, color-mix(in srgb, var(--gc-primary) 10%, transparent), transparent); }",
     ".gc-avatar { position: relative; flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: radial-gradient(120% 120% at 30% 15%, color-mix(in srgb, var(--gc-primary) 90%, #fff), var(--gc-primary) 40%, var(--gc-accent, #7c3aed)); box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 4px 12px -4px color-mix(in srgb, var(--gc-accent, #7c3aed) 60%, transparent); }",
     ".gc-avatar svg { width: 18px; height: 18px; }",
+    ".gc-avatar { background: radial-gradient(90% 90% at 35% 25%, color-mix(in srgb, var(--gc-ring-a) 38%, var(--gc-core)), var(--gc-core) 70%) padding-box, conic-gradient(from 210deg, var(--gc-ring-a), var(--gc-ring-b), var(--gc-gold), var(--gc-ring-b), var(--gc-ring-a)) border-box; border: 2px solid transparent; }",
+    ".gc-avatar img { width: 78%; height: 78%; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(10,4,30,.5)); }",
     ".gc-avatar::after { content: ''; position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 2px var(--gc-bubble); }",
     ".gc-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }",
     ".gc-head h2 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -.02em; color: var(--gc-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
@@ -266,7 +288,7 @@
 
   var launcher = el("button", {
     class: "gc-launcher", type: "button", "aria-label": "Open chat", "aria-expanded": "false",
-    html: '<span class="gc-li gc-li-ghost">' + ICONS.ghost + '</span><span class="gc-li gc-li-close">' + ICONS.close + '</span><span class="gc-dot"></span>'
+    html: '<span class="gc-ring"></span><span class="gc-core"></span><span class="gc-li gc-li-ghost"><img alt="" width="64" height="64" decoding="async" src="' + API_BASE + '/img/ghostchat-mascot.webp">' + ICONS.ghost + '</span><span class="gc-li gc-li-close">' + ICONS.close + '</span><span class="gc-dot"></span>'
   });
   var panel = el("div", { class: "gc-panel", role: "dialog", "aria-label": "Chat" });
   var title = el("h2", { text: state.name });
@@ -274,7 +296,9 @@
   var voiceBtn = el("button", { class: "gc-iconbtn", type: "button", title: "Read replies aloud", "aria-label": "Read replies aloud", "aria-pressed": "false", html: ICONS.speaker, hidden: "hidden" });
   var micBtn = el("button", { class: "gc-iconbtn", type: "button", title: "Speak", "aria-label": "Ask by voice", html: ICONS.mic, hidden: "hidden" });
   var closeBtn = el("button", { class: "gc-iconbtn", type: "button", title: "Minimise", "aria-label": "Minimise chat", html: ICONS.minimize });
-  var avatar = el("div", { class: "gc-avatar", html: ICONS.ghost });
+  var MASCOT = API_BASE + "/img/ghostchat-mascot.webp";
+  function botAvatarHtml() { return '<img alt="" width="34" height="34" decoding="async" src="' + MASCOT + '">'; }
+  var avatar = el("div", { class: "gc-avatar", html: botAvatarHtml() });
   var sub = el("span", { class: "gc-sub", text: "AI assistant · Online" });
   var head = el("div", { class: "gc-head" }, [
     avatar,
@@ -317,6 +341,16 @@
   shadow.appendChild(el("style", { text: css }));
   shadow.appendChild(root);
   document.documentElement.appendChild(host);
+
+  var launcherImg = launcher.querySelector("img");
+  if (launcherImg) launcherImg.addEventListener("error", function () { launcher.setAttribute("data-img", "off"); });
+  avatar.addEventListener("error", function (ev) { if (ev.target && ev.target.tagName === "IMG") avatar.innerHTML = ICONS.ghost; }, true);
+  // One gentle "hello" wiggle shortly after load (skipped automatically under prefers-reduced-motion).
+  setTimeout(function () {
+    if (state.open) return;
+    launcher.classList.add("gc-hello");
+    setTimeout(function () { launcher.classList.remove("gc-hello"); }, 1000);
+  }, 1400);
 
   function setUnread(on) {
     state.unread = !!on;
@@ -546,7 +580,7 @@
   function setLiveUi() {
     var on = live.status === "human" || live.status === "waiting";
     root.setAttribute("data-live", live.status === "human" ? "true" : live.status === "waiting" ? "waiting" : "false");
-    avatar.innerHTML = on ? ICONS.person : ICONS.ghost;
+    avatar.innerHTML = on ? ICONS.person : botAvatarHtml();
     sub.textContent = live.status === "human" ? "You're chatting with " + (live.agent || "the team")
       : live.status === "waiting" ? "Connecting you to " + (live.agent || "the team") + "…"
       : "AI assistant · Online";
@@ -780,7 +814,7 @@
     if (typeof cfg.soundDefault === "boolean" && localStorage.getItem("gc_sound_" + SITE_KEY) == null) state.sound = cfg.soundDefault;
     if (cfg.theme) {
       if (cfg.theme.mode) state.themeMode = cfg.theme.mode;
-      if (cfg.theme.primary) state.primary = cfg.theme.primary;
+      if (cfg.theme.primary && String(cfg.theme.primary).toLowerCase() !== LEGACY_PRIMARY) state.primary = cfg.theme.primary;
       if (cfg.theme.accent && /^#[0-9a-f]{3,8}$/i.test(cfg.theme.accent)) root.style.setProperty("--gc-accent", cfg.theme.accent);
     }
     if (typeof cfg.showBranding === "boolean") state.showBranding = cfg.showBranding;
