@@ -184,6 +184,28 @@
     ".gc-bubble code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: rgba(0,0,0,.25); padding: 1px 5px; border-radius: 6px; }",
     ".gc-code { margin: 8px 0 0; padding: 10px; overflow: auto; border-radius: 12px; background: #0b0612; color: #f5f3ff; font-size: 12px; }",
     ".gc-root[data-mode='light'] .gc-code { background: #1e1133; }",
+    ".gc-row.has-results { max-width: 100%; width: 100%; }",
+    ".gc-recs { position: relative; width: 100%; }",
+    ".gc-rail { display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding: 0 2px; padding: 2px 2px 6px; -webkit-overflow-scrolling: touch; scrollbar-width: none; outline: none; }",
+    ".gc-rail::-webkit-scrollbar { display: none; }",
+    ".gc-rail:focus-visible { box-shadow: 0 0 0 2px var(--gc-primary); border-radius: 14px; }",
+    ".gc-rc { flex: none; width: 142px; scroll-snap-align: start; display: flex; flex-direction: column; border: 1px solid var(--gc-line); border-radius: 14px; overflow: hidden; background: var(--gc-bubble); contain: layout paint; }",
+    ".gc-rc-img { position: relative; aspect-ratio: 2 / 3; background: linear-gradient(135deg, color-mix(in srgb, var(--gc-primary) 22%, transparent), transparent); overflow: hidden; }",
+    ".gc-rc-img img { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .35s var(--gc-ease); }",
+    ".gc-rc-img img.ok { opacity: 1; }",
+    ".gc-rc-img .gc-rc-ph { position: absolute; inset: 0; display: grid; place-items: center; padding: 10px; text-align: center; font-size: 12px; font-weight: 650; color: var(--gc-muted); }",
+    ".gc-rc-rate { position: absolute; z-index: 2; top: 6px; left: 6px; padding: 2px 6px; border-radius: 999px; background: rgba(8,4,16,.72); color: #fde68a; font-size: 11px; font-weight: 700; }",
+    ".gc-rc-b { display: flex; flex-direction: column; gap: 3px; padding: 8px 9px 9px; flex: 1; }",
+    ".gc-rc-t { font-size: 13px; font-weight: 650; color: var(--gc-text); line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }",
+    ".gc-rc-m { font-size: 11px; color: var(--gc-muted); }",
+    ".gc-rc-w { font-size: 11.5px; color: var(--gc-muted); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }",
+    ".gc-rc-cta { margin-top: 6px; display: block; text-align: center; border-radius: 9px; padding: 6px 6px; background: var(--gc-primary); color: #160b27; font-size: 11.5px; font-weight: 700; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: transform .18s var(--gc-spring), opacity .18s; }",
+    ".gc-rc-cta:hover { opacity: .92; } .gc-rc-cta:active { transform: scale(.96); }",
+    ".gc-rc-cta:focus-visible { outline: 2px solid var(--gc-text); outline-offset: 2px; }",
+    ".gc-rnav { position: absolute; top: 34%; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--gc-line); background: var(--gc-bubble); color: var(--gc-text); display: grid; place-items: center; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .18s; }",
+    ".gc-rnav svg { width: 14px; height: 14px; }",
+    ".gc-rnav.prev { left: -4px; } .gc-rnav.next { right: -4px; }",
+    "@media (hover: hover) { .gc-recs:hover .gc-rnav.on, .gc-rnav.on:focus-visible { opacity: 1; pointer-events: auto; } }",
     ".gc-sources, .gc-suggest, .gc-actions { display: flex; flex-wrap: wrap; gap: 6px; }",
     ".gc-chip, .gc-src { border: 1px solid var(--gc-line); background: transparent; color: var(--gc-muted); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12px; line-height: 1.35; cursor: pointer; text-decoration: none; transition: border-color .18s, color .18s, background .18s; }",
     ".gc-sources { width: 100%; }",
@@ -263,6 +285,8 @@
   // The GhostChat mark: a soft ghost with a scalloped hem and cut-out eyes (evenodd).
   var GHOST_PATH = "M12 2.6c-4.3 0-7.4 3.2-7.4 7.5v9.6c0 .9 1 1.4 1.7.8l1.5-1.2 1.6 1.4c.5.4 1.2.4 1.7 0L12 19.3l1.9 1.4c.5.4 1.2.4 1.7 0l1.6-1.4 1.5 1.2c.7.6 1.7.1 1.7-.8v-9.6c0-4.3-3.1-7.5-7.4-7.5ZM9.3 9.4a1.35 1.6 0 1 0 0 3.2 1.35 1.6 0 0 0 0-3.2Zm5.4 0a1.35 1.6 0 1 0 0 3.2 1.35 1.6 0 0 0 0-3.2Z";
   var ICONS = {
+    prev: icon('<path d="M15 5l-7 7 7 7"/>'),
+    next: icon('<path d="M9 5l7 7-7 7"/>'),
     ghost: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d="' + GHOST_PATH + '"/></svg>',
     send: icon('<path d="M4.5 12h11"/><path d="M4.2 4.6 20 12 4.2 19.4c-.5.2-1-.3-.8-.8L6.1 12 3.4 5.4c-.2-.5.3-1 .8-.8Z"/>'),
     close: icon('<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>'),
@@ -482,6 +506,57 @@
     scrollDown();
   }
 
+
+  // Recommendation cards from the site's search tool: a swipeable, lazy-loaded rail.
+  function addResults(row, results) {
+    if (!results || !results.length) return;
+    row.classList.add("has-results");
+    var box = el("div", { class: "gc-recs", role: "region", "aria-label": "Recommendations" });
+    var rail = el("div", { class: "gc-rail", role: "list", tabindex: "0", "aria-label": results.length + " recommendations. Use the arrow keys to scroll." });
+    results.slice(0, 8).forEach(function (r, i) {
+      var url = /^https?:\/\//i.test(r.url || "") ? r.url : null;
+      if (!url || !r.title) return;
+      var card = el("div", { class: "gc-rc", role: "listitem", "aria-label": (i + 1) + " of " + results.length + ": " + r.title });
+      var media = el("div", { class: "gc-rc-img" });
+      media.appendChild(el("span", { class: "gc-rc-ph", text: r.title, "aria-hidden": "true" }));
+      if (r.image && /^https?:\/\//i.test(r.image)) {
+        var img = el("img", { alt: "", loading: "lazy", decoding: "async", width: "142", height: "213", referrerpolicy: "no-referrer" });
+        img.addEventListener("load", function () { img.classList.add("ok"); var ph = media.querySelector(".gc-rc-ph"); if (ph) ph.style.visibility = "hidden"; });
+        img.addEventListener("error", function () { img.remove(); });
+        img.src = r.image;
+        media.appendChild(img);
+      }
+      if (r.rating) media.appendChild(el("span", { class: "gc-rc-rate", text: "\u2605 " + r.rating, "aria-label": "Rated " + r.rating }));
+      card.appendChild(media);
+      var b = el("div", { class: "gc-rc-b" });
+      b.appendChild(el("div", { class: "gc-rc-t", text: r.title }));
+      var meta = [r.year, r.subtitle].filter(Boolean).join(" \u00b7 ");
+      if (meta) b.appendChild(el("div", { class: "gc-rc-m", text: meta }));
+      if (r.why) b.appendChild(el("div", { class: "gc-rc-w", text: r.why }));
+      b.appendChild(el("a", { class: "gc-rc-cta", href: url, text: r.cta || "Open", "aria-label": (r.cta || "Open") + ": " + r.title }));
+      card.appendChild(b);
+      rail.appendChild(card);
+    });
+    if (!rail.firstChild) return;
+    var prev = el("button", { class: "gc-rnav prev", type: "button", "aria-label": "Previous", html: ICONS.prev });
+    var next = el("button", { class: "gc-rnav next", type: "button", "aria-label": "Next", html: ICONS.next });
+    function step(dir) { rail.scrollBy({ left: dir * (rail.clientWidth - 40), behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }
+    function sync() {
+      prev.classList.toggle("on", rail.scrollLeft > 4);
+      next.classList.toggle("on", rail.scrollLeft + rail.clientWidth < rail.scrollWidth - 4);
+    }
+    prev.addEventListener("click", function () { step(-1); });
+    next.addEventListener("click", function () { step(1); });
+    rail.addEventListener("scroll", function () { requestAnimationFrame(sync); }, { passive: true });
+    rail.addEventListener("keydown", function (ev) {
+      if (ev.target !== rail) return;
+      if (ev.key === "ArrowRight") { ev.preventDefault(); step(1); }
+      if (ev.key === "ArrowLeft") { ev.preventDefault(); step(-1); }
+    });
+    box.appendChild(rail); box.appendChild(prev); box.appendChild(next);
+    row.appendChild(box);
+    setTimeout(sync, 60);
+  }
 
   function addCards(row, cards) {
     if (!cards || !cards.length) return;
@@ -772,6 +847,7 @@
         acc = ev.answer;
         bubble.innerHTML = renderMarkdown(acc);
       }
+      if (ev && ev.results) addResults(row, ev.results);
       if (ev && ev.sources) addSources(row, ev.sources);
       if (ev && ev.suggestions) addSuggestions(ev.suggestions);
       if (ev && ev.cards) addCards(row, ev.cards);

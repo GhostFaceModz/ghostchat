@@ -239,6 +239,7 @@
         <nav class="tabs" id="tabs">
           <button type="button" data-tab="setup" class="on">Setup</button>
           <button type="button" data-tab="train">Train</button>
+          <button type="button" data-tab="tools">Search tools</button>
           <button type="button" data-tab="persona">Persona</button>
           <button type="button" data-tab="appearance">Appearance</button>
           <button type="button" data-tab="model">Model</button>
@@ -298,7 +299,32 @@
             <button type="submit" class="btn">Import from Notion</button>
             <p class="muted tiny">Share the Notion page with the GhostChat integration first, then paste its link.</p>
           </form>
+          <details class="scope" id="crawl-scope">
+            <summary>Crawl scope (optional)</summary>
+            <form id="scope-form" class="stack">
+              <label>Sitemap URL <input name="sitemap_url" placeholder="/sitemap.xml or https://yoursite.com/sitemap-titles.xml" /></label>
+              <small class="muted">With a sitemap set, only the pages it lists are crawled (no link following).</small>
+              <div class="row two">
+                <label>Only these paths (one per line) <textarea name="include" rows="3" placeholder="/title/&#10;/help/"></textarea></label>
+                <label>Skip these paths <textarea name="exclude" rows="3" placeholder="/account&#10;/admin"></textarea></label>
+              </div>
+              <label class="check"><input type="checkbox" name="page_chunks" /> One chunk per page (title + URL + page summary). Best for catalogues: each answer links its own page.</label>
+              <button type="submit" class="btn">Save scope</button>
+            </form>
+          </details>
           <div id="doc-list" class="list"></div>
+        </section>
+
+        <section class="panel glass hidden" data-panel="tools">
+          <h3>Site search tools</h3>
+          <p class="muted">Connect a JSON search endpoint or a catalogue feed. When a visitor asks for recommendations or looks for something specific, the bot searches it and shows the results as cards with links to your pages. It only ever shows items your tool returns.</p>
+          <div id="tool-list" class="stack"></div>
+          <div class="row">
+            <button type="button" class="btn" id="tool-add-json">+ JSON search endpoint</button>
+            <button type="button" class="btn" id="tool-add-feed">+ Catalogue feed</button>
+            <button type="button" class="btn primary" id="tool-save">Save tools</button>
+          </div>
+          <p class="muted tiny">URL placeholders: <code>{query}</code> <code>{genre}</code> <code>{mood}</code> <code>{year_from}</code> <code>{year_to}</code> <code>{similar_to}</code> <code>{type}</code> <code>{language}</code> <code>{actors}</code>. Empty ones are dropped from the query string. Fields use dot paths, e.g. <code>poster.url</code>.</p>
         </section>
 
         <section class="panel glass hidden" data-panel="persona">
@@ -514,5 +540,6 @@
   <div id="toast" role="status" hidden></div>
   <script src="/dashboard/app.js"></script>
   <script src="/dashboard/live.js"></script>
+  <script src="/dashboard/tools.js"></script>
 </body>
 </html>

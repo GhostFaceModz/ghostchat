@@ -191,6 +191,7 @@ async function selectSite(id) {
   if (state.tab === "transcripts") loadLogs();
   if (state.tab === "analytics") loadAnalytics();
   if (state.tab === "live" && window.gcRenderLive) window.gcRenderLive();
+  if (window.gcRenderTools) window.gcRenderTools();
   if (state.tab === "leads") loadLeads();
 }
 

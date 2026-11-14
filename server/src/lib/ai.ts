@@ -94,7 +94,7 @@ export async function embedTexts(texts: string[], kind: "query" | "passage" = "p
 
 export async function completeChat(
   messages: ChatMessage[],
-  opts?: { maxTokens?: number; temperature?: number; site?: { chat_provider?: string | null; chat_model?: string | null } },
+  opts?: { maxTokens?: number; temperature?: number; json?: boolean; fast?: boolean; site?: { chat_provider?: string | null; chat_model?: string | null } },
 ): Promise<string> {
   const resolved = resolveChatModel(opts?.site);
   const res = await aiFetch(resolved, "/chat/completions", {
@@ -102,6 +102,9 @@ export async function completeChat(
     messages,
     temperature: opts?.temperature ?? 0.3,
     max_tokens: opts?.maxTokens ?? 700,
+    ...(opts?.json ? { response_format: { type: "json_object" } } : {}),
+    // Utility calls (intent, picks) skip "thinking": faster, cheaper, and the JSON never gets cut off by reasoning tokens.
+    ...(opts?.fast && resolved.provider === "openrouter" ? { reasoning: { enabled: false } } : {}),
   });
   const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
   return json.choices?.[0]?.message?.content?.trim() ?? "";

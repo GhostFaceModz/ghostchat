@@ -323,3 +323,18 @@ dialog::backdrop { background: rgba(5, 2, 12, .7); backdrop-filter: blur(6px); }
 .ch-own .row input { flex: 1; min-width: 160px; font-size: 13px; padding: 8px 10px; }
 @media (max-width: 760px) { .live-grid { grid-template-columns: 1fr; } .live-head { flex-direction: row; } }
 .row.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0; } @media (max-width: 560px) { .row.two { grid-template-columns: 1fr; } }
+/* Site search tools */
+.tool { padding: 14px; border-radius: 14px; display: flex; flex-direction: column; gap: 10px; }
+.tool .row { margin: 0; }
+.row.between { justify-content: space-between; }
+.row.tight { gap: 10px; flex-wrap: wrap; }
+.fieldmap { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.fieldmap input { width: 100%; }
+.tool-cards { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; }
+.tool-card { flex: none; width: 110px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 4px; color: inherit; text-decoration: none; font-size: 12px; }
+.tool-card img, .tool-card .ph { width: 110px; aspect-ratio: 2/3; object-fit: cover; border-radius: 10px; background: rgba(139,92,246,.15); }
+.tool-card small { opacity: .7; }
+.tool-out .err { color: #f87171; }
+details.scope { margin: 14px 0; border: 1px solid rgba(196,181,253,.18); border-radius: 12px; padding: 10px 12px; }
+details.scope summary { cursor: pointer; font-weight: 600; }
+details.scope form { margin-top: 10px; }

@@ -3,7 +3,9 @@ import multer from "multer";
 import { PLAN_LIMITS, type Plan } from "../config.js";
 import { getDb } from "../lib/supabase.js";
 import { newSiteKey, type AuthedRequest } from "../lib/auth.js";
-import { crawlSite } from "../lib/crawl.js";
+import { crawlSite, type CrawlScope } from "../lib/crawl.js";
+import { normalizeTools, runTool, fillTemplate } from "../lib/siteTools.js";
+import { classifyIntent } from "../lib/intent.js";
 import { chunkText } from "../lib/chunk.js";
 import { embedTexts } from "../lib/ai.js";
 import { assertPublicHttpUrl } from "../lib/ssrf.js";
@@ -153,6 +155,20 @@ sitesRouter.patch("/:id", async (req, res) => {
   if (typeof body.reveal_model === "boolean") patch.reveal_model = body.reveal_model;
   if ([0, 1, 3].includes(Number(body.max_sources)) && body.max_sources !== null && body.max_sources !== "") patch.max_sources = Number(body.max_sources);
   if (Number.isInteger(Number(body.max_suggestions)) && Number(body.max_suggestions) >= 0 && Number(body.max_suggestions) <= 3 && body.max_suggestions !== null && body.max_suggestions !== "") patch.max_suggestions = Number(body.max_suggestions);
+  if (Array.isArray(body.search_tools)) {
+    try {
+      patch.search_tools = await normalizeTools(body.search_tools);
+    } catch (err) {
+      return res.status(400).json({ error: `Search tool: ${(err as Error).message}` });
+    }
+  }
+  if (body.crawl_scope && typeof body.crawl_scope === "object") {
+    try {
+      patch.crawl_scope = await normalizeScope(body.crawl_scope, patch.url as string | undefined || site.url);
+    } catch (err) {
+      return res.status(400).json({ error: `Crawl scope: ${(err as Error).message}` });
+    }
+  }
   if (typeof body.chat_model === "string") patch.chat_model = body.chat_model.trim() || null;
   if (typeof body.url === "string" && body.url.trim()) {
     try {
@@ -215,6 +231,36 @@ async function refreshCounts(siteId: string): Promise<void> {
     .eq("id", siteId);
 }
 
+/** Try a search tool from the builder before saving it: returns the first mapped results. */
+sitesRouter.post("/:id/tools/test", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  const rl = rateLimit(`tooltest:${site.id}`, 20, 60_000);
+  if (!rl.ok) return res.status(429).json({ error: "Too many tests. Try again in a minute." });
+  try {
+    const [tool] = await normalizeTools([req.body?.tool]);
+    if (!tool) return res.status(400).json({ error: "Add a URL first." });
+    const sample = String(req.body?.message || "").trim().slice(0, 300);
+    const intent = sample ? await classifyIntent(sample) : { filters: { query: "test" } };
+    const items = await runTool(tool, intent.filters);
+    res.json({ url: tool.kind === "feed" ? tool.url_template : fillTemplate(tool.url_template, intent.filters), filters: intent.filters, intent: "intent" in intent ? intent.intent : null, items: items.slice(0, 8) });
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
+});
+
+async function normalizeScope(raw: Record<string, unknown>, siteUrl: string): Promise<CrawlScope> {
+  const list = (v: unknown) => (Array.isArray(v) ? v : typeof v === "string" ? v.split(/[\n,]+/) : []).map((x) => String(x).trim()).filter((x) => x.startsWith("/")).slice(0, 20).map((x) => x.slice(0, 120));
+  const scope: CrawlScope = { include: list(raw.include), exclude: list(raw.exclude), page_chunks: raw.page_chunks === true };
+  const sm = typeof raw.sitemap_url === "string" ? raw.sitemap_url.trim() : "";
+  if (sm) {
+    const u = await assertPublicHttpUrl(new URL(sm, siteUrl).href);
+    if (u.host !== new URL(siteUrl).host) throw new Error("The sitemap must be on your site's domain");
+    scope.sitemap_url = u.href;
+  }
+  return scope;
+}
+
 sitesRouter.post("/:id/crawl", async (req, res) => {
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
@@ -230,7 +276,7 @@ sitesRouter.post("/:id/crawl", async (req, res) => {
   // Respond after starting? For MVP we run inline so the dashboard can show the result.
   // Keep it synchronous but robust.
   try {
-    const result = await crawlSite(site.url, site.plan);
+    const result = await crawlSite(site.url, site.plan, (site.crawl_scope as CrawlScope | undefined) || undefined);
     // Replace previous crawl documents + chunks, keep uploads.
     const { data: oldDocs } = await db
       .from("ghostchat_documents")
