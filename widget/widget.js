@@ -30,6 +30,7 @@
     open: attr("data-open", "") === "true",
     sound: attr("data-sound", "") === "true",
     themeMode: attr("data-theme", "dark"),
+    voiceAttr: attr("data-voice", ""),
     primary: attr("data-primary", "#a78bfa"),
     greeting: attr("data-greeting", ""),
     delay: parseInt(attr("data-delay", ""), 10),
@@ -40,7 +41,11 @@
     sending: false,
     lastLogId: null,
     greeted: false,
-    thinking: false
+    thinking: false,
+    voice: false,
+    voiceOutput: false,
+    bookingUrl: "",
+    bookingProvider: ""
   };
 
   try {
@@ -142,7 +147,19 @@
     "@keyframes gc-dots { 0%,80%,100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }",
     ".gc-fb { display: flex; gap: 4px; }",
     ".gc-fb button { border: 0; background: transparent; cursor: pointer; color: var(--gc-muted); font-size: 13px; }",
-    ".gc-fb button.on { color: var(--gc-primary); }"
+    ".gc-fb button.on { color: var(--gc-primary); }",
+    ".gc-cards { display: flex; flex-direction: column; gap: 8px; width: 100%; }",
+    ".gc-card { width: 100%; border: 1px solid var(--gc-line); border-radius: 16px; padding: 10px; background: var(--gc-bubble); display: flex; gap: 10px; align-items: flex-start; }",
+    ".gc-card img { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; }",
+    ".gc-card h4 { margin: 0 0 2px; font-size: 13px; }",
+    ".gc-card p { margin: 0 0 8px; font-size: 12px; color: var(--gc-muted); }",
+    ".gc-card .gc-cta, .gc-copy { border: 0; border-radius: 10px; padding: 6px 10px; background: var(--gc-primary); color: #160b27; font-weight: 700; cursor: pointer; font-size: 12px; text-decoration: none; display: inline-block; }",
+    ".gc-codechip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; padding: 4px 8px; border: 1px dashed var(--gc-line); border-radius: 8px; margin-right: 6px; }",
+    ".gc-modal { position: fixed; inset: 0; z-index: 2147483001; background: rgba(5,2,12,.72); display: none; place-items: center; padding: 16px; }",
+    ".gc-modal.on { display: grid; }",
+    ".gc-modal-box { width: min(440px, 100%); height: min(640px, 90vh); background: var(--gc-panel); border: 1px solid var(--gc-line); border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; }",
+    ".gc-modal-box header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--gc-line); color: var(--gc-text); font-weight: 700; }",
+    ".gc-modal-box iframe { flex: 1; width: 100%; border: 0; background: #fff; }"
   ].join("\n");
 
   var host = el("div", { class: "gc-host", id: "ghostchat-host" });
@@ -159,10 +176,12 @@
   var panel = el("div", { class: "gc-panel", role: "dialog", "aria-label": "Chat" });
   var title = el("h2", { text: state.name });
   var soundBtn = el("button", { class: "gc-iconbtn", type: "button", title: "Sound", text: "♪" });
+  var voiceBtn = el("button", { class: "gc-iconbtn", type: "button", title: "Read replies aloud", text: "🔊", hidden: "hidden" });
+  var micBtn = el("button", { class: "gc-iconbtn", type: "button", title: "Speak", text: "🎤", hidden: "hidden" });
   var closeBtn = el("button", { class: "gc-iconbtn", type: "button", title: "Close", text: "✕" });
   var head = el("div", { class: "gc-head" }, [
     el("div", { html: ghostSvg.replace("gc-ghost", "gc-ghost"), style: "width:28px;height:28px" }),
-    title, soundBtn, closeBtn
+    title, micBtn, voiceBtn, soundBtn, closeBtn
   ]);
   // fix head ghost sizing
   head.firstChild.style.cssText = "width:28px;height:28px;display:grid;place-items:center";
@@ -175,8 +194,30 @@
   panel.appendChild(msgs);
   panel.appendChild(composer);
   panel.appendChild(brand);
+  var modal = el("div", { class: "gc-modal" });
+  var modalBox = el("div", { class: "gc-modal-box" });
+  var modalTitle = el("div", { text: "Book a time" });
+  var modalClose = el("button", { class: "gc-iconbtn", type: "button", text: "✕" });
+  var modalHead = el("header", {}, [modalTitle, modalClose]);
+  var modalFrame = el("iframe", { title: "Booking calendar", allow: "payment; fullscreen" });
+  modalBox.appendChild(modalHead);
+  modalBox.appendChild(modalFrame);
+  modal.appendChild(modalBox);
+  modalClose.addEventListener("click", function () { modal.classList.remove("on"); modalFrame.src = "about:blank"; });
+  modal.addEventListener("click", function (ev) { if (ev.target === modal) modalClose.click(); });
+  function openBooking(url) {
+    if (!url) return;
+    try {
+      var parsed = new URL(url, window.location.href);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return;
+      modalFrame.src = parsed.href;
+      modal.classList.add("on");
+    } catch (e) {}
+  }
+
   root.appendChild(panel);
   root.appendChild(launcher);
+  root.appendChild(modal);
   shadow.appendChild(el("style", { text: css }));
   shadow.appendChild(root);
   document.documentElement.appendChild(host);
@@ -276,6 +317,78 @@
     row.appendChild(form);
   }
 
+
+  function addCards(row, cards) {
+    if (!cards || !cards.length) return;
+    var wrap = el("div", { class: "gc-cards" });
+    cards.forEach(function (card) {
+      var box = el("div", { class: "gc-card" });
+      if (card.image && card.type === "product") box.appendChild(el("img", { src: card.image, alt: "" }));
+      var body = el("div");
+      body.appendChild(el("h4", { text: card.title || "Card" }));
+      if (card.subtitle || card.price) body.appendChild(el("p", { text: [card.price, card.subtitle].filter(Boolean).join(" · ") }));
+      if (card.type === "discount" && card.code) {
+        var code = el("span", { class: "gc-codechip", text: card.code });
+        var copy = el("button", { class: "gc-copy", type: "button", text: "Copy code" });
+        copy.addEventListener("click", function () {
+          if (navigator.clipboard) navigator.clipboard.writeText(card.code);
+          copy.textContent = "Copied";
+        });
+        body.appendChild(code);
+        body.appendChild(copy);
+      } else if (card.type === "form") {
+        addLeadForm(box);
+      } else if (card.type === "booking" || card.url) {
+        var cta = el(card.type === "booking" ? "button" : "a", {
+          class: "gc-cta",
+          type: card.type === "booking" ? "button" : undefined,
+          href: card.type === "booking" ? undefined : card.url,
+          target: card.type === "booking" ? undefined : "_blank",
+          rel: "noopener noreferrer",
+          text: card.cta || (card.type === "booking" ? "Open calendar" : "View")
+        });
+        if (card.type === "booking") cta.addEventListener("click", function () { openBooking(card.url || state.bookingUrl); });
+        body.appendChild(cta);
+      }
+      box.appendChild(body);
+      wrap.appendChild(box);
+    });
+    row.appendChild(wrap);
+  }
+
+  function speak(text) {
+    if (!state.voiceOutput || !window.speechSynthesis) return;
+    try {
+      window.speechSynthesis.cancel();
+      var clean = String(text || "").replace(/```[\s\S]*?```/g, " ").replace(/[`*_#]/g, " ").trim();
+      if (!clean) return;
+      var u = new SpeechSynthesisUtterance(clean.slice(0, 800));
+      u.rate = 1.02;
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  function canListen() {
+    return state.voice && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  }
+
+  function startListening() {
+    var Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Ctor) return;
+    var rec = new Ctor();
+    rec.lang = document.documentElement.lang || "en-GB";
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = function (ev) {
+      var said = ev.results && ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript;
+      if (said) sendMessage(said);
+    };
+    rec.onerror = function () { micBtn.style.color = ""; };
+    rec.onend = function () { micBtn.style.color = ""; };
+    micBtn.style.color = "var(--gc-primary)";
+    rec.start();
+  }
+
   function addFeedback(row, logId) {
     if (!logId) return;
     var wrap = el("div", { class: "gc-fb" });
@@ -300,7 +413,9 @@
     state.greeted = true;
     var text = state.greeting || "Hi — how can I help?";
     var row = addBubble("assistant", renderMarkdown(text));
-    addSuggestions(state.starters);
+    var starters = (state.starters || []).slice();
+    if (state.bookingUrl && starters.indexOf("Book a time") === -1) starters.push("Book a time");
+    addSuggestions(starters);
     void row;
   }
 
@@ -393,7 +508,9 @@
       }
       if (ev && ev.sources) addSources(row, ev.sources);
       if (ev && ev.suggestions) addSuggestions(ev.suggestions);
-      if (ev && ev.unsure) addLeadForm(row);
+      if (ev && ev.cards) addCards(row, ev.cards);
+      else if (ev && ev.unsure) addLeadForm(row);
+      speak(acc || (ev && ev.answer) || "");
       if (ev && ev.assistantLogId) {
         state.lastLogId = ev.assistantLogId;
         addFeedback(row, ev.assistantLogId);
@@ -410,6 +527,12 @@
     try { localStorage.setItem("gc_sound_" + SITE_KEY, state.sound ? "1" : "0"); } catch (e) {}
     soundBtn.style.color = state.sound ? "var(--gc-primary)" : "";
   });
+  voiceBtn.addEventListener("click", function () {
+    state.voiceOutput = !state.voiceOutput;
+    voiceBtn.style.color = state.voiceOutput ? "var(--gc-primary)" : "";
+    if (!state.voiceOutput && window.speechSynthesis) window.speechSynthesis.cancel();
+  });
+  micBtn.addEventListener("click", function () { startListening(); });
   sendBtn.addEventListener("click", function () { sendMessage(); });
   input.addEventListener("keydown", function (ev) {
     if (ev.key === "Enter" && !ev.shiftKey) {
@@ -431,6 +554,11 @@
       if (cfg.theme.primary) state.primary = cfg.theme.primary;
     }
     if (typeof cfg.showBranding === "boolean") state.showBranding = cfg.showBranding;
+    if (typeof cfg.voiceEnabled === "boolean") state.voice = cfg.voiceEnabled;
+    if (cfg.bookingUrl) state.bookingUrl = cfg.bookingUrl;
+    if (cfg.bookingProvider) state.bookingProvider = cfg.bookingProvider;
+    voiceBtn.hidden = !(state.voice && window.speechSynthesis);
+    micBtn.hidden = !canListen();
     root.setAttribute("data-mode", state.themeMode === "light" ? "light" : "dark");
     root.style.setProperty("--gc-primary", state.primary);
     soundBtn.style.color = state.sound ? "var(--gc-primary)" : "";

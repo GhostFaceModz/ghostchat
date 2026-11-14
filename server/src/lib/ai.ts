@@ -1,47 +1,63 @@
-import { config } from "../config.js";
+import { EMBEDDING_DIMENSIONS, resolveChatModel, resolveEmbeddingModel, type ResolvedModel } from "./models.js";
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
-async function aiFetch(path: string, body: unknown, stream = false): Promise<Response> {
-  if (!config.aiApiKey) {
-    throw new Error("AI_API_KEY is not set");
+async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, stream = false): Promise<Response> {
+  if (!resolved.apiKey) {
+    throw new Error(`No API key is configured for ${resolved.provider}.`);
   }
-  const res = await fetch(`${config.aiBaseUrl}${path}`, {
+  const res = await fetch(`${resolved.baseUrl}${path}`, {
     method: "POST",
     headers: {
-      authorization: `Bearer ${config.aiApiKey}`,
+      authorization: `Bearer ${resolved.apiKey}`,
       "content-type": "application/json",
+      ...resolved.headers,
     },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`AI request failed (${res.status}): ${text.slice(0, 400)}`);
+    throw new Error(`${resolved.provider} request failed (${res.status}): ${text.slice(0, 400)}`);
   }
-  if (stream && !res.body) throw new Error("AI provider did not return a stream");
+  if (stream && !res.body) throw new Error(`${resolved.provider} did not return a stream`);
   return res;
 }
 
-export async function embedTexts(texts: string[]): Promise<number[][]> {
+export async function embedTexts(texts: string[], kind: "query" | "passage" = "passage"): Promise<number[][]> {
   if (!texts.length) return [];
+  const resolved = resolveEmbeddingModel();
+  const prefix = kind === "query" ? resolved.queryPrefix : resolved.passagePrefix;
+  const input = prefix ? texts.map((t) => (t.startsWith(prefix) ? t : prefix + t)) : texts;
   const vectors: number[][] = [];
   const batchSize = 32;
-  for (let i = 0; i < texts.length; i += batchSize) {
-    const input = texts.slice(i, i + batchSize);
-    const res = await aiFetch("/embeddings", {
-      model: config.embeddingModel,
-      input,
+  for (let i = 0; i < input.length; i += batchSize) {
+    const batch = input.slice(i, i + batchSize);
+    const res = await aiFetch(resolved, "/embeddings", {
+      model: resolved.model,
+      input: batch,
+      dimensions: EMBEDDING_DIMENSIONS,
     });
     const json = (await res.json()) as { data: Array<{ index: number; embedding: number[] }> };
     const ordered = [...json.data].sort((a, b) => a.index - b.index);
-    for (const row of ordered) vectors.push(row.embedding);
+    for (const row of ordered) {
+      if (row.embedding.length !== EMBEDDING_DIMENSIONS) {
+        throw new Error(
+          `Embeddings from ${resolved.provider}/${resolved.model} returned ${row.embedding.length} dimensions; GhostChat requires ${EMBEDDING_DIMENSIONS}.`,
+        );
+      }
+      vectors.push(row.embedding);
+    }
   }
   return vectors;
 }
 
-export async function completeChat(messages: ChatMessage[], opts?: { maxTokens?: number; temperature?: number }): Promise<string> {
-  const res = await aiFetch("/chat/completions", {
-    model: config.aiModel,
+export async function completeChat(
+  messages: ChatMessage[],
+  opts?: { maxTokens?: number; temperature?: number; site?: { chat_provider?: string | null; chat_model?: string | null } },
+): Promise<string> {
+  const resolved = resolveChatModel(opts?.site);
+  const res = await aiFetch(resolved, "/chat/completions", {
+    model: resolved.model,
     messages,
     temperature: opts?.temperature ?? 0.3,
     max_tokens: opts?.maxTokens ?? 700,
@@ -52,12 +68,14 @@ export async function completeChat(messages: ChatMessage[], opts?: { maxTokens?:
 
 export async function* streamChat(
   messages: ChatMessage[],
-  opts?: { maxTokens?: number; temperature?: number },
+  opts?: { maxTokens?: number; temperature?: number; site?: { chat_provider?: string | null; chat_model?: string | null } },
 ): AsyncGenerator<string> {
+  const resolved = resolveChatModel(opts?.site);
   const res = await aiFetch(
+    resolved,
     "/chat/completions",
     {
-      model: config.aiModel,
+      model: resolved.model,
       messages,
       temperature: opts?.temperature ?? 0.3,
       max_tokens: opts?.maxTokens ?? 700,

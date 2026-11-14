@@ -21,6 +21,11 @@
         <button type="button" data-mode="login" class="on">Sign in</button>
         <button type="button" data-mode="signup">Create account</button>
       </div>
+      <div class="oauth" id="oauth-buttons" hidden>
+        <a class="btn oauth discord" id="oauth-discord" href="/api/auth/discord">Continue with Discord</a>
+        <a class="btn oauth google" id="oauth-google" href="/api/auth/google">Continue with Google</a>
+        <p class="muted tiny">or use email and password</p>
+      </div>
       <form id="auth-form">
         <label class="signup-only hidden">Name <input name="name" autocomplete="name" /></label>
         <label>Email <input name="email" type="email" required autocomplete="email" /></label>
@@ -38,6 +43,7 @@
       <nav id="site-list" class="site-list"></nav>
       <div class="rail-foot">
         <div id="owner-email" class="muted tiny"></div>
+        <button type="button" class="btn ghost tiny" id="open-billing">Plan &amp; billing</button>
         <button type="button" class="btn ghost tiny" id="sign-out">Sign out</button>
       </div>
     </aside>
@@ -47,6 +53,14 @@
         <h2>Add your first site</h2>
         <p>We’ll give you a site key, an embed snippet, and a place to train the bot.</p>
         <button type="button" class="btn primary" id="empty-new">Add a site</button>
+      </div>
+
+      <div id="billing-view" class="hidden">
+        <section class="panel glass">
+          <h3>Plan &amp; billing</h3>
+          <p class="muted" id="billing-intro">Plans are unlocked by Whop. Use the same email as your GhostChat account.</p>
+          <div id="billing-body"></div>
+        </section>
       </div>
 
       <div id="site-view" class="hidden">
@@ -66,6 +80,8 @@
           <button type="button" data-tab="train">Train</button>
           <button type="button" data-tab="persona">Persona</button>
           <button type="button" data-tab="appearance">Appearance</button>
+          <button type="button" data-tab="model">Model</button>
+          <button type="button" data-tab="convert">Convert</button>
           <button type="button" data-tab="transcripts">Transcripts</button>
           <button type="button" data-tab="analytics">Analytics</button>
           <button type="button" data-tab="leads">Leads</button>
@@ -91,16 +107,21 @@
 
         <section class="panel glass hidden" data-panel="train">
           <h3>Train the assistant</h3>
-          <p class="muted">Crawl your site (including sitemap.xml) and upload docs or a FAQ. PDF and Notion connectors are on the roadmap.</p>
+          <p class="muted">Crawl your site (including sitemap.xml), upload PDFs or text docs, paste a FAQ, or import a Notion page shared with your integration.</p>
           <div class="row">
             <button type="button" class="btn primary" id="crawl-btn">Crawl site</button>
             <span class="muted" id="crawl-status"></span>
           </div>
           <form id="upload-form" class="stack">
-            <label>Upload .txt, .md, .html or .csv <input type="file" name="files" multiple accept=".txt,.md,.markdown,.html,.htm,.csv,text/plain,text/markdown,text/html,text/csv" /></label>
+            <label>Upload PDF, .txt, .md, .html or .csv <input type="file" name="files" multiple accept=".pdf,.txt,.md,.markdown,.html,.htm,.csv,application/pdf,text/plain,text/markdown,text/html,text/csv" /></label>
             <label>Or paste a FAQ / notes <textarea name="text" rows="6" placeholder="Paste help content…"></textarea></label>
             <label>Title for pasted content <input name="title" placeholder="FAQ" /></label>
             <button type="submit" class="btn">Add to training</button>
+          </form>
+          <form id="notion-form" class="stack">
+            <label>Import a Notion page (URL or ID) <input name="url" placeholder="https://www.notion.so/..." /></label>
+            <button type="submit" class="btn">Import from Notion</button>
+            <p class="muted tiny">Requires NOTION_API_KEY and that the page is shared with your GhostChat integration.</p>
           </form>
           <div id="doc-list" class="list"></div>
         </section>
@@ -132,10 +153,57 @@
             </label>
             <label>Primary colour <input name="primary" type="color" value="#a78bfa" /></label>
             <label class="check"><input name="sound_default" type="checkbox" /> Sound on by default</label>
+            <label class="check"><input name="voice_enabled" type="checkbox" /> Enable voice mode (browser speech, with a graceful fallback)</label>
             <label class="check"><input name="show_branding" type="checkbox" /> Show “Powered by GhostChat” badge</label>
             <p class="muted tiny" id="branding-note">Free plan always shows the badge. Pro and Business can remove it.</p>
             <button type="submit" class="btn primary">Save appearance</button>
           </form>
+        </section>
+
+        <section class="panel glass hidden" data-panel="model">
+          <h3>Chat model</h3>
+          <p class="muted">Pick any provider that has a key configured on the server. If that key is missing, the bot falls back to Grok (xAI).</p>
+          <form id="model-form" class="stack">
+            <label>Provider
+              <select name="chat_provider" id="chat-provider"></select>
+            </label>
+            <label>Model
+              <select name="chat_model" id="chat-model"></select>
+            </label>
+            <p class="muted tiny" id="model-note"></p>
+            <button type="submit" class="btn primary">Save model</button>
+          </form>
+          <div id="embedding-note" class="item muted" style="margin-top:16px"></div>
+        </section>
+
+        <section class="panel glass hidden" data-panel="convert">
+          <h3>Booking &amp; conversion cards</h3>
+          <p class="muted">Add a Cal.com or Calendly link, plus product, discount, or lead-form cards the bot can show in chat.</p>
+          <form id="booking-form" class="stack">
+            <label>Booking URL <input name="booking_url" placeholder="https://cal.com/you or https://calendly.com/you" /></label>
+            <button type="submit" class="btn primary">Save booking link</button>
+          </form>
+          <form id="card-form" class="stack">
+            <h3>Add a card</h3>
+            <label>Type
+              <select name="type">
+                <option value="product">Product</option>
+                <option value="discount">Discount code</option>
+                <option value="form">Lead form</option>
+                <option value="booking">Booking</option>
+              </select>
+            </label>
+            <label>Title <input name="title" required /></label>
+            <label>Subtitle <input name="subtitle" /></label>
+            <label>URL or image <input name="url" placeholder="https://..." /></label>
+            <label>Image URL (products) <input name="image" /></label>
+            <label>Price <input name="price" /></label>
+            <label>Discount code <input name="code" /></label>
+            <label>Button label <input name="cta" placeholder="View / Copy / Book" /></label>
+            <label>Trigger keywords (comma separated) <input name="triggers" placeholder="price, plan, discount" /></label>
+            <button type="submit" class="btn">Add card</button>
+          </form>
+          <div id="card-list" class="list"></div>
         </section>
 
         <section class="panel glass hidden" data-panel="transcripts">

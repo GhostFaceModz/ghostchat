@@ -2,7 +2,7 @@ import { Router } from "express";
 import { getDb } from "../lib/supabase.js";
 import { isValidEmail } from "../lib/auth.js";
 import { clientIp, rateLimit } from "../lib/rateLimit.js";
-import { incrementLeads } from "../lib/usage.js";
+import { incrementLeads, assertCanCaptureLead } from "../lib/usage.js";
 import { redactPii } from "../lib/pii.js";
 import type { Site } from "../types.js";
 
@@ -28,6 +28,12 @@ leadsRouter.post("/", async (req, res) => {
     .maybeSingle();
   if (siteErr || !site) return res.status(404).json({ error: "Unknown site key." });
   const typed = site as Site;
+  try {
+    await assertCanCaptureLead(typed);
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status ?? 400;
+    return res.status(status).json({ error: (err as Error).message });
+  }
 
   let transcript: string | null = null;
   if (sessionId) {

@@ -8,7 +8,10 @@ const state = {
   sites: [],
   site: null,
   tab: "setup",
-  templates: []
+  templates: [],
+  catalog: null,
+  billing: null,
+  view: "sites"
 };
 
 function toast(msg) {
@@ -36,19 +39,49 @@ function showAuth(on) {
 }
 
 async function boot() {
+  const params = new URLSearchParams(location.search);
+  const token = params.get("token");
+  const authError = params.get("auth_error");
+  if (token) {
+    state.token = token;
+    localStorage.setItem("gc_token", token);
+    params.delete("token");
+    const next = params.toString();
+    history.replaceState({}, "", location.pathname + (next ? "?" + next : ""));
+  }
   loadTemplates();
+  loadProviders();
+  if (authError) {
+    showAuth(true);
+    const err = $("#auth-error");
+    err.textContent = authError;
+    err.hidden = false;
+    return;
+  }
   if (!state.token) { showAuth(true); return; }
   try {
     const { owner } = await req("/api/auth/me");
     state.owner = owner;
     showAuth(false);
-    $("#owner-email").textContent = owner.email;
+    $("#owner-email").textContent = owner.email + (owner.plan ? " · " + owner.plan : "");
     await refreshSites();
   } catch {
     state.token = "";
     localStorage.removeItem("gc_token");
     showAuth(true);
   }
+}
+
+async function loadProviders() {
+  try {
+    const data = await fetch("/api/auth/providers").then((r) => r.json());
+    const box = $("#oauth-buttons");
+    if (!box) return;
+    const any = data.providers && (data.providers.discord || data.providers.google);
+    box.hidden = !any;
+    $("#oauth-discord").style.display = data.providers && data.providers.discord ? "" : "none";
+    $("#oauth-google").style.display = data.providers && data.providers.google ? "" : "none";
+  } catch { /* leave hidden */ }
 }
 
 async function loadTemplates() {
@@ -132,6 +165,11 @@ function renderSite() {
   $("#branding-note").textContent = s.plan === "free"
     ? "Free plan always shows the badge. Pro and Business can remove it."
     : "Pro and Business can hide the badge.";
+  if (theme.voice_enabled) theme.voice_enabled.checked = !!s.voice_enabled;
+  const booking = $("#booking-form");
+  if (booking) booking.booking_url.value = s.booking_url || "";
+  renderCards();
+  fillModelForm();
 
   const picks = $("#template-picks");
   picks.innerHTML = "";
@@ -227,7 +265,12 @@ $("#tabs").addEventListener("click", (ev) => {
   if (!btn) return;
   state.tab = btn.dataset.tab;
   $$("#tabs button").forEach((b) => b.classList.toggle("on", b === btn));
+  state.view = "sites";
+  $("#billing-view")?.classList.add("hidden");
+  $("#site-view")?.classList.toggle("hidden", !state.site);
   $$(".panel").forEach((p) => p.classList.toggle("hidden", p.dataset.panel !== state.tab));
+  if (state.tab === "model") fillModelForm();
+  if (state.tab === "convert") renderCards();
   if (state.tab === "train") loadDocs();
   if (state.tab === "transcripts") loadLogs();
   if (state.tab === "analytics") loadAnalytics();
@@ -275,7 +318,8 @@ $("#theme-form").addEventListener("submit", async (ev) => {
     body: {
       theme: { mode: fd.get("mode"), primary: fd.get("primary") },
       sound_default: $("#theme-form").sound_default.checked,
-      show_branding: $("#theme-form").show_branding.checked
+      show_branding: $("#theme-form").show_branding.checked,
+      voice_enabled: $("#theme-form").voice_enabled ? $("#theme-form").voice_enabled.checked : false
     }
   });
   state.site = site;
@@ -392,5 +436,169 @@ async function loadLeads() {
     box.appendChild(item);
   });
 }
+
+
+function renderCards() {
+  const box = $("#card-list");
+  if (!box || !state.site) return;
+  const cards = state.site.conversion_cards || [];
+  box.innerHTML = cards.length ? "" : "<p class='muted'>No conversion cards yet.</p>";
+  cards.forEach((card, i) => {
+    const item = document.createElement("div");
+    item.className = "item";
+    item.innerHTML = "<strong>" + escapeHtml(card.type) + "</strong> · " + escapeHtml(card.title || "") +
+      (card.code ? " · <code>" + escapeHtml(card.code) + "</code>" : "");
+    const del = document.createElement("button");
+    del.className = "btn tiny ghost";
+    del.textContent = "Remove";
+    del.addEventListener("click", async () => {
+      const next = (state.site.conversion_cards || []).filter((_, j) => j !== i);
+      const { site } = await req("/api/sites/" + state.site.id, { method: "PATCH", body: { conversion_cards: next } });
+      state.site = site;
+      renderCards();
+    });
+    item.appendChild(del);
+    box.appendChild(item);
+  });
+}
+
+async function loadCatalog() {
+  if (state.catalog) return state.catalog;
+  try {
+    const data = await req("/api/models");
+    state.catalog = data.catalog;
+  } catch {
+    state.catalog = { providers: [], defaultProvider: "grok", defaultModel: "grok-4.7", embedding: { dimensions: 1536, supported: false } };
+  }
+  return state.catalog;
+}
+
+async function fillModelForm() {
+  const catalog = await loadCatalog();
+  const providerSel = $("#chat-provider");
+  const modelSel = $("#chat-model");
+  if (!providerSel || !modelSel) return;
+  const currentProvider = (state.site && state.site.chat_provider) || catalog.defaultProvider;
+  providerSel.innerHTML = "";
+  (catalog.providers || []).forEach((p) => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name + (p.enabled ? "" : " (key not configured)");
+    opt.disabled = !p.enabled;
+    if (p.id === currentProvider) opt.selected = true;
+    providerSel.appendChild(opt);
+  });
+  function fillModels() {
+    const prov = (catalog.providers || []).find((p) => p.id === providerSel.value);
+    modelSel.innerHTML = "";
+    (prov ? prov.models : []).forEach((m) => {
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.label;
+      if (state.site && state.site.chat_model === m.id) opt.selected = true;
+      modelSel.appendChild(opt);
+    });
+  }
+  fillModels();
+  providerSel.onchange = fillModels;
+  const note = $("#model-note");
+  if (note) {
+    const enabled = (catalog.providers || []).filter((p) => p.enabled).map((p) => p.name);
+    note.textContent = enabled.length
+      ? "Enabled now: " + enabled.join(", ") + ". Missing keys fall back to Grok."
+      : "No provider keys are set yet. Add GROK_API_KEY (or XAI_API_KEY) so Grok can run by default.";
+  }
+  const emb = $("#embedding-note");
+  if (emb && catalog.embedding) {
+    emb.textContent = catalog.embedding.supported
+      ? "Embeddings are global (not per-site) so every bot shares the same search index: " +
+        (catalog.embedding.provider || "") + " / " + (catalog.embedding.model || "") + " at " + catalog.embedding.dimensions + " dimensions."
+      : "Embeddings are not configured yet. Set GROK_API_KEY or OPENAI_API_KEY. Vectors must stay 1536-d.";
+  }
+}
+
+async function showBilling() {
+  state.view = "billing";
+  $("#site-view")?.classList.add("hidden");
+  $("#empty-state")?.classList.add("hidden");
+  $("#billing-view")?.classList.remove("hidden");
+  const box = $("#billing-body");
+  try {
+    const data = await req("/api/billing");
+    const b = data.billing;
+    state.billing = b;
+    const limits = b.limits || {};
+    box.innerHTML =
+      "<div class='stat-row'>" +
+        "<div class='stat'><b>" + escapeHtml(b.plan || "free") + "</b> current plan</div>" +
+        "<div class='stat'><b>" + (limits.monthlyMessages || "—") + "</b> messages / month</div>" +
+        "<div class='stat'><b>" + (limits.monthlyLeads || "—") + "</b> leads / month</div>" +
+      "</div>" +
+      "<p class='muted'>Webhook URL (paste this in Whop): <code>" + escapeHtml(b.webhookUrl || "") + "</code></p>" +
+      (b.configured
+        ? "<div class='row'>" +
+            (b.checkout && b.checkout.pro ? "<a class='btn primary' href='" + b.checkout.pro + "' target='_blank' rel='noopener'>Upgrade to Pro</a>" : "") +
+            (b.checkout && b.checkout.business ? "<a class='btn' href='" + b.checkout.business + "' target='_blank' rel='noopener'>Upgrade to Business</a>" : "") +
+          "</div>"
+        : "<p class='muted'>Whop is not connected yet. Set WHOP_WEBHOOK_SECRET and the checkout URLs, then subscribe with the same email as this account.</p>");
+  } catch (e) {
+    box.innerHTML = "<p class='error'>" + escapeHtml(e.message) + "</p>";
+  }
+}
+
+document.getElementById("open-billing")?.addEventListener("click", showBilling);
+
+document.getElementById("notion-form")?.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const fd = new FormData(ev.target);
+  await req("/api/sites/" + state.site.id + "/documents/notion", { method: "POST", body: { url: fd.get("url") } });
+  ev.target.reset();
+  toast("Notion page imported");
+  loadDocs();
+});
+
+document.getElementById("booking-form")?.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const fd = new FormData(ev.target);
+  const { site } = await req("/api/sites/" + state.site.id, { method: "PATCH", body: { booking_url: fd.get("booking_url") } });
+  state.site = site;
+  toast("Booking link saved");
+});
+
+document.getElementById("card-form")?.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const fd = new FormData(ev.target);
+  const triggers = String(fd.get("triggers") || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const card = {
+    id: "card_" + Date.now().toString(36),
+    type: fd.get("type"),
+    title: fd.get("title"),
+    subtitle: fd.get("subtitle") || undefined,
+    url: fd.get("url") || undefined,
+    image: fd.get("image") || undefined,
+    price: fd.get("price") || undefined,
+    code: fd.get("code") || undefined,
+    cta: fd.get("cta") || undefined,
+    triggers: triggers.length ? triggers : undefined
+  };
+  const next = (state.site.conversion_cards || []).concat([card]);
+  const { site } = await req("/api/sites/" + state.site.id, { method: "PATCH", body: { conversion_cards: next } });
+  state.site = site;
+  ev.target.reset();
+  renderCards();
+  toast("Card added");
+});
+
+document.getElementById("model-form")?.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const fd = new FormData(ev.target);
+  const { site } = await req("/api/sites/" + state.site.id, {
+    method: "PATCH",
+    body: { chat_provider: fd.get("chat_provider"), chat_model: fd.get("chat_model") }
+  });
+  state.site = site;
+  toast("Model saved");
+});
+
 
 boot();

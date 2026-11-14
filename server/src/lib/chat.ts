@@ -3,7 +3,8 @@ import { embedTexts, completeChat, streamChat } from "./ai.js";
 import { detectInjection, hitsBannedTopic, sanitizeContext, UNSURE_REPLY } from "./guardrails.js";
 import { redactPii } from "./pii.js";
 import { incrementMessages } from "./usage.js";
-import type { ChatSource, RetrievedChunk, Site } from "../types.js";
+import { selectCards } from "./cards.js";
+import type { ChatSource, ConversionCard, RetrievedChunk, Site } from "../types.js";
 
 const SIMILARITY_THRESHOLD = 0.72;
 
@@ -12,6 +13,7 @@ export type ChatOutcome = {
   unsure: boolean;
   sources: ChatSource[];
   suggestions: string[];
+  cards: ConversionCard[];
   userLogId: string;
   assistantLogId: string;
 };
@@ -62,7 +64,7 @@ ${context || "(no relevant context was retrieved)"}
 }
 
 export async function retrieveChunks(siteId: string, question: string): Promise<RetrievedChunk[]> {
-  const [embedding] = await embedTexts([question]);
+  const [embedding] = await embedTexts([question], "query");
   if (!embedding?.length) return [];
   const { data, error } = await getDb().rpc("ghostchat_match_chunks", {
     query_embedding: embedding,
@@ -113,7 +115,7 @@ export async function maybeSuggestions(site: Site, question: string, answer: str
         },
         { role: "user", content: `Question: ${question}\nAnswer: ${answer}` },
       ],
-      { maxTokens: 160, temperature: 0.5 },
+      { maxTokens: 160, temperature: 0.5, site },
     );
     const jsonStart = raw.indexOf("[");
     const jsonEnd = raw.lastIndexOf("]");
@@ -174,6 +176,7 @@ export async function answerQuestion(opts: {
       unsure: true,
       sources: [],
       suggestions: site.starter_questions?.slice(0, 3) ?? [],
+      cards: selectCards({ site, message, answer: pre.reply, unsure: true }),
       userLogId,
       assistantLogId,
     };
@@ -194,16 +197,20 @@ export async function answerQuestion(opts: {
       unsure: true,
       sources: [],
       suggestions: await maybeSuggestions(site, message, UNSURE_REPLY, true),
+      cards: selectCards({ site, message, answer: UNSURE_REPLY, unsure: true }),
       userLogId,
       assistantLogId,
     };
   }
 
   const system = buildSystemPrompt(site, chunks);
-  const answer = await completeChat([
-    { role: "system", content: system },
-    { role: "user", content: message },
-  ]);
+  const answer = await completeChat(
+    [
+      { role: "system", content: system },
+      { role: "user", content: message },
+    ],
+    { site },
+  );
   const unsure = /^i['’]m not sure/i.test(answer.trim()) || !answer.trim();
   const finalAnswer = answer.trim() || UNSURE_REPLY;
   const sources = unsure ? [] : uniqueSources(chunks);
@@ -217,7 +224,7 @@ export async function answerQuestion(opts: {
     was_unsure: unsure,
   });
   await incrementMessages(site.id);
-  return { answer: finalAnswer, unsure, sources, suggestions, userLogId, assistantLogId };
+  return { answer: finalAnswer, unsure, sources, suggestions, cards: selectCards({ site, message, answer: finalAnswer, unsure }), userLogId, assistantLogId };
 }
 
 export async function streamAnswer(opts: {
@@ -232,7 +239,7 @@ export async function streamAnswer(opts: {
   const userLogId = await insertLog({ site_id: site.id, session_id: sessionId, role: "user", message, page_url: pageUrl });
   onEvent({ type: "meta", userLogId });
 
-  const finish = async (partial: Omit<ChatOutcome, "userLogId" | "assistantLogId">) => {
+  const finish = async (partial: Omit<ChatOutcome, "userLogId" | "assistantLogId" | "cards"> & { cards?: ChatOutcome["cards"] }) => {
     const assistantLogId = await insertLog({
       site_id: site.id,
       session_id: sessionId,
@@ -242,13 +249,15 @@ export async function streamAnswer(opts: {
       was_unsure: partial.unsure,
     });
     await incrementMessages(site.id);
-    const outcome: ChatOutcome = { ...partial, userLogId, assistantLogId };
+    const cards = partial.cards ?? selectCards({ site, message, answer: partial.answer, unsure: partial.unsure });
+    const outcome: ChatOutcome = { ...partial, cards, userLogId, assistantLogId };
     onEvent({
       type: "done",
       answer: outcome.answer,
       unsure: outcome.unsure,
       sources: outcome.sources,
       suggestions: outcome.suggestions,
+      cards,
       userLogId,
       assistantLogId,
     });
@@ -279,10 +288,13 @@ export async function streamAnswer(opts: {
 
   const system = buildSystemPrompt(site, chunks);
   let answer = "";
-  for await (const token of streamChat([
-    { role: "system", content: system },
-    { role: "user", content: message },
-  ])) {
+  for await (const token of streamChat(
+    [
+      { role: "system", content: system },
+      { role: "user", content: message },
+    ],
+    { site },
+  )) {
     answer += token;
     onEvent({ type: "token", text: token });
   }

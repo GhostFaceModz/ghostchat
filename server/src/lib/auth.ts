@@ -13,7 +13,8 @@ export async function hashPassword(password: string): Promise<string> {
   return `scrypt:${salt}:${key.toString("hex")}`;
 }
 
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+export async function verifyPassword(password: string, stored: string | null | undefined): Promise<boolean> {
+  if (!stored) return false;
   const [scheme, salt, hex] = stored.split(":");
   if (scheme !== "scrypt" || !salt || !hex) return false;
   const key = (await scrypt(password, salt, SCRYPT_KEYLEN)) as Buffer;
@@ -79,4 +80,31 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
 export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
+}
+
+export function signOAuthState(provider: string, ttlSeconds = 600): string {
+  if (!config.sessionSecret) throw new Error("SESSION_SECRET is not set");
+  const body = b64url(JSON.stringify({ p: provider, exp: Math.floor(Date.now() / 1000) + ttlSeconds, n: randomBytes(8).toString("hex") }));
+  const sig = b64url(createHmac("sha256", config.sessionSecret).update(body).digest());
+  return `${body}.${sig}`;
+}
+
+export function verifyOAuthState(token: string, provider: string): boolean {
+  const payload = verifyTokenLike(token);
+  return Boolean(payload && payload.p === provider && payload.exp >= Math.floor(Date.now() / 1000));
+}
+
+function verifyTokenLike(token: string): { p?: string; exp: number } | null {
+  if (!config.sessionSecret) return null;
+  const [body, sig] = token.split(".");
+  if (!body || !sig) return null;
+  const expected = b64url(createHmac("sha256", config.sessionSecret).update(body).digest());
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  try {
+    return JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
 }

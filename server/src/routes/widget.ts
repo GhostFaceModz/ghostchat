@@ -17,7 +17,7 @@ widgetRouter.get("/config/:siteKey", async (req, res) => {
   const { data, error } = await getDb()
     .from("ghostchat_sites")
     .select(
-      "name, url, theme, greeting, starter_questions, proactive_delay_ms, sound_default, show_branding, plan, site_key",
+      "name, url, theme, greeting, starter_questions, proactive_delay_ms, sound_default, show_branding, plan, site_key, booking_url, booking_provider, voice_enabled",
     )
     .eq("site_key", siteKey)
     .maybeSingle();
@@ -33,6 +33,9 @@ widgetRouter.get("/config/:siteKey", async (req, res) => {
       proactiveDelayMs: site.proactive_delay_ms,
       soundDefault: site.sound_default,
       showBranding: effectiveBranding(site),
+      bookingUrl: site.booking_url || null,
+      bookingProvider: site.booking_provider || null,
+      voiceEnabled: Boolean(config.voiceEnabled && site.voice_enabled),
     },
   });
 });

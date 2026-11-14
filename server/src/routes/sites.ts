@@ -10,12 +10,16 @@ import { assertPublicHttpUrl } from "../lib/ssrf.js";
 import { clientIp, rateLimit } from "../lib/rateLimit.js";
 import { countOwnerSites, countUploads, messageLimit, refreshPeriod, effectiveBranding } from "../lib/usage.js";
 import { getTemplate } from "../lib/templates.js";
+import { extractPdfText, isPdfFile } from "../lib/pdf.js";
+import { importNotionPage } from "../lib/notion.js";
+import { detectBookingProvider, normalizeCards } from "../lib/cards.js";
+import { analyticsLevel, getOwnerPlan, maxCards } from "../lib/usage.js";
 import type { Site, Theme } from "../types.js";
 
 export const sitesRouter = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 1_000_000, files: 5 },
+  limits: { fileSize: 5_000_000, files: 5 },
 });
 
 const DEFAULT_THEME: Theme = { mode: "dark", primary: "#a78bfa" };
@@ -64,12 +68,7 @@ sitesRouter.post("/", async (req, res) => {
   if (existing >= PLAN_LIMITS.free.maxSites && (count ?? 0) >= PLAN_LIMITS.free.maxSites) {
     // If they already have a higher-plan site, use the highest plan they own.
   }
-  const { data: owned } = await getDb()
-    .from("ghostchat_sites")
-    .select("plan")
-    .eq("owner_id", owner.id);
-  const plans = (owned ?? []).map((s: { plan: Plan }) => s.plan);
-  const plan: Plan = plans.includes("business") ? "business" : plans.includes("pro") ? "pro" : "free";
+  const plan: Plan = await getOwnerPlan(owner.id);
   if (existing >= PLAN_LIMITS[plan].maxSites) {
     return res.status(402).json({ error: "You've reached the site limit for your plan." });
   }
@@ -140,6 +139,17 @@ sitesRouter.patch("/:id", async (req, res) => {
     const limits = PLAN_LIMITS[site.plan];
     patch.show_branding = limits.brandingRequired ? true : body.show_branding;
   }
+  if (typeof body.voice_enabled === "boolean") patch.voice_enabled = body.voice_enabled;
+  if (typeof body.booking_url === "string") {
+    const booking = body.booking_url.trim();
+    patch.booking_url = booking || null;
+    patch.booking_provider = booking ? detectBookingProvider(booking) : null;
+  }
+  if (Array.isArray(body.conversion_cards)) {
+    patch.conversion_cards = normalizeCards(body.conversion_cards, maxCards(site));
+  }
+  if (typeof body.chat_provider === "string") patch.chat_provider = body.chat_provider.trim() || null;
+  if (typeof body.chat_model === "string") patch.chat_model = body.chat_model.trim() || null;
   if (typeof body.url === "string" && body.url.trim()) {
     try {
       const url = await assertPublicHttpUrl(body.url.trim().startsWith("http") ? body.url.trim() : `https://${body.url.trim()}`);
@@ -313,7 +323,7 @@ sitesRouter.post("/:id/documents", upload.array("files", 5), async (req, res) =>
   }
 
   const created: unknown[] = [];
-  const process = async (filename: string, text: string, sourceType: "upload" | "paste") => {
+  const process = async (filename: string, text: string, sourceType: "upload" | "paste" | "pdf" | "notion", sourceUrl: string | null = null) => {
     const chunks = chunkText(text, { title: filename, url: null });
     if (!chunks.length) throw new Error(`No usable text in ${filename}`);
     const { data: doc, error } = await getDb()
@@ -322,6 +332,7 @@ sitesRouter.post("/:id/documents", upload.array("files", 5), async (req, res) =>
         site_id: site.id,
         filename,
         source_type: sourceType,
+        source_url: sourceUrl,
         byte_size: text.length,
         chunk_count: chunks.length,
       })
@@ -335,8 +346,13 @@ sitesRouter.post("/:id/documents", upload.array("files", 5), async (req, res) =>
   try {
     for (const file of files) {
       const name = file.originalname || "upload.txt";
+      if (isPdfFile(name, file.mimetype)) {
+        const text = await extractPdfText(file.buffer, name);
+        await process(name, text, "pdf");
+        continue;
+      }
       if (!/\.(txt|md|markdown|html?|csv)$/i.test(name) && !file.mimetype.startsWith("text/")) {
-        return res.status(400).json({ error: `Unsupported file type: ${name}. Use .txt, .md, .html or .csv.` });
+        return res.status(400).json({ error: `Unsupported file type: ${name}. Use .pdf, .txt, .md, .html or .csv.` });
       }
       await process(name, file.buffer.toString("utf8"), "upload");
     }
@@ -345,6 +361,41 @@ sitesRouter.post("/:id/documents", upload.array("files", 5), async (req, res) =>
     res.status(201).json({ documents: created });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message || "Could not train on that document." });
+  }
+});
+
+
+sitesRouter.post("/:id/documents/notion", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  const existing = await countUploads(site.id);
+  if (existing + 1 > PLAN_LIMITS[site.plan].maxUploads) {
+    return res.status(402).json({ error: "You've reached the upload limit for your plan." });
+  }
+  const page = String(req.body?.url || req.body?.pageId || req.body?.page_id || "").trim();
+  if (!page) return res.status(400).json({ error: "Paste a Notion page URL or ID." });
+  try {
+    const imported = await importNotionPage(page);
+    const chunks = chunkText(imported.text, { title: imported.title, url: imported.url });
+    if (!chunks.length) throw new Error("No usable text in that Notion page.");
+    const { data: doc, error } = await getDb()
+      .from("ghostchat_documents")
+      .insert({
+        site_id: site.id,
+        filename: imported.title,
+        source_type: "notion",
+        source_url: imported.url,
+        byte_size: imported.text.length,
+        chunk_count: chunks.length,
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    await storeChunks({ site, documentId: doc.id, sourceType: "notion", chunks });
+    await refreshCounts(site.id);
+    res.status(201).json({ document: doc });
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message || "Could not import that Notion page." });
   }
 });
 
@@ -434,17 +485,18 @@ sitesRouter.get("/:id/analytics", async (req, res) => {
     .map(([url, count]) => ({ url, count }));
 
   const fresh = await refreshPeriod(site);
+  const level = analyticsLevel(fresh);
   res.json({
     analytics: {
       topQuestions,
-      questionsByPage,
-      unanswered: unanswered.slice(0, 25),
-      satisfaction: {
+      questionsByPage: level === "full" ? questionsByPage : [],
+      unanswered: level === "full" ? unanswered.slice(0, 25) : [],
+      satisfaction: level === "full" ? {
         up,
         down,
         rated: up + down,
         score: up + down ? Math.round((up / (up + down)) * 100) : null,
-      },
+      } : { up: 0, down: 0, rated: 0, score: null },
       totals: {
         messages: rows.length,
         assistant,
@@ -453,6 +505,8 @@ sitesRouter.get("/:id/analytics", async (req, res) => {
         messageLimit: messageLimit(fresh),
         plan: fresh.plan,
       },
+      level,
+      upgradeHint: level === "basic" ? "Upgrade to Pro to see pages driving questions, unanswered gaps, and satisfaction scores." : null,
     },
   });
 });

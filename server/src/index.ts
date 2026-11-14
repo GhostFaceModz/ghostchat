@@ -10,6 +10,8 @@ import { sitesRouter } from "./routes/sites.js";
 import { chatRouter } from "./routes/chat.js";
 import { leadsRouter } from "./routes/leads.js";
 import { widgetRouter } from "./routes/widget.js";
+import { billingRouter, whopWebhookRouter } from "./routes/billing.js";
+import { modelsRouter } from "./routes/models.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +41,7 @@ app.use((_req, res, next) => {
   next();
 });
 app.use(cors({ origin: true }));
+app.use("/api/webhooks/whop", express.raw({ type: "application/json" }), whopWebhookRouter);
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false }));
 
@@ -51,6 +54,8 @@ app.use("/api/sites", requireAuth, sitesRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/leads", leadsRouter);
 app.use("/api/widget", widgetRouter);
+app.use("/api/billing", requireAuth, billingRouter);
+app.use("/api/models", requireAuth, modelsRouter);
 app.get("/api/templates", (_req, res, next) => {
   // convenience alias
   _req.url = "/templates";

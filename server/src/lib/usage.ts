@@ -93,7 +93,55 @@ export async function countUploads(siteId: string): Promise<number> {
     .from("ghostchat_documents")
     .select("id", { count: "exact", head: true })
     .eq("site_id", siteId)
-    .in("source_type", ["upload", "paste"]);
+    .in("source_type", ["upload", "paste", "pdf", "notion"]);
   if (error) throw error;
   return count ?? 0;
+}
+
+export function limitsFor(plan: Plan) {
+  return PLAN_LIMITS[plan] ?? PLAN_LIMITS.free;
+}
+
+export function leadsLimit(site: Site): number {
+  return limitsFor(site.plan as Plan).monthlyLeads;
+}
+
+export function analyticsLevel(site: Site): "basic" | "full" {
+  return limitsFor(site.plan as Plan).analytics;
+}
+
+export function maxCards(site: Site): number {
+  return limitsFor(site.plan as Plan).maxCards;
+}
+
+export async function assertCanCaptureLead(site: Site): Promise<Site> {
+  const fresh = await refreshPeriod(site);
+  if (fresh.leads_this_period >= leadsLimit(fresh)) {
+    const err = new Error("This site has reached its monthly lead-capture limit. Upgrade to keep collecting emails.");
+    (err as Error & { status: number }).status = 402;
+    throw err;
+  }
+  return fresh;
+}
+
+export async function applyOwnerPlan(ownerId: string, plan: Plan, extra?: Record<string, unknown>): Promise<void> {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const { error: ownerErr } = await db
+    .from("ghostchat_owners")
+    .update({ plan, updated_at: now, ...(extra || {}) })
+    .eq("id", ownerId);
+  if (ownerErr) throw ownerErr;
+  const { error: siteErr } = await db
+    .from("ghostchat_sites")
+    .update({ plan, updated_at: now })
+    .eq("owner_id", ownerId);
+  if (siteErr) throw siteErr;
+}
+
+export async function getOwnerPlan(ownerId: string): Promise<Plan> {
+  const { data, error } = await getDb().from("ghostchat_owners").select("plan").eq("id", ownerId).maybeSingle();
+  if (error) throw error;
+  const plan = data?.plan as Plan | undefined;
+  return plan && plan in PLAN_LIMITS ? plan : "free";
 }
