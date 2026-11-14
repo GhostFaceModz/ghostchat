@@ -382,9 +382,20 @@ $("#new-form").addEventListener("submit", async (ev) => {
   }
 });
 
+// If the tab row overflows (phones, or a very narrow window), map the mouse wheel
+// to horizontal scroll so later tabs stay reachable on a PC without a visible scrollbar.
+$("#tabs").addEventListener("wheel", (ev) => {
+  const bar = ev.currentTarget;
+  if (bar.scrollWidth <= bar.clientWidth + 1) return;
+  if (Math.abs(ev.deltaY) <= Math.abs(ev.deltaX)) return;
+  ev.preventDefault();
+  bar.scrollLeft += ev.deltaY;
+}, { passive: false });
+
 $("#tabs").addEventListener("click", (ev) => {
   const btn = ev.target.closest("button");
   if (!btn) return;
+  btn.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
   state.tab = btn.dataset.tab;
   $$("#tabs button").forEach((b) => b.classList.toggle("on", b === btn));
   state.view = "sites";
