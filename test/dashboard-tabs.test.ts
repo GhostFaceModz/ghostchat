@@ -8,7 +8,8 @@ const js = readFileSync(new URL("../dashboard/app.js", import.meta.url), "utf8")
 
 const TABS = [
   "setup", "train", "tools", "persona", "appearance", "model",
-  "convert", "transcripts", "analytics", "leads", "share", "live"
+  "convert", "transcripts", "analytics", "leads", "share", "live",
+  "support", "tickets", "features"
 ];
 
 test("dashboard lists every site tab, including Leads, Share and Live chat", () => {

@@ -249,13 +249,17 @@
           <button type="button" data-tab="leads">Leads</button>
           <button type="button" data-tab="share">Share</button>
           <button type="button" data-tab="live">Live chat</button>
+          <button type="button" data-tab="support">Mode &amp; support</button>
+          <button type="button" data-tab="tickets">Tickets</button>
+          <button type="button" data-tab="features">Smart features</button>
         </nav>
 
         <section class="panel glass" data-panel="setup">
           <div class="checklist">
             <div class="checklist-head">
               <h3>Getting started</h3>
-              <a class="tiny" href="/guide" target="_blank" rel="noopener">Full guide →</a>
+              <span class="row tight"><button type="button" class="btn small primary" id="wizard-open">Setup wizard</button>
+              <a class="tiny" href="/guide" target="_blank" rel="noopener">Full guide →</a></span>
             </div>
             <ol>
               <li><button type="button" data-goto="train"><b>Train it</b><span>Crawl your site or paste your FAQ</span></button></li>
@@ -380,7 +384,7 @@
             </label>
             <label>Primary colour <input name="primary" type="color" value="#a78bfa" /></label>
             <label class="check"><input name="sound_default" type="checkbox" /> Sound on by default</label>
-            <label class="check"><input name="voice_enabled" type="checkbox" /> Enable voice mode (browser speech, with a graceful fallback)</label>
+            <label class="check"><input name="voice_enabled" type="checkbox" /> Enable voice mode <span class="pill">Pro</span> (mic button + read-aloud in the browser; hidden where unsupported)</label>
             <label class="check"><input name="show_branding" type="checkbox" /> Show “Powered by GhostChat” and “Add to your website” in the chat panel</label>
             <p class="muted tiny" id="branding-note">Free plan always shows the badge. Pro and Business can remove it.</p>
             <button type="submit" class="btn primary">Save appearance</button>
@@ -514,6 +518,103 @@
           <div class="live-channels" id="live-channels"></div>
         </section>
 
+
+        <section class="panel glass hidden" data-panel="support">
+          <h3>Bot mode</h3>
+          <p class="muted">Pick what the bot is mainly for. It changes how it talks, what it asks and which buttons it offers.</p>
+          <div class="mode-picks" id="mode-picks" role="radiogroup" aria-label="Bot mode"></div>
+          <form id="support-form" class="stack">
+            <h3>Support settings</h3>
+            <p class="muted tiny">Used in Support mode. The bot greets, asks what's wrong, troubleshoots step by step, and opens a ticket (name, email, order, problem) when it can't fix it, when the visitor asks for a person, or when they're upset. Tickets go to the Tickets tab and your Telegram/Discord.</p>
+            <label>Support greeting <input name="greeting" maxlength="300" /></label>
+            <label>Quick-reply buttons (one per line) <textarea name="quick_replies" rows="3" placeholder="Track my order&#10;Report a problem&#10;Talk to a human"></textarea>
+              <small class="muted" id="qr-note">The widget shows as many as your follow-up suggestion limit (Persona tab).</small></label>
+            <fieldset class="hours">
+              <legend>Support hours</legend>
+              <label class="check"><input type="checkbox" name="hours_enabled" /> Only offer a human during these hours</label>
+              <div class="row two">
+                <label>Opens <input type="time" name="start" /></label>
+                <label>Closes <input type="time" name="end" /></label>
+              </div>
+              <div class="days" id="support-days"></div>
+              <label>Time zone <input name="tz" placeholder="Europe/London" /></label>
+            </fieldset>
+            <label>Out-of-hours message <textarea name="out_of_hours_message" rows="2" maxlength="500"></textarea></label>
+            <label>Satisfaction rating at the end
+              <select name="csat"><option value="stars">1–5 rating</option><option value="thumbs">Thumbs up / down</option></select></label>
+            <h4>Canned responses</h4>
+            <p class="muted tiny">The bot can use these, and you can insert them when replying to a ticket.</p>
+            <div id="canned-list" class="stack"></div>
+            <div class="row">
+              <button type="button" class="btn small" id="canned-add">+ Canned response</button>
+              <button type="submit" class="btn primary">Save support settings</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel glass hidden" data-panel="tickets">
+          <div class="row between">
+            <h3>Tickets</h3>
+            <div class="tfilter" id="ticket-filter" role="tablist" aria-label="Filter tickets">
+              <button type="button" data-status="open" class="on">Open</button>
+              <button type="button" data-status="pending">Pending</button>
+              <button type="button" data-status="solved">Solved</button>
+              <button type="button" data-status="">All</button>
+            </div>
+          </div>
+          <div class="tickets">
+            <div class="ticket-list" id="ticket-list" aria-live="polite"></div>
+            <div class="ticket-detail glass" id="ticket-detail" hidden></div>
+          </div>
+        </section>
+
+        <section class="panel glass hidden" data-panel="features">
+          <form id="features-form" class="stack">
+            <h3>Answers</h3>
+            <label class="check"><input type="checkbox" name="live_lookup" /> <span><b>Live site lookup</b> · when the bot isn't sure, it checks your site in real time (same domain only, respects robots.txt and your crawl scope, ~7 s max), answers with a link and learns the page</span></label>
+            <label>Site search URL (optional) <input name="lookup_search_url" placeholder="https://yoursite.com/search?q={query}" />
+              <small class="muted">Leave empty to detect it automatically. Must be on your domain and contain <code>{query}</code>.</small></label>
+            <label class="check"><input type="checkbox" name="multilingual" /> <span><b>Reply in the visitor's language</b> · widget buttons and labels are translated for English, Spanish, French, German, Portuguese, Italian, Dutch and Polish</span></label>
+            <label class="check"><input type="checkbox" name="memory_enabled" /> <span><b>Remember returning visitors</b> · an anonymous id on their device recalls preferences (e.g. size, budget). Visitors see a privacy note and can turn it off with “Forget me”</span></label>
+            <label>Auto re-crawl
+              <select name="recrawl_schedule"><option value="off">Off</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select>
+              <small class="muted">Only changed pages are re-embedded. <span id="recrawl-last"></span></small></label>
+
+            <h3>Proactive greetings</h3>
+            <p class="muted tiny">Show a small message by the chat button on matching pages after a delay. Each visitor sees one once per visit. Use <code>/pricing</code>, <code>/blog/*</code> or <code>*</code> for every page.</p>
+            <div id="greet-list" class="stack"></div>
+            <button type="button" class="btn small" id="greet-add">+ Greeting</button>
+
+            <h3>Booking &amp; forms in chat</h3>
+            <label class="check"><input type="checkbox" name="form_enabled" /> Offer a form when visitors mention these words</label>
+            <div class="row two">
+              <label>Form title <input name="form_title" maxlength="120" /></label>
+              <label>Button <input name="form_cta" maxlength="40" /></label>
+            </div>
+            <label>Subtitle <input name="form_subtitle" maxlength="240" /></label>
+            <label>Trigger words (comma separated) <input name="form_triggers" placeholder="book, appointment, quote" /></label>
+            <div class="form-fields" id="form-fields"></div>
+            <small class="muted">Email is always required. Submissions are saved in Leads and sent to your Telegram/Discord.</small>
+
+            <h3>White label <span class="pill">Pro</span></h3>
+            <p class="muted tiny" id="wl-note"></p>
+            <label>Custom chat domain <input name="custom_domain" placeholder="chat.yourdomain.com" /></label>
+            <div class="callout" id="cname-help"></div>
+
+            <h3>WhatsApp &amp; Instagram <span class="pill">Business</span></h3>
+            <p class="muted tiny">Answer WhatsApp and Instagram DMs with the same bot. Off by default. Needs a Meta Business app; see the <a href="/guide#meta" target="_blank" rel="noopener">setup guide</a>.</p>
+            <div class="row two">
+              <label class="check"><input type="checkbox" name="wa_enabled" /> WhatsApp</label>
+              <label>Phone number ID <input name="wa_id" inputmode="numeric" /></label>
+            </div>
+            <div class="row two">
+              <label class="check"><input type="checkbox" name="ig_enabled" /> Instagram</label>
+              <label>Instagram account ID <input name="ig_id" inputmode="numeric" /></label>
+            </div>
+            <div class="row"><button type="submit" class="btn primary">Save features</button></div>
+          </form>
+        </section>
+
         <section class="panel glass hidden" data-panel="share">
           <h3>Shareable chat link</h3>
           <p class="muted">Send this link or print the QR so people can talk to your bot without embedding it first.</p>
@@ -564,9 +665,58 @@
     </form>
   </dialog>
 
+
+  <dialog id="wizard" class="glass wizard" aria-labelledby="wz-title">
+    <div class="wz-steps" id="wz-steps" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+    <div class="wz-body">
+      <section data-step="1">
+        <h3 id="wz-title">Add your website</h3>
+        <p class="muted">We'll read your site so the bot can answer from it.</p>
+        <form id="wz-site" class="stack">
+          <label>Website URL <input name="url" placeholder="https://yoursite.com" required inputmode="url" /></label>
+          <label>Bot name <input name="name" placeholder="Acme Help" /></label>
+          <label>What is it for?
+            <select name="mode"><option value="assistant">General assistant</option><option value="support">Customer support</option><option value="sales">Sales</option><option value="recommendations">Product recommendations</option></select></label>
+          <p class="error" id="wz-err" hidden></p>
+          <div class="row"><button class="btn primary" type="submit">Continue</button></div>
+        </form>
+      </section>
+      <section data-step="2" hidden>
+        <h3>Reading your site</h3>
+        <p class="muted" id="wz-crawl-msg">Crawling your pages… this usually takes under a minute.</p>
+        <div class="wz-progress"><i></i></div>
+        <div class="row"><button class="btn" type="button" data-next>Skip for now</button></div>
+      </section>
+      <section data-step="3" hidden>
+        <h3>Match your brand</h3>
+        <form id="wz-style" class="stack">
+          <div class="row two">
+            <label>Brand colour <input type="color" name="primary" value="#a78bfa" /></label>
+            <label>Look <select name="mode"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+          </div>
+          <label>Greeting <input name="greeting" placeholder="Hi! How can I help?" /></label>
+          <div class="row"><button class="btn primary" type="submit">Save &amp; continue</button></div>
+        </form>
+      </section>
+      <section data-step="4" hidden>
+        <h3>Add it to your site</h3>
+        <p class="muted">Paste this one line just before <code>&lt;/body&gt;</code>.</p>
+        <textarea id="wz-snippet" rows="3" readonly></textarea>
+        <div class="row"><button class="btn primary" type="button" id="wz-copy">Copy snippet</button><button class="btn" type="button" data-next>Next</button></div>
+      </section>
+      <section data-step="5" hidden>
+        <h3>Test your bot</h3>
+        <p class="muted">Ask it something a customer would.</p>
+        <iframe id="wz-chat" title="Test chat" loading="lazy"></iframe>
+        <div class="row"><button class="btn primary" type="button" id="wz-done">Finish</button></div>
+      </section>
+    </div>
+    <button type="button" class="wz-x" id="wz-close" aria-label="Close setup">✕</button>
+  </dialog>
   <div id="toast" role="status" hidden></div>
   <script src="/dashboard/app.js"></script>
   <script src="/dashboard/live.js"></script>
   <script src="/dashboard/tools.js"></script>
+  <script src="/dashboard/v2.js"></script>
 </body>
 </html>

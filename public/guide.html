@@ -304,6 +304,29 @@
           </div>
         </article>
 
+        <section class="help glass reveal" id="meta">
+          <span class="tag">Business plan · optional</span>
+          <h2>WhatsApp &amp; Instagram</h2>
+          <p class="muted">Your bot can answer WhatsApp and Instagram DMs with the same knowledge. It's off until you set it up, and it needs your own Meta Business app (Meta may charge for WhatsApp conversations).</p>
+          <ol>
+            <li>In <b>Meta for Developers</b>, create a Business app and add the <b>WhatsApp</b> and/or <b>Instagram</b> products.</li>
+            <li>Webhook callback URL: <code>https://ghostchat-nfoc.onrender.com/api/webhooks/meta</code>. Verify token: the value of <code>META_VERIFY_TOKEN</code> on the server. Subscribe to <code>messages</code>.</li>
+            <li>On the server set <code>META_CHANNELS_ENABLED=true</code>, <code>META_VERIFY_TOKEN</code>, <code>META_APP_SECRET</code> (used to check every webhook's signature) and <code>META_ACCESS_TOKEN</code> (a system-user token).</li>
+            <li>In the dashboard open <b>Smart features → WhatsApp &amp; Instagram</b>, paste your Phone number ID / Instagram account ID and switch the channel on.</li>
+          </ol>
+          <div class="tip"><b>Tip:</b> Test with the WhatsApp test number Meta gives you before going live.</div>
+        </section>
+
+        <section class="help glass reveal" id="domain">
+          <span class="tag">Pro</span>
+          <h2>White label &amp; custom domain</h2>
+          <ol>
+            <li>Turn off <b>Show “Powered by GhostChat”</b> in Appearance. The bot also stops mentioning GhostChat.</li>
+            <li>Add a <code>CNAME</code> record such as <code>chat</code> → <code>ghostchat-nfoc.onrender.com</code> at your DNS provider and enter <code>chat.yourdomain.com</code> in Smart features.</li>
+            <li>Once the domain is added on the host and its certificate is issued, load <code>https://chat.yourdomain.com/widget.js</code> in your snippet.</li>
+          </ol>
+        </section>
+
         <section class="help glass reveal" id="help">
           <span class="tag">Troubleshooting</span>
           <h2>If something looks off</h2>

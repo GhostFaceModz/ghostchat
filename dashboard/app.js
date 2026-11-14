@@ -192,6 +192,7 @@ async function selectSite(id) {
   if (state.tab === "analytics") loadAnalytics();
   if (state.tab === "live" && window.gcRenderLive) window.gcRenderLive();
   if (window.gcRenderTools) window.gcRenderTools();
+  if (window.gcSiteChanged) window.gcSiteChanged();
   if (state.tab === "leads") loadLeads();
 }
 
@@ -567,7 +568,7 @@ async function loadAnalytics() {
   const topMax = Math.max(1, ...(a.topQuestions || []).map((x) => x.count));
   const q = (a.topQuestions || []).map((x) => "<li class='hbar'><span class='hbar-t'>" + escapeHtml(x.message) + "</span><span class='hbar-b'><i style='width:" + Math.round((x.count / topMax) * 100) + "%'></i></span><b>" + x.count + "</b></li>").join("") || "<li class='muted'>None yet</li>";
   const pages = (a.questionsByPage || []).map((x) => "<li>" + escapeHtml(x.url) + " <span class='muted'>×" + x.count + "</span></li>").join("") || "<li class='muted'>No page data yet. It appears once visitors ask questions from your site.</li>";
-  const low = (a.lowConfidence || []).map((x) => "<li class='lowc'><div><b>" + escapeHtml(x.question || "(no question)") + "</b><span class='muted tiny'>" + (x.reason === "unsure" ? "Bot wasn't sure" : "Visitor gave 👎") + " · " + escapeHtml(new Date(x.created_at).toLocaleString()) + "</span><p class='muted'>" + escapeHtml(String(x.answer || "").slice(0, 220)) + "</p></div><button type='button' class='btn small' data-fix='" + escapeHtml(x.logId) + "' data-q='" + escapeHtml(x.question || "") + "'>Fix this answer</button></li>").join("") || "<li class='muted'>No low-confidence answers right now.</li>";
+  const low = (a.lowConfidence || []).map((x, i) => "<li class='lowc" + (i >= 6 ? " lowc-more" : "") + "'><div><b>" + escapeHtml(x.question || "(no question)") + "</b><span class='muted tiny'>" + (x.reason === "unsure" ? "Bot wasn't sure" : "Visitor gave 👎") + " · " + escapeHtml(new Date(x.created_at).toLocaleString()) + "</span><p class='muted'>" + escapeHtml(String(x.answer || "").slice(0, 220)) + "</p></div><button type='button' class='btn small' data-fix='" + escapeHtml(x.logId) + "' data-q='" + escapeHtml(x.question || "") + "'>Fix this answer</button></li>").join("") || "<li class='muted'>No low-confidence answers right now.</li>";
   const sat = a.satisfaction || {};
   const conv = a.conversion || {};
   const days = a.daily || [];
@@ -585,12 +586,14 @@ async function loadAnalytics() {
     <div class="chart-card"><h3>Questions per day <span class="muted tiny">last 14 days</span></h3>${barChart(days.map((d) => d.count), days.map((d) => d.date), { label: "Questions per day", short: (l) => l.slice(8) })}</div>
     <div class="chart-card"><h3>Busiest hours <span class="muted tiny">${escapeHtml(a.timeZone || "")}${a.peakHour != null ? " · peak " + String(a.peakHour).padStart(2, "0") + ":00" : ""}</span></h3>${barChart(hours, hourLabels, { label: "Questions by hour", dense: true, highlight: a.peakHour, short: (l, i) => (i % 3 === 0 ? String(i) : "") })}</div>
     <div><h3>Top questions</h3><ul class="hbars">${q}</ul></div>
-    <div><h3>Unanswered &amp; low-confidence answers</h3><p class="muted tiny">Fix an answer once and the bot uses your version next time someone asks something similar.</p><ul class="lowc-list">${low}</ul></div>
+    <div><h3>Unanswered &amp; low-confidence answers</h3><p class="muted tiny">Fix an answer once and the bot uses your version next time someone asks something similar.</p><ul class="lowc-list">${low}</ul>${(a.lowConfidence || []).length > 6 ? `<button type="button" class="btn ghost small" id="lowc-all">Show all ${a.lowConfidence.length}</button>` : ""}</div>
     <div><h3>Pages driving questions</h3><ul>${pages}</ul></div>
     ${a.languages && a.languages.length ? "<div><h3>Visitor languages</h3><p class='muted'>" + a.languages.map((l) => escapeHtml(l.lang) + " ×" + l.count).join(" · ") + "</p></div>" : ""}
     ${a.upgradeHint ? "<p class='muted tiny'>" + escapeHtml(a.upgradeHint) + "</p>" : ""}
     <div><h3>Your corrections</h3><div id="corrections" class="list"><p class="muted tiny">Loading…</p></div></div>
   `;
+  const all = $("#lowc-all");
+  if (all) all.addEventListener("click", () => { box.querySelectorAll(".lowc-more").forEach((li) => li.classList.remove("lowc-more")); all.remove(); });
   loadCorrections();
 }
 
