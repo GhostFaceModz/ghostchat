@@ -83,7 +83,8 @@
   }
 
   function renderMarkdown(raw) {
-    var text = String(raw || "");
+    // Internal grounding tags like [#1] are hidden; sources render as chips below the answer.
+    var text = String(raw || "").replace(/\s*\[#\d+(?:\s*,\s*#?\d+)*\]/g, "");
     var blocks = [];
     text = text.replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, function (_, lang, code) {
       var i = blocks.length;
