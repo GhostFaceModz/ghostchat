@@ -35,16 +35,55 @@ export type ChatOutcome = {
   assistantLogId: string;
 };
 
-function uniqueSources(chunks: RetrievedChunk[]): ChatSource[] {
+/** Owner setting: how many source links to show under an answer (0, 1 or 3; default 1). */
+export function sourceLimit(site: Pick<Site, "max_sources">): number {
+  const n = Number(site.max_sources ?? 1);
+  return n === 0 || n === 3 ? n : 1;
+}
+/** Owner setting: how many follow-up suggestion chips to show (0-3; default 2). */
+export function suggestionLimit(site: Pick<Site, "max_suggestions">): number {
+  const n = Number(site.max_suggestions ?? 2);
+  return Number.isInteger(n) && n >= 0 && n <= 3 ? n : 2;
+}
+
+const normUrl = (u: string) => { try { const x = new URL(u); x.hash = ""; x.search = ""; return (x.host + x.pathname.replace(/\/+$/, "")).toLowerCase(); } catch { return u.toLowerCase(); } };
+/** "Pricing | Acme – Best widgets" -> "Pricing", capped at 60 chars on a word boundary. */
+export function cleanSourceTitle(title: string | null, url: string | null): string {
+  let t = (title || "").replace(/\s+/g, " ").trim();
+  const parts = t.split(/\s+[|\u2013\u2014·-]\s+/).filter(Boolean);
+  if (parts.length > 1 && parts[0].length >= 3) t = parts[0];
+  if (!t && url) { try { const x = new URL(url); t = decodeURIComponent(x.pathname.split("/").filter(Boolean).pop() || x.host).replace(/[-_]+/g, " "); } catch { t = url; } }
+  if (t.length > 60) t = t.slice(0, 59).replace(/\s+\S*$/, "") + "\u2026";
+  return t || "Source";
+}
+
+const words5 = (t: string) => new Set((t.toLowerCase().match(/[a-z0-9]{5,}/g) || []));
+/**
+ * Source links shown under an answer: only pages the answer clearly draws on, strongest first, one per page.
+ * A page must score near the best match AND share a good part of its wording with the answer.
+ */
+export function pickSources(site: Pick<Site, "max_sources">, chunks: RetrievedChunk[], answer: string): ChatSource[] {
+  const limit = sourceLimit(site);
+  if (!limit || !chunks.length) return [];
+  const a = words5(answer);
+  if (a.size < 4) return [];
+  const top = Math.max(...chunks.map((c) => c.similarity || 0));
+  const floor = Math.max(similarityThreshold(), top - 0.06);
+  const scored = chunks
+    .filter((c) => (c.similarity || 0) >= floor)
+    .map((c) => { const w = words5(c.content); let hit = 0; a.forEach((x) => { if (w.has(x)) hit++; }); return { c, overlap: hit / a.size }; })
+    .filter((x) => x.overlap >= 0.25)
+    .sort((x, y) => (y.c.similarity || 0) - (x.c.similarity || 0) || y.overlap - x.overlap);
   const seen = new Set<string>();
   const out: ChatSource[] = [];
-  for (const chunk of chunks) {
-    const key = chunk.url || chunk.title || chunk.id;
+  for (const { c } of scored) {
+    const key = c.url ? normUrl(c.url) : (c.title || c.id).toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ title: chunk.title || "Source", url: chunk.url });
+    out.push({ title: cleanSourceTitle(c.title, c.url), url: c.url });
+    if (out.length >= limit) break;
   }
-  return out.slice(0, 5);
+  return out;
 }
 
 export function answerMode(site: Site): "helpful" | "strict" {
@@ -170,26 +209,28 @@ async function insertLog(row: {
 }
 
 export async function maybeSuggestions(site: Site, question: string, answer: string, unsure: boolean): Promise<string[]> {
-  const starters = (site.starter_questions || []).filter(Boolean).slice(0, 3);
-  if (unsure) return starters.length ? starters : ["Can someone from the team help me?", "Where can I find more details?"];
+  const n = suggestionLimit(site);
+  if (!n) return [];
+  const starters = (site.starter_questions || []).filter(Boolean).slice(0, n);
+  if (unsure) return (starters.length ? starters : ["Can someone from the team help me?", "Where can I find more details?"]).slice(0, n);
   try {
     const raw = await completeChat(
       [
         {
           role: "system",
           content:
-            "Suggest 3 short follow-up questions a website visitor might ask next. Return a JSON array of strings only. No preamble. Each question under 80 characters. Stay on the site topic.",
+            `Suggest ${n} short follow-up question${n > 1 ? "s" : ""} a website visitor might ask next. Return a JSON array of strings only. No preamble. Each question under 80 characters. Stay on the site topic.`,
         },
         { role: "user", content: `Question: ${question}\nAnswer: ${answer}` },
       ],
-      { maxTokens: 160, temperature: 0.5, site },
+      { maxTokens: 40 + 45 * n, temperature: 0.5, site },
     );
     const jsonStart = raw.indexOf("[");
     const jsonEnd = raw.lastIndexOf("]");
     if (jsonStart >= 0 && jsonEnd > jsonStart) {
       const parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1)) as unknown;
       if (Array.isArray(parsed)) {
-        return parsed.map((s) => String(s).trim()).filter(Boolean).slice(0, 3);
+        return parsed.map((s) => String(s).trim()).filter(Boolean).slice(0, n);
       }
     }
   } catch {
@@ -242,7 +283,7 @@ export async function answerQuestion(opts: {
       answer: pre.reply,
       unsure: true,
       sources: [],
-      suggestions: site.starter_questions?.slice(0, 3) ?? [],
+      suggestions: (site.starter_questions ?? []).slice(0, suggestionLimit(site)),
       cards: selectCards({ site, message, answer: pre.reply, handoff: await wantsHandoff(site, sessionId, message, true) }),
       userLogId,
       assistantLogId,
@@ -287,7 +328,7 @@ export async function answerQuestion(opts: {
   }
   const unsure = /^i['’]m not sure/i.test(answer.trim()) || !answer.trim();
   const finalAnswer = answer.trim() || UNSURE_REPLY;
-  const sources = unsure || !citesContext(finalAnswer, chunks) ? [] : uniqueSources(chunks);
+  const sources = unsure || !citesContext(finalAnswer, chunks) ? [] : pickSources(site, chunks, finalAnswer);
   const suggestions = await maybeSuggestions(site, message, finalAnswer, unsure);
   const assistantLogId = await insertLog({
     site_id: site.id,
@@ -345,7 +386,7 @@ export async function streamAnswer(opts: {
       answer: pre.reply,
       unsure: true,
       sources: [],
-      suggestions: site.starter_questions?.slice(0, 3) ?? [],
+      suggestions: (site.starter_questions ?? []).slice(0, suggestionLimit(site)),
     });
   }
 
@@ -382,7 +423,7 @@ export async function streamAnswer(opts: {
   }
   const unsure = /^i['’]m not sure/i.test(answer.trim()) || !answer.trim();
   const finalAnswer = answer.trim() || UNSURE_REPLY;
-  const sources = unsure || !citesContext(finalAnswer, chunks) ? [] : uniqueSources(chunks);
+  const sources = unsure || !citesContext(finalAnswer, chunks) ? [] : pickSources(site, chunks, finalAnswer);
   const suggestions = await maybeSuggestions(site, message, finalAnswer, unsure);
   return finish({ answer: finalAnswer, unsure, sources, suggestions });
 }

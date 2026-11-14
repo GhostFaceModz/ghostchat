@@ -322,3 +322,4 @@ dialog::backdrop { background: rgba(5, 2, 12, .7); backdrop-filter: blur(6px); }
 .ch-own summary { cursor: pointer; color: var(--muted); margin-top: 6px; }
 .ch-own .row input { flex: 1; min-width: 160px; font-size: 13px; padding: 8px 10px; }
 @media (max-width: 760px) { .live-grid { grid-template-columns: 1fr; } .live-head { flex-direction: row; } }
+.row.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0; } @media (max-width: 560px) { .row.two { grid-template-columns: 1fr; } }

@@ -65,6 +65,10 @@ export type Site = {
   chat_provider?: string | null;
   chat_model?: string | null;
   answer_mode?: "helpful" | "strict";
+  max_sources?: number | null;
+  max_suggestions?: number | null;
+  search_tools?: unknown;
+  crawl_scope?: unknown;
   usage_alert_level?: number;
   reveal_model?: boolean;
   live_chat?: Record<string, unknown> | null;

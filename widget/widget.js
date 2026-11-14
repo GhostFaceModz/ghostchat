@@ -185,9 +185,9 @@
     ".gc-code { margin: 8px 0 0; padding: 10px; overflow: auto; border-radius: 12px; background: #0b0612; color: #f5f3ff; font-size: 12px; }",
     ".gc-root[data-mode='light'] .gc-code { background: #1e1133; }",
     ".gc-sources, .gc-suggest, .gc-actions { display: flex; flex-wrap: wrap; gap: 6px; }",
-    ".gc-chip, .gc-src { border: 1px solid var(--gc-line); background: transparent; color: var(--gc-muted); border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; text-decoration: none; transition: border-color .18s, color .18s, background .18s; }",
+    ".gc-chip, .gc-src { border: 1px solid var(--gc-line); background: transparent; color: var(--gc-muted); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12px; line-height: 1.35; cursor: pointer; text-decoration: none; transition: border-color .18s, color .18s, background .18s; }",
     ".gc-sources { width: 100%; }",
-    ".gc-src { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; box-sizing: border-box; min-width: 0; }",
+    ".gc-src { display: inline-flex; align-items: center; gap: 5px; max-width: min(100%, 260px); box-sizing: border-box; min-width: 0; }",
     ".gc-src svg { width: 12px; height: 12px; flex: none; opacity: .8; }",
     ".gc-src span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }",
     ".gc-chip:hover, .gc-src:hover { border-color: var(--gc-primary); color: var(--gc-text); }",
@@ -223,9 +223,9 @@
     ".gc-typing i:nth-child(2) { animation-delay: .15s; }",
     ".gc-typing i:nth-child(3) { animation-delay: .3s; }",
     "@keyframes gc-dots { 0%,80%,100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }",
-    ".gc-fb { display: flex; gap: 2px; margin-left: 2px; }",
-    ".gc-fb button { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; color: var(--gc-muted); opacity: .7; display: grid; place-items: center; transition: opacity .18s, background .18s, color .18s, transform .18s var(--gc-spring); }",
-    ".gc-fb button svg { width: 15px; height: 15px; }",
+    ".gc-fb { display: flex; gap: 0; margin: -2px 0 0 0; }",
+    ".gc-fb button { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; color: var(--gc-muted); opacity: .7; display: grid; place-items: center; transition: opacity .18s, background .18s, color .18s, transform .18s var(--gc-spring); }",
+    ".gc-fb button svg { width: 13px; height: 13px; }",
     ".gc-fb button:hover { opacity: 1; background: var(--gc-line); }",
     ".gc-fb button:active { transform: scale(.88); }",
     ".gc-fb button.on { color: var(--gc-primary); opacity: 1; }",
@@ -421,21 +421,29 @@
   function addSources(row, sources) {
     if (!sources || !sources.length) return;
     var wrap = el("div", { class: "gc-sources" });
+    var seen = {};
     sources.slice(0, 3).forEach(function (s) {
+      var key = String(s.url || s.title || "").toLowerCase().replace(/[#?].*$/, "").replace(/\/+$/, "");
+      if (!key || seen[key]) return;
+      seen[key] = 1;
       var label = s.title || s.url || "Source";
       var inner = ICONS.link + "<span>" + escapeHtml(label) + "</span>";
       if (s.url) wrap.appendChild(el("a", { class: "gc-src", href: s.url, target: "_blank", rel: "noopener noreferrer", title: label, html: inner }));
       else wrap.appendChild(el("span", { class: "gc-src", title: label, html: inner }));
     });
-    row.appendChild(wrap);
+    if (wrap.firstChild) row.appendChild(wrap);
+  }
+
+  // Follow-up chips live only under the latest bot reply (older ones are removed).
+  function clearSuggestions() {
+    msgs.querySelectorAll(".gc-suggest").forEach(function (n) { n.remove(); });
   }
 
   function addSuggestions(list) {
+    clearSuggestions();
     if (!list || !list.length) return;
-    var existing = msgs.querySelectorAll(".gc-suggest");
-    existing.forEach(function (n) { n.remove(); });
     var wrap = el("div", { class: "gc-suggest" });
-    list.forEach(function (q) {
+    list.slice(0, 3).forEach(function (q) {
       var chip = el("button", { class: "gc-chip", type: "button", text: q });
       chip.addEventListener("click", function () { sendMessage(q); });
       wrap.appendChild(chip);
@@ -659,6 +667,7 @@
     input.value = "";
     state.sending = true;
     sendBtn.disabled = true;
+    clearSuggestions();
     addBubble("user", escapeHtml(message));
     setThinking(true);
     var typing = el("div", { class: "gc-row assistant" });

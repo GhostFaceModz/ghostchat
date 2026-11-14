@@ -316,6 +316,24 @@
               <small class="muted">Either way, facts about your site (prices, policies, accounts) only ever come from your content. If they're missing, the bot says it isn't sure.</small>
             </label>
             <label class="check"><input name="reveal_model" type="checkbox" /> Let the bot name the AI model it runs on (otherwise it says it's your assistant, powered by GhostChat)</label>
+            <div class="row two">
+              <label>Source links under answers
+                <select name="max_sources">
+                  <option value="0">Off</option>
+                  <option value="1">1 (most relevant page)</option>
+                  <option value="3">Up to 3</option>
+                </select>
+              </label>
+              <label>Follow-up suggestions
+                <select name="max_suggestions">
+                  <option value="0">None</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                </select>
+              </label>
+            </div>
+            <small class="muted">Links only appear when an answer clearly comes from one of your pages. Suggestions show under the latest reply only.</small>
             <label>Greeting <input name="greeting" /></label>
             <label>Starter questions (one per line) <textarea name="starter_questions" rows="4"></textarea></label>
             <label>Guardrails <textarea name="guardrails" rows="3" placeholder="Extra rules the bot must follow"></textarea></label>
