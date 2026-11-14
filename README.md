@@ -66,7 +66,7 @@ Embeddings are **global** (not per-site) so every bot shares the same vector ind
 
 ## Local development
 
-Needs Node 20+ and the env vars in `.env.example`.
+Needs Node 22+ and the env vars in `.env.example`.
 
 ```bash
 cp .env.example .env
@@ -127,7 +127,7 @@ This project does not read or change `public.profiles`, `ghostflix_*`, `gg_*`, `
 
 ## Deploy (Render)
 
-Free Render web service (`render.yaml`, Frankfurt, Node 20). Owner does this — secrets are not in the repo:
+Free Render web service (`render.yaml`, Frankfurt, Node 22; Node 20 crashes because supabase-js needs a global WebSocket). Owner does this — secrets are not in the repo:
 
 1. Confirm both `ghostchat_` migrations have been applied.
 2. Create the service from this repo / Blueprint.

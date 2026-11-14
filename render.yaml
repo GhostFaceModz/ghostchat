@@ -13,8 +13,9 @@ services:
     healthCheckPath: /healthz
     autoDeployTrigger: commit
     envVars:
+      # Node 22+ is required: supabase-js needs the built-in global WebSocket.
       - key: NODE_VERSION
-        value: "20"
+        value: "22"
       - key: NODE_ENV
         value: production
       - key: PUBLIC_URL
