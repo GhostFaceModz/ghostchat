@@ -49,8 +49,38 @@
     voice: false,
     voiceOutput: false,
     bookingUrl: "",
-    bookingProvider: ""
+    bookingProvider: "",
+    lang: "en",
+    multilingual: true,
+    memory: false,
+    memoryOff: false,
+    visitorId: "",
+    mode: "assistant",
+    quickReplies: [],
+    csat: null,
+    replies: 0,
+    usedVoice: false
   };
+
+  // UI strings for the main languages (the bot itself replies in whatever language the visitor writes).
+  var I18N = {
+    en: { ph: "Ask a question…", send: "Send message", checking: "Checking the site…", online: "AI assistant · Online", pb: "Powered by", add: "Add to your website →", err: "I couldn't reply just now. Please try again in a moment.", reach: "I couldn't reach the assistant just now. Please try again.", followTitle: "Want a human to follow up?", followSub: "Leave your email and the team will get back to you.", thanks: "Thanks! The team will follow up by email.", ticket: "Ticket created. The team will reply by email.", sendErr: "Could not send just now.", email: "you@email.com", mem: "This chat remembers your preferences on this device.", forget: "Forget me", memOff: "Memory is off for this chat.", memOn: "Turn on", csatQ: "How did we do?", csatThanks: "Thanks for the feedback!", speak: "Ask by voice", listening: "Listening…", micBlocked: "Voice input isn't available here. You can type instead.", readAloud: "Read replies aloud", min: "Minimise chat", greetClose: "Dismiss" },
+    es: { ph: "Haz una pregunta…", send: "Enviar mensaje", checking: "Consultando el sitio…", online: "Asistente IA · En línea", pb: "Con la tecnología de", add: "Añádelo a tu web →", err: "No he podido responder ahora. Inténtalo de nuevo en un momento.", reach: "No he podido conectar con el asistente. Inténtalo de nuevo.", followTitle: "¿Quieres que una persona te responda?", followSub: "Deja tu correo y el equipo se pondrá en contacto.", thanks: "¡Gracias! El equipo te escribirá por correo.", ticket: "Ticket creado. El equipo te responderá por correo.", sendErr: "No se pudo enviar ahora.", email: "tu@correo.com", mem: "Este chat recuerda tus preferencias en este dispositivo.", forget: "Olvidarme", memOff: "La memoria está desactivada.", memOn: "Activar", csatQ: "¿Qué tal te hemos ayudado?", csatThanks: "¡Gracias por tu opinión!", speak: "Preguntar por voz", listening: "Escuchando…", micBlocked: "La voz no está disponible aquí. Puedes escribir.", readAloud: "Leer respuestas en voz alta", min: "Minimizar chat", greetClose: "Cerrar" },
+    fr: { ph: "Posez une question…", send: "Envoyer", checking: "Je consulte le site…", online: "Assistant IA · En ligne", pb: "Propulsé par", add: "Ajoutez-le à votre site →", err: "Je n'ai pas pu répondre. Réessayez dans un instant.", reach: "Impossible de joindre l'assistant. Réessayez.", followTitle: "Besoin qu'une personne vous recontacte ?", followSub: "Laissez votre e-mail et l'équipe vous répondra.", thanks: "Merci ! L'équipe vous répondra par e-mail.", ticket: "Ticket créé. L'équipe vous répondra par e-mail.", sendErr: "Envoi impossible pour le moment.", email: "vous@email.com", mem: "Ce chat mémorise vos préférences sur cet appareil.", forget: "M'oublier", memOff: "La mémoire est désactivée.", memOn: "Activer", csatQ: "Comment avons-nous fait ?", csatThanks: "Merci pour votre avis !", speak: "Poser par la voix", listening: "J'écoute…", micBlocked: "La saisie vocale n'est pas disponible ici.", readAloud: "Lire les réponses", min: "Réduire le chat", greetClose: "Fermer" },
+    de: { ph: "Stell eine Frage…", send: "Senden", checking: "Ich sehe auf der Website nach…", online: "KI-Assistent · Online", pb: "Bereitgestellt von", add: "Auf deiner Website einbauen →", err: "Ich konnte gerade nicht antworten. Bitte versuch es gleich noch einmal.", reach: "Der Assistent ist gerade nicht erreichbar.", followTitle: "Soll sich jemand bei dir melden?", followSub: "Hinterlass deine E-Mail, das Team meldet sich.", thanks: "Danke! Das Team meldet sich per E-Mail.", ticket: "Ticket erstellt. Das Team antwortet per E-Mail.", sendErr: "Senden gerade nicht möglich.", email: "du@email.de", mem: "Dieser Chat merkt sich deine Vorlieben auf diesem Gerät.", forget: "Vergessen", memOff: "Gedächtnis ist aus.", memOn: "Einschalten", csatQ: "Wie war die Hilfe?", csatThanks: "Danke für dein Feedback!", speak: "Per Sprache fragen", listening: "Ich höre zu…", micBlocked: "Spracheingabe ist hier nicht verfügbar.", readAloud: "Antworten vorlesen", min: "Chat minimieren", greetClose: "Schließen" },
+    pt: { ph: "Faça uma pergunta…", send: "Enviar", checking: "A consultar o site…", online: "Assistente IA · Online", pb: "Com tecnologia", add: "Adicione ao seu site →", err: "Não consegui responder agora. Tente novamente.", reach: "Não consegui contactar o assistente.", followTitle: "Quer que alguém da equipa responda?", followSub: "Deixe o seu e-mail e a equipa entra em contacto.", thanks: "Obrigado! A equipa responde por e-mail.", ticket: "Pedido criado. A equipa responde por e-mail.", sendErr: "Não foi possível enviar agora.", email: "voce@email.com", mem: "Este chat lembra as suas preferências neste dispositivo.", forget: "Esquecer-me", memOff: "A memória está desligada.", memOn: "Ligar", csatQ: "Como foi a ajuda?", csatThanks: "Obrigado pelo feedback!", speak: "Perguntar por voz", listening: "A ouvir…", micBlocked: "A voz não está disponível aqui.", readAloud: "Ler respostas em voz alta", min: "Minimizar chat", greetClose: "Fechar" },
+    it: { ph: "Fai una domanda…", send: "Invia", checking: "Controllo il sito…", online: "Assistente IA · Online", pb: "Realizzato con", add: "Aggiungilo al tuo sito →", err: "Non riesco a rispondere ora. Riprova tra poco.", reach: "Non riesco a contattare l'assistente.", followTitle: "Vuoi che qualcuno ti ricontatti?", followSub: "Lascia la tua email e il team ti risponderà.", thanks: "Grazie! Il team ti scriverà via email.", ticket: "Ticket creato. Il team risponderà via email.", sendErr: "Invio non riuscito.", email: "tu@email.it", mem: "Questa chat ricorda le tue preferenze su questo dispositivo.", forget: "Dimenticami", memOff: "La memoria è disattivata.", memOn: "Attiva", csatQ: "Com'è andata?", csatThanks: "Grazie per il feedback!", speak: "Chiedi a voce", listening: "Ti ascolto…", micBlocked: "L'input vocale non è disponibile qui.", readAloud: "Leggi le risposte", min: "Riduci chat", greetClose: "Chiudi" },
+    nl: { ph: "Stel een vraag…", send: "Versturen", checking: "Ik kijk op de site…", online: "AI-assistent · Online", pb: "Mogelijk gemaakt door", add: "Zet het op je site →", err: "Ik kon nu niet antwoorden. Probeer het zo opnieuw.", reach: "De assistent is nu niet bereikbaar.", followTitle: "Wil je dat iemand contact opneemt?", followSub: "Laat je e-mail achter, het team neemt contact op.", thanks: "Bedankt! Het team mailt je.", ticket: "Ticket aangemaakt. Het team mailt je.", sendErr: "Versturen lukt nu niet.", email: "jij@email.nl", mem: "Deze chat onthoudt je voorkeuren op dit apparaat.", forget: "Vergeet mij", memOff: "Geheugen staat uit.", memOn: "Aanzetten", csatQ: "Hoe hebben we geholpen?", csatThanks: "Bedankt voor je feedback!", speak: "Vraag met je stem", listening: "Ik luister…", micBlocked: "Spraakinvoer is hier niet beschikbaar.", readAloud: "Antwoorden voorlezen", min: "Chat minimaliseren", greetClose: "Sluiten" },
+    pl: { ph: "Zadaj pytanie…", send: "Wyślij", checking: "Sprawdzam stronę…", online: "Asystent AI · Online", pb: "Napędzane przez", add: "Dodaj na swoją stronę →", err: "Nie mogę teraz odpowiedzieć. Spróbuj za chwilę.", reach: "Nie mogę połączyć się z asystentem.", followTitle: "Chcesz, żeby ktoś się odezwał?", followSub: "Zostaw e-mail, a zespół się odezwie.", thanks: "Dzięki! Zespół odpisze e-mailem.", ticket: "Zgłoszenie utworzone. Zespół odpisze e-mailem.", sendErr: "Nie udało się wysłać.", email: "ty@email.pl", mem: "Ten czat pamięta twoje preferencje na tym urządzeniu.", forget: "Zapomnij mnie", memOff: "Pamięć jest wyłączona.", memOn: "Włącz", csatQ: "Jak nam poszło?", csatThanks: "Dzięki za opinię!", speak: "Zapytaj głosem", listening: "Słucham…", micBlocked: "Głos nie jest tu dostępny.", readAloud: "Czytaj odpowiedzi", min: "Zminimalizuj czat", greetClose: "Zamknij" }
+  };
+  function pickLang() {
+    var langs = [];
+    try { langs = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || "en"]); } catch (e) {}
+    for (var i = 0; i < langs.length; i++) { var b = String(langs[i] || "").toLowerCase().split("-")[0]; if (I18N[b]) return b; }
+    return "en";
+  }
+  state.lang = pickLang();
+  function t(key) { var d = I18N[state.multilingual ? state.lang : "en"] || I18N.en; return d[key] || I18N.en[key] || key; }
 
   try {
     state.sessionId = localStorage.getItem("gc_session_" + SITE_KEY) || "";
@@ -58,6 +88,13 @@
       state.sessionId = "s_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
       localStorage.setItem("gc_session_" + SITE_KEY, state.sessionId);
     }
+    // Anonymous visitor id for returning-visitor memory (separate from the chat session). Opt-out is remembered.
+    state.visitorId = localStorage.getItem("gc_vid_" + SITE_KEY) || "";
+    if (!/^v_[a-z0-9]{8,40}$/.test(state.visitorId)) {
+      state.visitorId = "v_" + Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+      localStorage.setItem("gc_vid_" + SITE_KEY, state.visitorId);
+    }
+    state.memoryOff = localStorage.getItem("gc_mem_off_" + SITE_KEY) === "1";
     var soundPref = localStorage.getItem("gc_sound_" + SITE_KEY);
     if (soundPref === "1") state.sound = true;
     if (soundPref === "0") state.sound = false;
@@ -263,6 +300,27 @@
     ".gc-modal-box { width: min(440px, 100%); height: min(640px, 90vh); background: var(--gc-panel); border: 1px solid var(--gc-line); border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; }",
     ".gc-modal-box header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--gc-line); color: var(--gc-text); font-weight: 700; }",
     ".gc-modal-box iframe { flex: 1; width: 100%; border: 0; background: #fff; }",
+    ".gc-status { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--gc-muted); }",
+    ".gc-status .gc-typing { padding: 4px 0; }",
+    ".gc-lead-f { display: grid; gap: 6px; }",
+    ".gc-lead-f input, .gc-lead-f textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--gc-line); background: rgba(0,0,0,.12); color: var(--gc-text); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; resize: vertical; }",
+    ".gc-lead-f textarea { min-height: 62px; }",
+    ".gc-lead-f label { display: grid; gap: 3px; font-size: 11.5px; color: var(--gc-muted); }",
+    ".gc-lead-f button { justify-self: start; }",
+    ".gc-lead-err { color: #fca5a5; font-size: 12px; }",
+    ".gc-csat { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--gc-line); border-radius: 16px; background: var(--gc-bubble); font-size: 13px; }",
+    ".gc-csat-r { display: flex; gap: 4px; }",
+    ".gc-csat-r button { min-width: 34px; height: 34px; border: 1px solid var(--gc-line); border-radius: 10px; background: transparent; color: var(--gc-text); font-size: 16px; cursor: pointer; transition: transform .18s var(--gc-spring), border-color .18s, background .18s; }",
+    ".gc-csat-r button:hover, .gc-csat-r button:focus-visible { border-color: var(--gc-primary); background: color-mix(in srgb, var(--gc-primary) 16%, transparent); transform: translateY(-1px); outline: none; }",
+    ".gc-mem { padding: 0 14px 8px; font-size: 10.5px; color: var(--gc-muted); opacity: .75; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }",
+    ".gc-mem button { border: 0; background: none; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; padding: 0; }",
+    ".gc-iconbtn.gc-listening { color: var(--gc-primary); animation: gc-pulse 1.1s ease-in-out infinite; }",
+    "@keyframes gc-pulse { 0%,100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--gc-primary) 45%, transparent); } 50% { box-shadow: 0 0 0 6px transparent; } }",
+    ".gc-teaser { position: fixed; right: var(--gc-offset-right, 22px); bottom: calc(var(--gc-offset-bottom, 22px) + var(--gc-size) + 12px); z-index: var(--gc-z, 2147483000); max-width: min(270px, calc(100vw - 40px)); display: flex; align-items: flex-start; gap: 6px; padding: 11px 12px 11px 14px; border-radius: 16px 16px 4px 16px; border: 1px solid var(--gc-line); background: var(--gc-panel); color: var(--gc-text); font: 500 13.5px/1.4 'Instrument Sans', 'Segoe UI', system-ui, sans-serif; box-shadow: 0 16px 40px -14px rgba(0,0,0,.6); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); cursor: pointer; opacity: 0; transform: translateY(8px) scale(.97); transition: opacity .25s var(--gc-ease), transform .3s var(--gc-spring); }",
+    ".gc-teaser.on { opacity: 1; transform: none; }",
+    ".gc-teaser button { flex: none; width: 22px; height: 22px; margin: -3px -4px 0 0; border: 0; border-radius: 8px; background: transparent; color: var(--gc-muted); cursor: pointer; display: grid; place-items: center; padding: 0; }",
+    ".gc-teaser button svg { width: 13px; height: 13px; }",
+    ".gc-root[data-open='true'] .gc-teaser { display: none; }",
     "@media (prefers-reduced-motion: reduce) { .gc-root *, .gc-root *::before, .gc-root *::after { animation: none !important; transition-duration: .01ms !important; } .gc-launcher::after { opacity: .45; } }"
   ].join("\n");
 
@@ -326,13 +384,15 @@
     voiceBtn, soundBtn, closeBtn
   ]);
   var msgs = el("div", { class: "gc-msgs", role: "log", "aria-live": "polite" });
-  var input = el("textarea", { rows: "1", placeholder: "Ask a question…", "aria-label": "Your message" });
+  var input = el("textarea", { rows: "1", placeholder: t("ph"), "aria-label": "Your message" });
   var sendBtn = el("button", { class: "gc-send", type: "button", title: "Send", "aria-label": "Send message", html: ICONS.send });
   var composer = el("div", { class: "gc-composer" }, [input, micBtn, sendBtn]);
   var brand = el("div", { class: "gc-brand" });
+  var memNote = el("div", { class: "gc-mem", hidden: "hidden" });
   panel.appendChild(head);
   panel.appendChild(msgs);
   panel.appendChild(composer);
+  panel.appendChild(memNote);
   panel.appendChild(brand);
   var modal = el("div", { class: "gc-modal" });
   var modalBox = el("div", { class: "gc-modal-box" });
@@ -408,8 +468,8 @@
       brand.innerHTML =
         '<a class="gc-pb" href="' + API_BASE + '/' + ref + '" target="_blank" rel="noopener">' +
         ICONS.ghost +
-        'Powered by <b>GhostChat</b></a>' +
-        '<a class="gc-add" href="' + API_BASE + '/signup' + ref + '" target="_blank" rel="noopener">Add to your website →</a>';
+        escapeHtml(t("pb")) + ' <b>GhostChat</b></a>' +
+        '<a class="gc-add" href="' + API_BASE + '/signup' + ref + '" target="_blank" rel="noopener">' + escapeHtml(t("add")) + '</a>';
       brand.style.display = "";
     } else {
       brand.style.display = "none";
@@ -477,35 +537,86 @@
   }
 
   function addLeadForm(row, card) {
-    if (msgs.querySelector(".gc-lead")) return; // one follow-up box per conversation
-    var form = el("form", { class: "gc-lead", "aria-label": "Ask a human to follow up" });
-    var t = el("div", { class: "gc-lead-t", html: ICONS.person });
+    var kind = card && card.kind === "support" ? "support" : card && card.fields ? "form" : "email";
+    if (msgs.querySelector('.gc-lead[data-kind="' + kind + '"]')) return; // one of each per conversation
+    var form = el("form", { class: "gc-lead", "data-kind": kind, "aria-label": (card && card.title) || t("followTitle"), novalidate: "novalidate" });
+    var head = el("div", { class: "gc-lead-t", html: ICONS.person });
     var tx = el("div");
-    tx.appendChild(document.createTextNode((card && card.title) || "Want a human to follow up?"));
-    tx.appendChild(el("small", { text: (card && card.subtitle) || "Leave your email and the team will get back to you." }));
-    t.appendChild(tx);
-    var email = el("input", { type: "email", required: "required", placeholder: "you@email.com", "aria-label": "Your email", autocomplete: "email" });
+    tx.appendChild(document.createTextNode((card && card.title) || t("followTitle")));
+    tx.appendChild(el("small", { text: (card && card.subtitle) || t("followSub") }));
+    head.appendChild(tx);
+    form.appendChild(head);
+    var inputs = {};
     var btn = el("button", { type: "submit", text: (card && card.cta) || "Send" });
-    form.appendChild(t);
-    form.appendChild(el("div", { class: "gc-lead-r" }, [email, btn]));
+    var err = el("div", { class: "gc-lead-err", role: "alert", hidden: "hidden" });
+    if (kind === "email") {
+      inputs.email = el("input", { type: "email", required: "required", placeholder: t("email"), "aria-label": "Your email", autocomplete: "email" });
+      form.appendChild(el("div", { class: "gc-lead-r" }, [inputs.email, btn]));
+    } else {
+      var grid = el("div", { class: "gc-lead-f" });
+      (card.fields || []).forEach(function (f) {
+        var type = f.key === "email" ? "email" : f.key === "phone" ? "tel" : f.key === "date" ? "date" : "text";
+        var ctl = f.key === "message"
+          ? el("textarea", { rows: "3", maxlength: "2000" })
+          : el("input", { type: type, autocomplete: f.key === "name" ? "name" : f.key === "email" ? "email" : f.key === "phone" ? "tel" : "off", maxlength: "200" });
+        if (f.required) ctl.setAttribute("required", "required");
+        inputs[f.key] = ctl;
+        grid.appendChild(el("label", { text: f.label + (f.required ? " *" : "") }, [ctl]));
+      });
+      grid.appendChild(btn);
+      form.appendChild(grid);
+    }
+    form.appendChild(err);
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
+      var payload = { siteKey: SITE_KEY, sessionId: state.sessionId, kind: kind };
+      var missing = null;
+      Object.keys(inputs).forEach(function (k) { payload[k] = inputs[k].value.trim(); if (!missing && inputs[k].required && !payload[k]) missing = inputs[k]; });
+      if (missing) { missing.focus(); return; }
       btn.disabled = true;
+      err.hidden = true;
       fetch(API_BASE + "/api/leads", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ siteKey: SITE_KEY, sessionId: state.sessionId, email: email.value })
+        body: JSON.stringify(payload)
       }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
         .then(function (res) {
+          if (!res.ok) { err.textContent = res.j.error || t("sendErr"); err.hidden = false; btn.disabled = false; return; }
           form.innerHTML = "";
-          form.appendChild(el("div", { class: "gc-lead-t gc-lead-done", html: ICONS.check + "<span>" + escapeHtml(res.ok ? "Thanks! The team will follow up by email." : (res.j.error || "Could not send just now.")) + "</span>" }));
+          var done = kind === "support" ? t("ticket") + (res.j.ticket && res.j.ticket.number ? " (#" + res.j.ticket.number + ")" : "") : t("thanks");
+          form.appendChild(el("div", { class: "gc-lead-t gc-lead-done", html: ICONS.check + "<span>" + escapeHtml(done) + "</span>" }));
+          if (kind === "support") maybeCsat(true);
         })
-        .catch(function () { btn.disabled = false; });
+        .catch(function () { btn.disabled = false; err.textContent = t("sendErr"); err.hidden = false; });
     });
     row.appendChild(form);
     scrollDown();
   }
 
+  // End-of-chat satisfaction rating (support mode): once per session.
+  function maybeCsat(force) {
+    if (!state.csat) return;
+    try { if (sessionStorage.getItem("gc_csat_" + SITE_KEY)) return; } catch (e) {}
+    if (!force && state.replies < 2) return;
+    try { sessionStorage.setItem("gc_csat_" + SITE_KEY, "1"); } catch (e) {}
+    var box = el("div", { class: "gc-csat", role: "group", "aria-label": t("csatQ") });
+    box.appendChild(el("span", { text: t("csatQ") }));
+    var r = el("div", { class: "gc-csat-r" });
+    var opts = state.csat === "thumbs" ? [["up", "👍"], ["down", "👎"]] : [[1, "1"], [2, "2"], [3, "3"], [4, "4"], [5, "5"]];
+    opts.forEach(function (o) {
+      var b = el("button", { type: "button", text: o[1], "aria-label": state.csat === "thumbs" ? (o[0] === "up" ? "Good" : "Bad") : o[0] + " out of 5" });
+      b.addEventListener("click", function () {
+        fetch(API_BASE + "/api/chat/csat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ siteKey: SITE_KEY, sessionId: state.sessionId, rating: o[0] }) }).catch(function () {});
+        box.innerHTML = "";
+        box.appendChild(el("span", { text: t("csatThanks") }));
+      });
+      r.appendChild(b);
+    });
+    box.appendChild(r);
+    var row = el("div", { class: "gc-row assistant" }, [box]);
+    msgs.appendChild(row);
+    scrollDown();
+  }
 
   // Recommendation cards from the site's search tool: a swipeable, lazy-loaded rail.
   function addResults(row, results) {
@@ -595,14 +706,15 @@
     if (wrap.childNodes.length) row.appendChild(wrap);
   }
 
-  function speak(text) {
-    if (!state.voiceOutput || !window.speechSynthesis) return;
+  function speak(text, force) {
+    if (!(state.voiceOutput || force) || !window.speechSynthesis) return;
     try {
       window.speechSynthesis.cancel();
       var clean = String(text || "").replace(/```[\s\S]*?```/g, " ").replace(/[`*_#]/g, " ").trim();
       if (!clean) return;
       var u = new SpeechSynthesisUtterance(clean.slice(0, 800));
       u.rate = 1.02;
+      u.lang = state.speechLang || document.documentElement.lang || "en-GB";
       window.speechSynthesis.speak(u);
     } catch (e) {}
   }
@@ -611,21 +723,44 @@
     return state.voice && (window.SpeechRecognition || window.webkitSpeechRecognition);
   }
 
+  var activeRec = null;
+  function stopListening() {
+    micBtn.classList.remove("gc-listening");
+    micBtn.setAttribute("aria-pressed", "false");
+    input.placeholder = t("ph");
+  }
   function startListening() {
     var Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Ctor) return;
-    var rec = new Ctor();
-    rec.lang = document.documentElement.lang || "en-GB";
-    rec.interimResults = false;
+    if (!Ctor) { addSystem(t("micBlocked")); return; }
+    if (activeRec) { try { activeRec.stop(); } catch (e) {} return; }
+    var rec;
+    try { rec = new Ctor(); } catch (e) { addSystem(t("micBlocked")); return; }
+    activeRec = rec;
+    rec.lang = state.speechLang || (state.multilingual ? (navigator.language || "en-GB") : (document.documentElement.lang || "en-GB"));
+    rec.interimResults = true;
     rec.maxAlternatives = 1;
+    var finalText = "";
     rec.onresult = function (ev) {
-      var said = ev.results && ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript;
-      if (said) sendMessage(said);
+      var interim = "";
+      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+        var r = ev.results[i];
+        if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
+      }
+      input.value = (finalText + " " + interim).trim();
     };
-    rec.onerror = function () { micBtn.style.color = ""; };
-    rec.onend = function () { micBtn.style.color = ""; };
-    micBtn.style.color = "var(--gc-primary)";
-    rec.start();
+    rec.onerror = function (ev) {
+      if (ev && (ev.error === "not-allowed" || ev.error === "service-not-allowed" || ev.error === "audio-capture")) addSystem(t("micBlocked"));
+    };
+    rec.onend = function () {
+      activeRec = null;
+      stopListening();
+      var said = (finalText || input.value || "").trim();
+      if (said) { state.usedVoice = true; sendMessage(said); }
+    };
+    micBtn.classList.add("gc-listening");
+    micBtn.setAttribute("aria-pressed", "true");
+    input.placeholder = t("listening");
+    try { rec.start(); } catch (e) { activeRec = null; stopListening(); addSystem(t("micBlocked")); }
   }
 
   function addFeedback(row, logId, text) {
@@ -729,9 +864,10 @@
   function maybeGreet() {
     if (state.greeted) return;
     state.greeted = true;
-    var text = state.greeting || "Hi — how can I help?";
+    var text = (state.mode === "support" && state.supportGreeting && !script.getAttribute("data-greeting")) ? state.supportGreeting : (state.greeting || "Hi — how can I help?");
+    if (state.pendingGreeting) { text = state.pendingGreeting; state.pendingGreeting = ""; }
     var row = addBubble("assistant", renderMarkdown(text));
-    var starters = (state.starters || []).slice();
+    var starters = state.quickReplies && state.quickReplies.length ? state.quickReplies.slice() : (state.starters || []).slice();
     if (state.bookingUrl && starters.indexOf("Book a time") === -1) starters.push("Book a time");
     addSuggestions(starters);
     void row;
@@ -774,13 +910,16 @@
         message: message,
         sessionId: state.sessionId,
         pageUrl: window.location.href,
+        lang: (navigator.language || "").slice(0, 20),
+        visitorId: state.memory && !state.memoryOff ? state.visitorId : undefined,
+        memory: state.memory && !state.memoryOff,
         stream: true
       })
     }).then(function (res) {
       if (!res.ok || !res.body) {
         return res.json().catch(function () { return {}; }).then(function (j) {
           ensureRow();
-          acc = (j && j.error) || "I couldn't reply just now. Please try again in a moment.";
+          acc = (j && j.error) || t("err");
           bubble.innerHTML = renderMarkdown(acc);
           finish(null);
         });
@@ -795,9 +934,9 @@
           var lines = buf.split("\n");
           buf = lines.pop() || "";
           lines.forEach(function (line) {
-            var t = line.trim();
-            if (t.indexOf("data:") !== 0) return;
-            var data = t.slice(5).trim();
+            var ln = line.trim();
+            if (ln.indexOf("data:") !== 0) return;
+            var data = ln.slice(5).trim();
             if (!data) return;
             try {
               var ev = JSON.parse(data);
@@ -806,6 +945,18 @@
                 acc += ev.text;
                 bubble.innerHTML = renderMarkdown(acc);
                 scrollDown();
+              } else if (ev.type === "status" && ev.status === "checking") {
+                // Live site lookup: show "Checking the site…" while the bot reads fresh pages.
+                if (!row) {
+                  var tb = typing.querySelector(".gc-bubble");
+                  if (tb) tb.innerHTML = '<div class="gc-status"><div class="gc-typing"><i></i><i></i><i></i></div><span>' + escapeHtml(t("checking")) + "</span></div>";
+                } else if (bubble) {
+                  bubble.innerHTML = '<div class="gc-status"><div class="gc-typing"><i></i><i></i><i></i></div><span>' + escapeHtml(t("checking")) + "</span></div>";
+                }
+                scrollDown();
+              } else if (ev.type === "reset") {
+                acc = "";
+                if (bubble) bubble.innerHTML = "";
               } else if (ev.type === "live") {
                 gotLive = true;
                 enterLive(ev);
@@ -824,7 +975,7 @@
       return pump();
     }).catch(function () {
       ensureRow();
-      bubble.innerHTML = "I couldn't reach the assistant just now. Please try again.";
+      bubble.innerHTML = escapeHtml(t("reach"));
       finish(null);
     });
 
@@ -852,7 +1003,10 @@
       if (ev && ev.sources) addSources(row, ev.sources);
       if (ev && ev.suggestions) addSuggestions(ev.suggestions);
       if (ev && ev.cards) addCards(row, ev.cards);
-      speak(acc || (ev && ev.answer) || "");
+      speak(acc || (ev && ev.answer) || "", state.usedVoice);
+      state.usedVoice = false;
+      if (ev && ev.answer) state.replies++;
+      if (/\b(thanks|thank you|cheers|that'?s all|solved|fixed|sorted|gracias|merci|danke|obrigad|grazie|bedankt|dzięki)\b/i.test(message)) maybeCsat(false);
       if (ev && ev.assistantLogId) {
         state.lastLogId = ev.assistantLogId;
         addFeedback(row, ev.assistantLogId, acc || ev.answer);
@@ -890,6 +1044,13 @@
     if (!cfg) return;
     if (cfg.name) { state.name = cfg.name; title.textContent = cfg.name; }
     if (cfg.greeting) state.greeting = cfg.greeting;
+    if (typeof cfg.multilingual === "boolean") state.multilingual = cfg.multilingual;
+    if (typeof cfg.memory === "boolean") state.memory = cfg.memory;
+    if (cfg.mode) state.mode = cfg.mode;
+    if (cfg.quickReplies) state.quickReplies = cfg.quickReplies;
+    if (cfg.csat) state.csat = cfg.csat;
+    if (cfg.supportGreeting) state.supportGreeting = cfg.supportGreeting;
+    if (Array.isArray(cfg.greetings)) state.greetings = cfg.greetings;
     if (cfg.starterQuestions) state.starters = cfg.starterQuestions;
     if (typeof cfg.proactiveDelayMs === "number" && !isNaN(state.delay)) { /* attr wins if set */ }
     if (typeof cfg.proactiveDelayMs === "number" && isNaN(state.delay)) state.delay = cfg.proactiveDelayMs;
@@ -904,6 +1065,12 @@
     if (cfg.bookingUrl) state.bookingUrl = cfg.bookingUrl;
     if (cfg.bookingProvider) state.bookingProvider = cfg.bookingProvider;
     voiceBtn.hidden = !(state.voice && window.speechSynthesis);
+    input.placeholder = t("ph");
+    sub.textContent = t("online");
+    micBtn.setAttribute("aria-label", t("speak")); micBtn.title = t("speak");
+    voiceBtn.setAttribute("aria-label", t("readAloud")); voiceBtn.title = t("readAloud");
+    closeBtn.setAttribute("aria-label", t("min"));
+    renderMemNote();
     micBtn.hidden = !canListen();
     root.setAttribute("data-mode", state.themeMode === "light" ? "light" : "dark");
     root.style.setProperty("--gc-primary", state.primary);
@@ -916,8 +1083,64 @@
   try { if (!state.open && !sessionStorage.getItem("gc_seen_" + SITE_KEY)) setTimeout(function () { if (!state.open) setUnread(true); }, 1500); } catch (e) {}
   soundBtn.setAttribute("aria-pressed", state.sound ? "true" : "false");
 
+  function renderMemNote() {
+    if (!state.memory) { memNote.hidden = true; return; }
+    memNote.hidden = false;
+    memNote.innerHTML = "";
+    if (state.memoryOff) {
+      memNote.appendChild(el("span", { text: t("memOff") }));
+      var on = el("button", { type: "button", text: t("memOn") });
+      on.addEventListener("click", function () { state.memoryOff = false; try { localStorage.removeItem("gc_mem_off_" + SITE_KEY); } catch (e) {} renderMemNote(); });
+      memNote.appendChild(on);
+      return;
+    }
+    memNote.appendChild(el("span", { text: t("mem") }));
+    var off = el("button", { type: "button", text: t("forget") });
+    off.addEventListener("click", function () {
+      state.memoryOff = true;
+      try { localStorage.setItem("gc_mem_off_" + SITE_KEY, "1"); } catch (e) {}
+      fetch(API_BASE + "/api/chat/forget", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ siteKey: SITE_KEY, visitorId: state.visitorId }) }).catch(function () {});
+      renderMemNote();
+    });
+    memNote.appendChild(off);
+  }
+
+  // Proactive greeting: owner rules by URL pattern, shown once per session as a small bubble by the launcher.
+  function matchGreeting() {
+    var list = state.greetings || [];
+    var p = (window.location.pathname || "/").replace(/\/+$/, "") || "/";
+    for (var i = 0; i < list.length; i++) {
+      var g = list[i];
+      if (!g || !g.message) continue;
+      if (g.pattern === "*") return g;
+      var pat = String(g.pattern || "").replace(/\/+$/, "") || "/";
+      if (pat.slice(-1) === "*" ? p.indexOf(pat.slice(0, -1)) === 0 : p === pat) return g;
+    }
+    return null;
+  }
+  function scheduleGreeting() {
+    var g = matchGreeting();
+    if (!g) return false;
+    try { if (sessionStorage.getItem("gc_greet_" + SITE_KEY) || sessionStorage.getItem("gc_seen_" + SITE_KEY)) return true; } catch (e) {}
+    setTimeout(function () {
+      if (state.open || state.greeted) return;
+      try { if (sessionStorage.getItem("gc_greet_" + SITE_KEY)) return; sessionStorage.setItem("gc_greet_" + SITE_KEY, "1"); } catch (e) {}
+      var x = el("button", { type: "button", "aria-label": t("greetClose"), html: ICONS.close });
+      var teaser = el("div", { class: "gc-teaser", role: "status" }, [el("span", { text: g.message }), x]);
+      var hide = function () { teaser.classList.remove("on"); setTimeout(function () { teaser.remove(); }, 300); };
+      x.addEventListener("click", function (ev) { ev.stopPropagation(); hide(); });
+      teaser.addEventListener("click", function () { state.pendingGreeting = g.message; hide(); setOpen(true); });
+      root.appendChild(teaser);
+      requestAnimationFrame(function () { teaser.classList.add("on"); });
+      setUnread(true);
+      setTimeout(hide, 20000);
+    }, Math.max(3, Number(g.delay_s) || 15) * 1000);
+    return true;
+  }
+
   // Proactive open: data-delay wins, then the site's setting, then 4s. 0 turns it off.
   function scheduleProactive() {
+    if (scheduleGreeting()) return; // an owner greeting rule replaces the auto-open on matching pages
     var delay = isNaN(state.delay) ? 4000 : state.delay;
     if (!state.open && delay > 0) {
       setTimeout(function () {
