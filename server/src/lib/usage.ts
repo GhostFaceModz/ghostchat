@@ -15,6 +15,7 @@ export async function refreshPeriod(site: Site): Promise<Site> {
     .update({
       messages_this_period: 0,
       leads_this_period: 0,
+      usage_alert_level: 0,
       period_start: start,
       updated_at: new Date().toISOString(),
     })
@@ -35,10 +36,35 @@ export function messageLimit(site: Site): number {
   return (PLAN_LIMITS[site.plan as Plan] ?? PLAN_LIMITS.free).monthlyMessages;
 }
 
+/** 10% grace over the monthly allowance when there are no credits left. */
+export const GRACE_RATIO = 0.1;
+export const PAUSED_REPLY = "This assistant is taking a short break right now. Please check back a little later, or contact the site directly.";
+
+export type SendDecision = { ok: boolean; reason: "allowance" | "credits" | "grace" | "paused" };
+/** Allowance first, then the account's top-up credits, then 10% grace, then paused. */
+export function decideSend(used: number, limit: number, credits: number): SendDecision {
+  if (used < limit) return { ok: true, reason: "allowance" };
+  if (credits > 0) return { ok: true, reason: "credits" };
+  if (used < Math.floor(limit * (1 + GRACE_RATIO))) return { ok: true, reason: "grace" };
+  return { ok: false, reason: "paused" };
+}
+export function alertLevel(used: number, limit: number): 0 | 80 | 100 {
+  if (!limit) return 0;
+  const pct = used / limit;
+  return pct >= 1 ? 100 : pct >= 0.8 ? 80 : 0;
+}
+
+export async function ownerCredits(ownerId: string): Promise<number> {
+  const { data } = await getDb().from("ghostchat_owners").select("message_credits").eq("id", ownerId).maybeSingle();
+  return Number(data?.message_credits ?? 0);
+}
+
 export async function assertCanSend(site: Site): Promise<Site> {
   const fresh = await refreshPeriod(site);
-  if (fresh.messages_this_period >= messageLimit(fresh)) {
-    const err = new Error("This site has reached its monthly message limit. Upgrade the plan to keep chatting.");
+  const limit = messageLimit(fresh);
+  const credits = fresh.messages_this_period >= limit ? await ownerCredits(fresh.owner_id) : 0;
+  if (!decideSend(fresh.messages_this_period, limit, credits).ok) {
+    const err = new Error(PAUSED_REPLY);
     (err as Error & { status: number }).status = 402;
     throw err;
   }
@@ -49,17 +75,25 @@ export async function incrementMessages(siteId: string): Promise<void> {
   const db = getDb();
   const { data, error } = await db
     .from("ghostchat_sites")
-    .select("messages_this_period")
+    .select("messages_this_period, owner_id, plan, usage_alert_level")
     .eq("id", siteId)
     .single();
   if (error) throw error;
+  const used = (data?.messages_this_period ?? 0) + 1;
+  const limit = messageLimit(data as unknown as Site);
+  const level = alertLevel(used, limit);
   await db
     .from("ghostchat_sites")
     .update({
-      messages_this_period: (data?.messages_this_period ?? 0) + 1,
+      messages_this_period: used,
+      ...(level > (data?.usage_alert_level ?? 0) ? { usage_alert_level: level } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", siteId);
+  // Past the allowance, each message uses one top-up credit (if any; otherwise it's within the grace).
+  if (used > limit && data?.owner_id) {
+    await db.rpc("ghostchat_use_credit", { p_owner: data.owner_id });
+  }
 }
 
 export async function incrementLeads(siteId: string): Promise<void> {

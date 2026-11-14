@@ -193,6 +193,30 @@ async function selectSite(id) {
   if (state.tab === "leads") loadLeads();
 }
 
+// ---- Message top-ups ----
+function topupsHtml(b) {
+  const packs = (b && b.topups) || [];
+  if (!packs.length) return "";
+  return "<div class='topup-head'><h4>Buy messages</h4><span class='muted tiny'>Credits: <b>" + Number(b.credits || 0).toLocaleString("en-GB") + "</b> · used after your monthly allowance, never expire</span></div>" +
+    "<div class='topup-row'>" + packs.map((t) => "<a class='topup' href='" + escapeHtml(checkoutUrl(t.url)) + "' target='_blank' rel='noopener'><b>" + t.messages.toLocaleString("en-GB") + " messages</b><span>£" + t.price + " <small>+ VAT</small></span><em>One-time</em></a>").join("") + "</div>";
+}
+async function renderUsageBanner(s) {
+  const box = $("#usage-banner"); if (!box) return;
+  const used = s.messages_this_period || 0, limit = s.message_limit || 200;
+  const pct = used / limit;
+  if (pct < 0.8) { box.classList.add("hidden"); return; }
+  let b = state.billing;
+  if (!b || !b.topups) { try { b = (await req("/api/billing")).billing; state.billing = b; } catch { b = {}; } }
+  const credits = Number(b.credits || 0);
+  const grace = Math.floor(limit * 1.1);
+  let msg;
+  if (used >= grace && !credits) msg = "<b>Your bot is paused.</b> It used its " + limit.toLocaleString("en-GB") + " monthly messages plus 10% grace. Visitors see a polite \"taking a break\" message until you top up or the month resets.";
+  else if (used >= limit) msg = credits ? "<b>Monthly allowance used.</b> Your bot is now using top-up credits (" + credits.toLocaleString("en-GB") + " left)." : "<b>Monthly allowance used.</b> You're in a 10% grace period (" + Math.max(0, grace - used) + " messages left), then the bot pauses until you top up or the month resets.";
+  else msg = "<b>" + Math.round(pct * 100) + "% of this month's messages used</b> (" + used.toLocaleString("en-GB") + " / " + limit.toLocaleString("en-GB") + "). Top up or upgrade so your bot doesn't pause.";
+  box.className = "usage-banner " + (used >= limit ? "warn" : "note");
+  box.innerHTML = "<p>" + msg + "</p>" + topupsHtml(b);
+}
+
 function renderSite() {
   const s = state.site;
   $("#site-title").textContent = s.name;
@@ -201,6 +225,7 @@ function renderSite() {
   const limit = s.message_limit || 200;
   $("#usage-label").textContent = used + " / " + limit + " messages this month";
   $("#usage-bar i").style.width = Math.min(100, Math.round((used / limit) * 100)) + "%";
+  renderUsageBanner(s);
   $("#site-key").value = s.site_key;
   const snippet = `<script src="${location.origin}/widget.js" data-id="${s.site_key}"></script>`;
   $("#embed").value = snippet;
@@ -648,7 +673,7 @@ async function showBilling() {
     }).join("") + "</div>" +
       "<p class='muted tiny' style='margin-top:16px'>Already paid? Your plan updates within a minute. Make sure the email on your Whop purchase matches <b>" +
       escapeHtml((state.owner && state.owner.email) || "your account email") + "</b>.</p>" +
-      (b.membership && current !== "free" ? "<p class='tiny'><a href='/account#billing' id='billing-manage-link'>Manage or cancel your subscription</a></p>" : "");
+      (b.membership && current !== "free" ? "<p class='tiny'><a href='/account#billing' id='billing-manage-link'>Manage or cancel your subscription</a></p>" : "") + "<div class='topups'>" + topupsHtml(b) + "</div>";
     $("#billing-manage-link")?.addEventListener("click", (ev) => { ev.preventDefault(); showAccount(); });
   } catch (e) {
     box.innerHTML = "<p class='error'>" + escapeHtml(e.message) + "</p>";
@@ -798,6 +823,7 @@ async function renderAccountBilling() {
       p.extra.map((x) => "<li>" + x + "</li>").join("") + "</ul>" +
       (p.url ? "<a class='btn primary' href='" + escapeHtml(checkoutUrl(p.url)) + "' target='_blank' rel='noopener'>Upgrade to " + p.name + "</a>" : "<span class='btn ghost' aria-disabled='true'>Coming soon</span>") +
       (current === "pro" && m ? "<p class='muted tiny'>Your account moves to Business as soon as it's paid. Then cancel the Pro order on Whop so you're not billed twice.</p>" : "") + "</div>").join("");
+    $("#acct-topups").innerHTML = topupsHtml(b);
     const paid = current !== "free" && m && !m.cancel_at_period_end && !(state.owner && state.owner.is_admin);
     $("#acct-cancel-line").hidden = !paid;
     $("#acct-cancel-note").hidden = true;

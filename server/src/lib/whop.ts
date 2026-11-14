@@ -59,6 +59,7 @@ export function extractWhopBilling(event: WhopEvent): {
   productId: string | null;
   metadataOwnerId: string | null;
   metadataPlan: Plan | null;
+  paymentId: string | null;
 } {
   const data = event.data;
   const user = asRecord(data.user) || asRecord(data.member) || asRecord(data.customer);
@@ -83,6 +84,7 @@ export function extractWhopBilling(event: WhopEvent): {
       metadata && typeof metadata.ghostchat_owner_id === "string" ? metadata.ghostchat_owner_id
       : metadata && typeof metadata.owner_id === "string" ? metadata.owner_id : null,
     // Set on a membership when the customer switches Business -> Pro from the cancel flow.
+    paymentId: typeof data.id === "string" && /^pay_/.test(data.id) ? data.id : typeof data.payment_id === "string" ? data.payment_id : null,
     metadataPlan: metadata && (metadata.ghostchat_plan === "pro" || metadata.ghostchat_plan === "business") ? (metadata.ghostchat_plan as Plan) : null,
   };
 }

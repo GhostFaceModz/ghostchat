@@ -10,6 +10,28 @@ import {
 } from "../lib/whop.js";
 
 export const billingRouter = Router();
+
+/** One-time message packs on Whop (prices exclude VAT). */
+export const TOPUPS = [
+  { id: config.whopTopup1000Id, messages: 1000, price: 5 },
+  { id: config.whopTopup5000Id, messages: 5000, price: 15 },
+];
+export function topupFor(planId?: string | null) {
+  return planId ? TOPUPS.find((t) => t.id === planId) ?? null : null;
+}
+
+/** Credit an account once per Whop payment. Returns false when this payment was already credited. */
+export async function grantTopup(ownerId: string, paymentId: string, planId: string, messages: number): Promise<boolean> {
+  const db = getDb();
+  const { error } = await db.from("ghostchat_credit_grants").insert({ owner_id: ownerId, whop_payment_id: paymentId, plan_id: planId, credits: messages });
+  if (error) {
+    if ((error as { code?: string }).code === "23505") return false; // already granted
+    throw error;
+  }
+  const { error: e2 } = await db.rpc("ghostchat_add_credits", { p_owner: ownerId, p_delta: messages });
+  if (e2) throw e2;
+  return true;
+}
 export const whopWebhookRouter = Router();
 
 billingRouter.get("/", requireAuth, async (req, res) => {
@@ -45,6 +67,8 @@ billingRouter.get("/", requireAuth, async (req, res) => {
         pro: config.whopCheckoutProUrl || null,
         business: config.whopCheckoutBusinessUrl || null,
       },
+      credits: Number((await getDb().from("ghostchat_owners").select("message_credits").eq("id", owner.id).maybeSingle()).data?.message_credits ?? 0),
+      topups: TOPUPS.map((t) => ({ id: t.id, messages: t.messages, price: t.price, url: `https://whop.com/checkout/${t.id}` })),
       plans: {
         free: PLAN_LIMITS.free,
         pro: PLAN_LIMITS.pro,
@@ -95,6 +119,20 @@ whopWebhookRouter.post("/", async (req: Request, res: Response) => {
       .ilike("email", info.email)
       .maybeSingle();
     ownerId = owner?.id ?? null;
+  }
+
+  // Top-up packs: credit the account once per payment; never change the plan.
+  const topup = topupFor(info.planId);
+  if (topup) {
+    let granted = false;
+    if (ownerId && /payment\.succeeded|payment_succeeded|payment\.paid/i.test(event.type)) {
+      granted = await grantTopup(ownerId, info.paymentId || eventId || `${info.membershipId}:${event.type}`, topup.id, topup.messages);
+    }
+    await db.from("ghostchat_billing_events").insert({
+      owner_id: ownerId, event_type: event.type || "unknown", whop_event_id: eventId,
+      payload: { type: event.type, email: info.email, planId: info.planId, paymentId: info.paymentId, topup: topup.messages, granted },
+    });
+    return res.json({ ok: true, topup: topup.messages, granted, ownerId });
   }
 
   let plan: Plan | null = null;

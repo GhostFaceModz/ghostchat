@@ -57,6 +57,8 @@ export const config = {
   whopPlanBusinessId: str("WHOP_PLAN_BUSINESS_ID"),
   whopCheckoutProUrl: str("WHOP_CHECKOUT_PRO_URL"),
   whopCheckoutBusinessUrl: str("WHOP_CHECKOUT_BUSINESS_URL"),
+  whopTopup1000Id: str("WHOP_TOPUP_1000_ID") || "plan_uGqpl2f3z1NB8",
+  whopTopup5000Id: str("WHOP_TOPUP_5000_ID") || "plan_3rVqDMRXNHvzM",
   notionApiKey: str("NOTION_API_KEY"),
   voiceEnabled: bool("VOICE_ENABLED", true),
 };
