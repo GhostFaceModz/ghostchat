@@ -58,7 +58,8 @@ export function selectCards(opts: {
   site: Site;
   message: string;
   answer?: string;
-  unsure?: boolean;
+  /** True once the visitor should be offered a human follow-up (2 misses, or asked for a person). */
+  handoff?: boolean;
 }): ConversionCard[] {
   const text = `${opts.message}\n${opts.answer || ""}`;
   const cards = opts.site.conversion_cards ?? [];
@@ -77,7 +78,7 @@ export function selectCards(opts: {
       card.type === "discount" ? DISCOUNT_WORDS :
       card.type === "form" ? FORM_WORDS :
       BOOKING_WORDS;
-    if (matchesTriggers(text, card, kindRe) || (opts.unsure && card.type === "form")) {
+    if (matchesTriggers(text, card, kindRe) || (opts.handoff && card.type === "form")) {
       add(card);
     }
   }
@@ -93,7 +94,7 @@ export function selectCards(opts: {
     });
   }
 
-  if (opts.unsure && !picked.some((c) => c.type === "form")) {
+  if (opts.handoff && !picked.some((c) => c.type === "form")) {
     add({
       id: "form-default",
       type: "form",

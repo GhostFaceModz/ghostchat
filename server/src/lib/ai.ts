@@ -3,26 +3,63 @@ import { localEmbed } from "./localEmbeddings.js";
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
-async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, stream = false): Promise<Response> {
+/** Thrown when the AI provider can't answer (after retries); callers show a friendly fallback. */
+export class AiUnavailableError extends Error {
+  constructor(message: string, public status?: number) { super(message); }
+}
+
+export const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 25_000;
+export const AI_MAX_RETRIES = 2;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Backoff before retry n (0-based): ~0.6s then ~1.8s, honouring Retry-After up to 5s. */
+export function backoffMs(attempt: number, retryAfter?: string | null): number {
+  const ra = Number(retryAfter);
+  if (Number.isFinite(ra) && ra > 0) return Math.min(5000, ra * 1000);
+  return Math.round(600 * Math.pow(3, attempt) * (0.8 + Math.random() * 0.4));
+}
+export function isRetryable(status: number): boolean {
+  return status === 429 || status === 408 || status >= 500;
+}
+
+async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, stream = false, fetchImpl: typeof fetch = fetch): Promise<Response> {
   if (!resolved.apiKey) {
     throw new Error(`No API key is configured for ${resolved.provider}.`);
   }
-  const res = await fetch(`${resolved.baseUrl}${path}`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${resolved.apiKey}`,
-      "content-type": "application/json",
-      ...resolved.headers,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
+  let lastStatus: number | undefined;
+  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
+    // Timeout covers connecting and the first response; streams get an idle timeout in streamChat.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetchImpl(`${resolved.baseUrl}${path}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${resolved.apiKey}`, "content-type": "application/json", ...resolved.headers },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      lastStatus = undefined;
+      if (attempt < AI_MAX_RETRIES) { await sleep(backoffMs(attempt)); continue; }
+      throw new AiUnavailableError(`${resolved.provider} request failed: ${(err as Error).name === "AbortError" ? "timed out" : (err as Error).message}`);
+    }
+    clearTimeout(timer);
+    if (res.ok) {
+      if (stream && !res.body) throw new AiUnavailableError(`${resolved.provider} did not return a stream`);
+      return res;
+    }
+    lastStatus = res.status;
     const text = await res.text().catch(() => "");
+    if (isRetryable(res.status) && attempt < AI_MAX_RETRIES) { await sleep(backoffMs(attempt, res.headers.get("retry-after"))); continue; }
+    if (isRetryable(res.status)) throw new AiUnavailableError(`${resolved.provider} request failed (${res.status}): ${text.slice(0, 200)}`, res.status);
     throw new Error(`${resolved.provider} request failed (${res.status}): ${text.slice(0, 400)}`);
   }
-  if (stream && !res.body) throw new Error(`${resolved.provider} did not return a stream`);
-  return res;
+  throw new AiUnavailableError(`${resolved.provider} request failed`, lastStatus);
 }
+
+export const _test = { aiFetch };
 
 export async function embedTexts(texts: string[], kind: "query" | "passage" = "passage"): Promise<number[][]> {
   if (!texts.length) return [];
@@ -90,8 +127,13 @@ export async function* streamChat(
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  const IDLE_MS = 20_000;
   while (true) {
-    const { done, value } = await reader.read();
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    const { done, value } = await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) => { idle = setTimeout(() => { reader.cancel().catch(() => {}); reject(new AiUnavailableError("The AI stream stalled")); }, IDLE_MS); }),
+    ]).finally(() => clearTimeout(idle));
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split("\n");

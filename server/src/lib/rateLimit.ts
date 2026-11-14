@@ -35,3 +35,12 @@ setInterval(() => {
     if (!bucket.timestamps.length) buckets.delete(key);
   }
 }, 10 * 60 * 1000).unref();
+
+/** Check a bucket without recording a hit. */
+export function peekRateLimit(key: string, limit: number, windowMs: number): { ok: boolean; retryAfterMs: number } {
+  const now = Date.now();
+  const bucket = buckets.get(key);
+  const live = bucket ? bucket.timestamps.filter((t) => now - t < windowMs) : [];
+  if (live.length >= limit) return { ok: false, retryAfterMs: windowMs - (now - live[0]) };
+  return { ok: true, retryAfterMs: 0 };
+}

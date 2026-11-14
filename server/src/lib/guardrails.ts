@@ -47,4 +47,7 @@ export function sanitizeContext(text: string): string {
 }
 
 export const UNSURE_REPLY =
-  "I'm not sure — I don't have enough information from this site to answer that confidently. If you'd like, leave your email and a human can follow up.";
+  "I'm not sure — I couldn't find that on this site, so I'd rather not guess. Try asking another way, or ask me something else.";
+
+/** The visitor explicitly wants a person. */
+export const HUMAN_REQUEST = /\b(human|real person|live (agent|person|chat)|(speak|talk|chat) (to|with) (a |an |the )?(person|someone|agent|team|support|staff|owner)|customer (service|support)|contact (support|the team|you|someone)|email (support|the team)|call me|get in touch)\b/i;

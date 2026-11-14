@@ -148,3 +148,19 @@ export async function getOwnerPlan(ownerId: string): Promise<Plan> {
   const plan = data?.plan as Plan | undefined;
   return plan && plan in PLAN_LIMITS ? plan : "free";
 }
+
+// ---- Per-site daily cap (in memory): a tenth of the monthly allowance per day, at least 25. ----
+const dailyCounts = new Map<string, number>();
+export function dailyCap(site: Site): number {
+  return Math.max(25, Math.ceil(messageLimit(site) / 10));
+}
+export function dailyCapCheck(site: Site, now = new Date()): { ok: boolean; used: number; cap: number } {
+  const day = now.toISOString().slice(0, 10);
+  const key = `${site.id}:${day}`;
+  if (dailyCounts.size > 5000) for (const k of dailyCounts.keys()) if (!k.endsWith(day)) dailyCounts.delete(k);
+  const used = dailyCounts.get(key) ?? 0;
+  const cap = dailyCap(site);
+  if (used >= cap) return { ok: false, used, cap };
+  dailyCounts.set(key, used + 1);
+  return { ok: true, used: used + 1, cap };
+}

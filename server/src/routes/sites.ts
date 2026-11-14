@@ -149,6 +149,8 @@ sitesRouter.patch("/:id", async (req, res) => {
     patch.conversion_cards = normalizeCards(body.conversion_cards, maxCards(site));
   }
   if (typeof body.chat_provider === "string") patch.chat_provider = body.chat_provider.trim() || null;
+  if (body.answer_mode === "helpful" || body.answer_mode === "strict") patch.answer_mode = body.answer_mode;
+  if (typeof body.reveal_model === "boolean") patch.reveal_model = body.reveal_model;
   if (typeof body.chat_model === "string") patch.chat_model = body.chat_model.trim() || null;
   if (typeof body.url === "string" && body.url.trim()) {
     try {

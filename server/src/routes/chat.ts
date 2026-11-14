@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { getDb } from "../lib/supabase.js";
 import { answerQuestion, streamAnswer } from "../lib/chat.js";
-import { clientIp, rateLimit } from "../lib/rateLimit.js";
-import { assertCanSend } from "../lib/usage.js";
+import { clientIp, rateLimit, peekRateLimit } from "../lib/rateLimit.js";
+import { assertCanSend, dailyCapCheck } from "../lib/usage.js";
 import type { Site } from "../types.js";
 
 export const chatRouter = Router();
@@ -13,6 +13,26 @@ async function loadSiteByKey(siteKey: string): Promise<Site | null> {
   const { data, error } = await getDb().from("ghostchat_sites").select("*").eq("site_key", key).maybeSingle();
   if (error) throw error;
   return (data as Site) ?? null;
+}
+
+/** Per visitor (session) and per IP: 6 messages a minute and 60 an hour. In memory. */
+export function chatRateLimit(ip: string, siteKey: string, sessionId: string): { message: string; retryAfterSec: number } | null {
+  const checks: Array<[string, number, number]> = [
+    [`chat:ip:m:${ip}`, 6, 60_000],
+    [`chat:ip:h:${ip}`, 60, 3_600_000],
+    [`chat:sid:m:${siteKey}:${sessionId}`, 6, 60_000],
+    [`chat:sid:h:${siteKey}:${sessionId}`, 60, 3_600_000],
+  ];
+  for (const [key, limit, windowMs] of checks) {
+    const rl = peekRateLimit(key, limit, windowMs);
+    if (!rl.ok) {
+      const sec = Math.max(1, Math.ceil(rl.retryAfterMs / 1000));
+      const wait = sec >= 120 ? `${Math.ceil(sec / 60)} minutes` : `${sec} seconds`;
+      return { message: `Whoa, that's a lot of messages! Please slow down a little and try again in ${wait}.`, retryAfterSec: sec };
+    }
+  }
+  for (const [key, limit, windowMs] of checks) rateLimit(key, limit, windowMs);
+  return null;
 }
 
 chatRouter.post("/", async (req, res) => {
@@ -27,14 +47,19 @@ chatRouter.post("/", async (req, res) => {
   if (sessionId.length > 80) return res.status(400).json({ error: "Invalid session." });
 
   const ip = clientIp(req);
-  const rl = rateLimit(`chat:${siteKey}:${ip}`, 30, 10 * 60 * 1000);
-  if (!rl.ok) {
-    res.setHeader("retry-after", String(Math.ceil(rl.retryAfterMs / 1000)));
-    return res.status(429).json({ error: "You're sending messages a little too quickly. Please wait a moment." });
+  const limited = chatRateLimit(ip, siteKey, sessionId);
+  if (limited) {
+    res.setHeader("retry-after", String(limited.retryAfterSec));
+    return res.status(429).json({ error: limited.message, retryAfter: limited.retryAfterSec });
   }
 
   const site = await loadSiteByKey(siteKey);
   if (!site) return res.status(404).json({ error: "Unknown site key." });
+
+  const daily = dailyCapCheck(site);
+  if (!daily.ok) {
+    return res.status(429).json({ error: "This assistant has had a very busy day and is taking a break. Please try again tomorrow." });
+  }
 
   try {
     await assertCanSend(site);
@@ -55,7 +80,8 @@ chatRouter.post("/", async (req, res) => {
     try {
       await streamAnswer({ site, message, sessionId, pageUrl, onEvent: send });
     } catch (err) {
-      send({ type: "error", error: (err as Error).message || "The assistant could not reply just now." });
+      console.error("chat route failed:", (err as Error).message);
+      send({ type: "error", error: "Sorry, I'm having trouble replying right now. Please try again in a minute." });
     }
     res.end();
     return;
@@ -65,7 +91,8 @@ chatRouter.post("/", async (req, res) => {
     const outcome = await answerQuestion({ site, message, sessionId, pageUrl });
     res.json(outcome);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message || "The assistant could not reply just now." });
+    console.error("chat route failed:", (err as Error).message);
+    res.status(500).json({ error: "Sorry, I'm having trouble replying right now. Please try again in a minute." });
   }
 });
 

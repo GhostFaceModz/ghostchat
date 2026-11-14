@@ -217,6 +217,8 @@ function renderSite() {
   const persona = $("#persona-form");
   persona.persona.value = s.persona || "";
   persona.tone.value = s.tone || "";
+  persona.answer_mode.value = s.answer_mode === "strict" ? "strict" : "helpful";
+  persona.reveal_model.checked = !!s.reveal_model;
   persona.greeting.value = s.greeting || "";
   persona.starter_questions.value = (s.starter_questions || []).join("\n");
   persona.guardrails.value = s.guardrails || "";
@@ -397,6 +399,8 @@ $("#persona-form").addEventListener("submit", async (ev) => {
     body: {
       persona: fd.get("persona"),
       tone: fd.get("tone"),
+      answer_mode: fd.get("answer_mode") === "strict" ? "strict" : "helpful",
+      reveal_model: ev.target.reveal_model.checked,
       greeting: fd.get("greeting"),
       starter_questions: lines(fd.get("starter_questions")),
       guardrails: fd.get("guardrails"),

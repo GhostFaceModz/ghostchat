@@ -64,6 +64,8 @@ export type Site = {
   conversion_cards?: ConversionCard[];
   chat_provider?: string | null;
   chat_model?: string | null;
+  answer_mode?: "helpful" | "strict";
+  reveal_model?: boolean;
 };
 
 export type RetrievedChunk = {

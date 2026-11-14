@@ -289,6 +289,14 @@
           <form id="persona-form" class="stack">
             <label>Persona <textarea name="persona" rows="4" placeholder="Who is the assistant?"></textarea></label>
             <label>Tone <input name="tone" placeholder="friendly and professional" /></label>
+            <label>Answer mode
+              <select name="answer_mode">
+                <option value="helpful">Helpful: also handles greetings, small talk and general questions</option>
+                <option value="strict">Strict: answers only from your site content</option>
+              </select>
+              <small class="muted">Either way, facts about your site (prices, policies, accounts) only ever come from your content. If they're missing, the bot says it isn't sure.</small>
+            </label>
+            <label class="check"><input name="reveal_model" type="checkbox" /> Let the bot name the AI model it runs on (otherwise it says it's your assistant, powered by GhostChat)</label>
             <label>Greeting <input name="greeting" /></label>
             <label>Starter questions (one per line) <textarea name="starter_questions" rows="4"></textarea></label>
             <label>Guardrails <textarea name="guardrails" rows="3" placeholder="Extra rules the bot must follow"></textarea></label>
