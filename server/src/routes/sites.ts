@@ -7,7 +7,7 @@ import { crawlSite, type CrawlScope } from "../lib/crawl.js";
 import { normalizeTools, runTool, fillTemplate } from "../lib/siteTools.js";
 import { classifyIntent } from "../lib/intent.js";
 import { chunkText } from "../lib/chunk.js";
-import { embedTexts } from "../lib/ai.js";
+import { storeChunks, refreshCounts, indexPages } from "../lib/indexer.js";
 import { assertPublicHttpUrl } from "../lib/ssrf.js";
 import { clientIp, rateLimit } from "../lib/rateLimit.js";
 import { countOwnerSites, countUploads, messageLimit, refreshPeriod, effectiveBranding } from "../lib/usage.js";
@@ -16,6 +16,8 @@ import { extractPdfText, isPdfFile } from "../lib/pdf.js";
 import { importNotionPage } from "../lib/notion.js";
 import { detectBookingProvider, normalizeCards } from "../lib/cards.js";
 import { analyticsLevel, getOwnerPlan, maxCards } from "../lib/usage.js";
+import { computeAnalytics, type LogRow } from "../lib/analytics.js";
+import { saveCorrection } from "../lib/corrections.js";
 import type { Site, Theme } from "../types.js";
 
 export const sitesRouter = Router();
@@ -189,48 +191,6 @@ sitesRouter.patch("/:id", async (req, res) => {
   res.json({ site: publicSite(data as Site) });
 });
 
-async function storeChunks(opts: {
-  site: Site;
-  documentId: string;
-  sourceType: string;
-  chunks: Array<{ title: string; url: string | null; content: string; tokenCount: number }>;
-}): Promise<number> {
-  if (!opts.chunks.length) return 0;
-  const vectors = await embedTexts(opts.chunks.map((c) => c.content));
-  const rows = opts.chunks.map((chunk, i) => ({
-    site_id: opts.site.id,
-    document_id: opts.documentId,
-    url: chunk.url,
-    title: chunk.title,
-    content: chunk.content,
-    token_count: chunk.tokenCount,
-    source_type: opts.sourceType,
-    embedding: vectors[i],
-  }));
-  const batchSize = 80;
-  for (let i = 0; i < rows.length; i += batchSize) {
-    const { error } = await getDb().from("ghostchat_chunks").insert(rows.slice(i, i + batchSize));
-    if (error) throw error;
-  }
-  return rows.length;
-}
-
-async function refreshCounts(siteId: string): Promise<void> {
-  const db = getDb();
-  const [{ count: chunks }, { count: docs }] = await Promise.all([
-    db.from("ghostchat_chunks").select("id", { count: "exact", head: true }).eq("site_id", siteId),
-    db.from("ghostchat_documents").select("id", { count: "exact", head: true }).eq("site_id", siteId).eq("source_type", "crawl"),
-  ]);
-  await db
-    .from("ghostchat_sites")
-    .update({
-      chunk_count: chunks ?? 0,
-      page_count: docs ?? 0,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", siteId);
-}
-
 /** Try a search tool from the builder before saving it: returns the first mapped results. */
 sitesRouter.post("/:id/tools/test", async (req, res) => {
   const site = await loadOwnedSite(req, req.params.id);
@@ -276,43 +236,12 @@ sitesRouter.post("/:id/crawl", async (req, res) => {
   // Respond after starting? For MVP we run inline so the dashboard can show the result.
   // Keep it synchronous but robust.
   try {
-    const result = await crawlSite(site.url, site.plan, (site.crawl_scope as CrawlScope | undefined) || undefined);
-    // Replace previous crawl documents + chunks, keep uploads.
-    const { data: oldDocs } = await db
-      .from("ghostchat_documents")
-      .select("id")
-      .eq("site_id", site.id)
-      .eq("source_type", "crawl");
-    const oldIds = (oldDocs ?? []).map((d: { id: string }) => d.id);
-    if (oldIds.length) {
-      await db.from("ghostchat_chunks").delete().in("document_id", oldIds);
-      await db.from("ghostchat_documents").delete().in("id", oldIds);
-    }
-
-    let stored = 0;
-    for (const page of result.pages) {
-      const pageChunks = result.chunks.filter((c) => c.sourceUrl === page.url);
-      const { data: doc, error } = await db
-        .from("ghostchat_documents")
-        .insert({
-          site_id: site.id,
-          filename: page.title,
-          source_type: "crawl",
-          source_url: page.url,
-          byte_size: page.text.length,
-          chunk_count: pageChunks.length,
-        })
-        .select("id")
-        .single();
-      if (error) throw error;
-      stored += await storeChunks({
-        site,
-        documentId: doc.id,
-        sourceType: "crawl",
-        chunks: pageChunks,
-      });
-    }
-
+    const scope = (site.crawl_scope as CrawlScope | undefined) || undefined;
+    const result = await crawlSite(site.url, site.plan, scope);
+    // Incremental: only new or changed pages are re-embedded; pages that disappeared are removed. Uploads stay.
+    const summary = await indexPages(site, result.pages, { sourceType: "crawl", removeMissing: true, scope });
+    const { count: storedCount } = await db.from("ghostchat_chunks").select("id", { count: "exact", head: true }).eq("site_id", site.id).eq("source_type", "crawl");
+    const stored = storedCount ?? summary.chunks;
     await db
       .from("ghostchat_sites")
       .update({
@@ -328,6 +257,7 @@ sitesRouter.post("/:id/crawl", async (req, res) => {
       site: fresh ? publicSite(fresh) : null,
       pages: result.pages.length,
       chunks: stored,
+      changes: summary,
       errors: result.errors.slice(0, 10),
     });
   } catch (err) {
@@ -493,70 +423,77 @@ sitesRouter.get("/:id/analytics", async (req, res) => {
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const db = getDb();
-  const { data: logs, error } = await db
-    .from("ghostchat_logs")
-    .select("id, role, message, was_unsure, feedback, page_url, created_at")
-    .eq("site_id", site.id)
-    .order("created_at", { ascending: false })
-    .limit(1000);
+  const since = new Date(Date.now() - 30 * 86400000).toISOString();
+  const [{ data: logs, error }, { data: leads }, { data: csat }, { data: tickets }] = await Promise.all([
+    db.from("ghostchat_logs").select("id, session_id, role, message, was_unsure, feedback, page_url, created_at, lang")
+      .eq("site_id", site.id).gte("created_at", since).order("created_at", { ascending: false }).limit(3000),
+    db.from("ghostchat_leads").select("session_id").eq("site_id", site.id).gte("created_at", since).limit(2000),
+    db.from("ghostchat_csat").select("rating").eq("site_id", site.id).gte("created_at", since).limit(2000),
+    db.from("ghostchat_tickets").select("status").eq("site_id", site.id).limit(2000),
+  ]);
   if (error) return res.status(500).json({ error: "Could not load analytics." });
-
-  const rows = logs ?? [];
-  const questions = new Map<string, number>();
-  const unanswered: Array<{ id: string; message: string; created_at: string }> = [];
-  let up = 0;
-  let down = 0;
-  let assistant = 0;
-  for (const row of rows) {
-    if (row.role === "user") {
-      const key = String(row.message || "").trim().toLowerCase();
-      if (key) questions.set(key, (questions.get(key) ?? 0) + 1);
-    }
-    if (row.role === "assistant") {
-      assistant += 1;
-      if (row.was_unsure) unanswered.push({ id: row.id, message: row.message, created_at: row.created_at });
-      if (row.feedback === "up") up += 1;
-      if (row.feedback === "down") down += 1;
-    }
-  }
+  const tz = typeof req.query.tz === "string" && /^[A-Za-z_]+(\/[A-Za-z_+-]+){0,2}$/.test(req.query.tz) ? req.query.tz : "Europe/London";
+  const a = computeAnalytics({
+    logs: (logs ?? []) as LogRow[], leads: (leads ?? []).length,
+    leadSessions: (leads ?? []).map((l: { session_id: string | null }) => l.session_id || ""),
+    csat: (csat ?? []).map((c: { rating: number }) => c.rating), tickets: (tickets ?? []) as Array<{ status: string }>, timeZone: tz,
+  });
   const pages = new Map<string, number>();
-  for (const row of rows) {
-    if (row.role === "user" && row.page_url) {
-      pages.set(row.page_url, (pages.get(row.page_url) ?? 0) + 1);
-    }
-  }
-  const topQuestions = [...questions.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([message, count]) => ({ message, count }));
-  const questionsByPage = [...pages.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 15)
-    .map(([url, count]) => ({ url, count }));
-
+  for (const row of (logs ?? []) as LogRow[]) if (row.role === "user" && row.page_url) pages.set(row.page_url, (pages.get(row.page_url) ?? 0) + 1);
   const fresh = await refreshPeriod(site);
   const level = analyticsLevel(fresh);
+  const full = level === "full";
   res.json({
     analytics: {
-      topQuestions,
-      questionsByPage: level === "full" ? questionsByPage : [],
-      unanswered: level === "full" ? unanswered.slice(0, 25) : [],
-      satisfaction: level === "full" ? {
-        up,
-        down,
-        rated: up + down,
-        score: up + down ? Math.round((up / (up + down)) * 100) : null,
-      } : { up: 0, down: 0, rated: 0, score: null },
-      totals: {
-        messages: rows.length,
-        assistant,
-        leads: fresh.leads_this_period,
-        messagesThisPeriod: fresh.messages_this_period,
-        messageLimit: messageLimit(fresh),
-        plan: fresh.plan,
-      },
+      ...a,
+      questionsByPage: full ? [...pages.entries()].sort((x, y) => y[1] - x[1]).slice(0, 15).map(([url, count]) => ({ url, count })) : [],
+      lowConfidence: full ? a.lowConfidence : a.lowConfidence.slice(0, 3),
+      unanswered: a.lowConfidence.filter((x) => x.reason === "unsure").slice(0, 25).map((x) => ({ id: x.logId, message: x.question || x.answer, created_at: x.created_at })),
+      totals: { ...a.totals, leads: fresh.leads_this_period, messagesThisPeriod: fresh.messages_this_period, messageLimit: messageLimit(fresh), plan: fresh.plan },
       level,
-      upgradeHint: level === "basic" ? "Upgrade to Pro to see pages driving questions, unanswered gaps, and satisfaction scores." : null,
+      upgradeHint: full ? null : "Upgrade to Pro for the full low-confidence list, pages driving questions and longer history.",
     },
   });
+});
+
+// ---- "Fix this answer": owner corrections ----
+sitesRouter.get("/:id/corrections", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  const { data, error } = await getDb().from("ghostchat_corrections").select("id, question, answer, log_id, created_at, updated_at")
+    .eq("site_id", site.id).order("created_at", { ascending: false }).limit(200);
+  if (error) return res.status(500).json({ error: "Could not load corrections." });
+  res.json({ corrections: data ?? [] });
+});
+
+sitesRouter.post("/:id/corrections", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  const rl = rateLimit(`fix:${site.id}`, 60, 60 * 60 * 1000);
+  if (!rl.ok) return res.status(429).json({ error: "Too many corrections at once. Try again shortly." });
+  let question = String(req.body?.question || "");
+  const logId = typeof req.body?.logId === "string" ? req.body.logId : null;
+  if (!question.trim() && logId) {
+    // Find the visitor question that led to this reply.
+    const { data: log } = await getDb().from("ghostchat_logs").select("session_id, created_at").eq("id", logId).eq("site_id", site.id).maybeSingle();
+    if (log) {
+      const { data: prev } = await getDb().from("ghostchat_logs").select("message").eq("site_id", site.id).eq("session_id", log.session_id)
+        .eq("role", "user").lte("created_at", log.created_at).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      question = prev?.message || "";
+    }
+  }
+  try {
+    const correction = await saveCorrection(site.id, { question, answer: String(req.body?.answer || ""), logId, id: req.body?.id || null });
+    res.status(201).json({ correction });
+  } catch (err) {
+    res.status((err as Error & { status?: number }).status ?? 500).json({ error: (err as Error).message || "Could not save the correction." });
+  }
+});
+
+sitesRouter.delete("/:id/corrections/:cid", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  const { error } = await getDb().from("ghostchat_corrections").delete().eq("id", req.params.cid).eq("site_id", site.id);
+  if (error) return res.status(500).json({ error: "Could not delete the correction." });
+  res.json({ ok: true });
 });

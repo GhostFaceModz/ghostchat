@@ -17,7 +17,7 @@ export type CrawlResult = {
   errors: string[];
 };
 
-function extractText(html: string, pageUrl: string): { title: string; text: string; links: string[] } {
+export function extractText(html: string, pageUrl: string): { title: string; text: string; links: string[] } {
   const $ = cheerio.load(html);
   $("script, style, noscript, nav, footer, iframe, svg, canvas, form, header").remove();
   const title =
@@ -42,9 +42,11 @@ function extractText(html: string, pageUrl: string): { title: string; text: stri
   return { title, text, links };
 }
 
-async function fetchPage(url: URL): Promise<{ html: string; finalUrl: URL } | null> {
+export async function fetchPage(url: URL, timeoutMs = 12000, signal?: AbortSignal): Promise<{ html: string; finalUrl: URL } | null> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 12000);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const onAbort = () => ctrl.abort();
+  signal?.addEventListener("abort", onAbort);
   try {
     const res = await fetch(url, {
       method: "GET",
@@ -65,6 +67,7 @@ async function fetchPage(url: URL): Promise<{ html: string; finalUrl: URL } | nu
     return null;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -88,7 +91,7 @@ export function pageChunk(page: CrawledPage): TextChunk {
   return { title: page.title, url: page.url, content, tokenCount: Math.max(1, Math.ceil(content.length / 4)) };
 }
 
-async function discoverSitemapUrls(origin: URL, maxUrls: number, custom?: string): Promise<URL[]> {
+export async function discoverSitemapUrls(origin: URL, maxUrls: number, custom?: string): Promise<URL[]> {
   const targets = custom ? [new URL(custom, origin)] : [new URL("/sitemap.xml", origin), new URL("/sitemap_index.xml", origin)];
   const found: URL[] = [];
   const seen = new Set<string>();

@@ -72,6 +72,18 @@ export type Site = {
   usage_alert_level?: number;
   reveal_model?: boolean;
   live_chat?: Record<string, unknown> | null;
+  recrawl_schedule?: "off" | "daily" | "weekly";
+  live_lookup?: boolean;
+  lookup_search_url?: string | null;
+  greetings?: Array<{ pattern: string; message: string; delay_s: number }>;
+  chat_form?: Record<string, unknown> | null;
+  memory_enabled?: boolean;
+  multilingual?: boolean;
+  custom_domain?: string | null;
+  channels?: Record<string, unknown> | null;
+  bot_mode?: "assistant" | "support" | "sales" | "recommendations";
+  support?: Record<string, unknown> | null;
+  updated_at?: string;
 };
 
 export type RetrievedChunk = {

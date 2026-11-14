@@ -11,6 +11,7 @@ import { selectCards } from "./cards.js";
 import { resolveEmbeddingModel } from "./models.js";
 import type { ChatSource, ConversionCard, RetrievedChunk, Site } from "../types.js";
 import { toolTurn, logText, type ResultCard } from "./recommend.js";
+import { matchCorrections, correctionChunks } from "./corrections.js";
 
 /**
  * Minimum cosine similarity for a chunk to count as relevant.
@@ -67,6 +68,7 @@ const words5 = (t: string) => new Set((t.toLowerCase().match(/[a-z0-9]{5,}/g) ||
  */
 export function pickSources(site: Pick<Site, "max_sources">, chunks: RetrievedChunk[], answer: string): ChatSource[] {
   const limit = sourceLimit(site);
+  chunks = chunks.filter((c) => !String(c.id).startsWith("correction:"));
   if (!limit || !chunks.length) return [];
   const a = words5(answer);
   if (a.size < 4) return [];
@@ -176,14 +178,18 @@ export async function wantsHandoff(site: Site, sessionId: string, message: strin
 export async function retrieveChunks(siteId: string, question: string): Promise<RetrievedChunk[]> {
   const [embedding] = await embedTexts([question], "query");
   if (!embedding?.length) return [];
-  const { data, error } = await getDb().rpc("ghostchat_match_chunks", {
-    query_embedding: embedding,
-    match_site_id: siteId,
-    match_count: 6,
-    match_threshold: similarityThreshold(),
-  });
+  const [{ data, error }, corrections] = await Promise.all([
+    getDb().rpc("ghostchat_match_chunks", {
+      query_embedding: embedding,
+      match_site_id: siteId,
+      match_count: 6,
+      match_threshold: similarityThreshold(),
+    }),
+    matchCorrections(siteId, embedding).catch(() => []),
+  ]);
   if (error) throw error;
-  return (data ?? []) as RetrievedChunk[];
+  // Owner corrections ("Fix this answer") always come first.
+  return [...correctionChunks(siteId, corrections), ...((data ?? []) as RetrievedChunk[])];
 }
 
 async function insertLog(row: {

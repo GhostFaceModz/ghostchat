@@ -541,29 +541,104 @@ async function loadLogs() {
     const when = new Date(l.created_at).toLocaleString();
     const extra = [l.was_unsure ? "unsure" : "", l.feedback || "", l.page_url || ""].filter(Boolean).join(" · ");
     item.innerHTML = "<div class='who'>" + escapeHtml(l.role) + " · " + escapeHtml(when) + (extra ? " · " + escapeHtml(extra) : "") + "</div><div>" + escapeHtml(l.message) + "</div>";
+    if (l.role === "assistant") {
+      const fix = document.createElement("button");
+      fix.type = "button"; fix.className = "btn tiny ghost fix-btn"; fix.textContent = "Fix this answer";
+      fix.addEventListener("click", () => openFix(l.id, "", l.message));
+      item.appendChild(fix);
+    }
     box.appendChild(item);
   });
 }
 
+function barChart(values, labels, opts = {}) {
+  const max = Math.max(1, ...values);
+  const hi = opts.highlight;
+  return "<div class='bars" + (opts.dense ? " dense" : "") + "' role='img' aria-label='" + escapeHtml(opts.label || "Chart") + "'>" + values.map((v, i) =>
+    "<div class='bar" + (i === hi ? " hi" : "") + "' title='" + escapeHtml(labels[i] + ": " + v) + "'><i style='height:" + Math.max(v ? 4 : 0, Math.round((v / max) * 100)) + "%'></i><span>" + escapeHtml(opts.short ? opts.short(labels[i], i) : labels[i]) + "</span></div>").join("") + "</div>";
+}
+
 async function loadAnalytics() {
   if (!state.site) return;
-  const { analytics } = await req("/api/sites/" + state.site.id + "/analytics");
-  const a = analytics;
+  let tz = "Europe/London";
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || tz; } catch {}
+  const { analytics: a } = await req("/api/sites/" + state.site.id + "/analytics?tz=" + encodeURIComponent(tz));
   const box = $("#analytics");
-  const q = (a.topQuestions || []).map((x) => "<li>" + escapeHtml(x.message) + " <span class='muted'>×" + x.count + "</span></li>").join("") || "<li class='muted'>None yet</li>";
-  const pages = (a.questionsByPage || []).map((x) => "<li>" + escapeHtml(x.url) + " <span class='muted'>×" + x.count + "</span></li>").join("") || "<li class='muted'>No page data yet — it appears once visitors ask questions from your site.</li>";
-  const gaps = (a.unanswered || []).map((x) => "<li>" + escapeHtml(x.message) + "</li>").join("") || "<li class='muted'>No unanswered gaps right now</li>";
+  const topMax = Math.max(1, ...(a.topQuestions || []).map((x) => x.count));
+  const q = (a.topQuestions || []).map((x) => "<li class='hbar'><span class='hbar-t'>" + escapeHtml(x.message) + "</span><span class='hbar-b'><i style='width:" + Math.round((x.count / topMax) * 100) + "%'></i></span><b>" + x.count + "</b></li>").join("") || "<li class='muted'>None yet</li>";
+  const pages = (a.questionsByPage || []).map((x) => "<li>" + escapeHtml(x.url) + " <span class='muted'>×" + x.count + "</span></li>").join("") || "<li class='muted'>No page data yet. It appears once visitors ask questions from your site.</li>";
+  const low = (a.lowConfidence || []).map((x) => "<li class='lowc'><div><b>" + escapeHtml(x.question || "(no question)") + "</b><span class='muted tiny'>" + (x.reason === "unsure" ? "Bot wasn't sure" : "Visitor gave 👎") + " · " + escapeHtml(new Date(x.created_at).toLocaleString()) + "</span><p class='muted'>" + escapeHtml(String(x.answer || "").slice(0, 220)) + "</p></div><button type='button' class='btn small' data-fix='" + escapeHtml(x.logId) + "' data-q='" + escapeHtml(x.question || "") + "'>Fix this answer</button></li>").join("") || "<li class='muted'>No low-confidence answers right now.</li>";
   const sat = a.satisfaction || {};
+  const conv = a.conversion || {};
+  const days = a.daily || [];
+  const hours = a.hours || new Array(24).fill(0);
+  const hourLabels = hours.map((_, h) => String(h).padStart(2, "0") + ":00");
   box.innerHTML = `
     <div class="stat-row">
-      <div class="stat"><b>${a.totals.messagesThisPeriod}</b> messages this period</div>
+      <div class="stat"><b>${conv.conversations ?? 0}</b> conversations (30 days)</div>
+      <div class="stat"><b>${a.answerRate == null ? "—" : a.answerRate + "%"}</b> answered confidently</div>
+      <div class="stat"><b>${conv.rate ?? 0}%</b> lead conversion (${conv.leads ?? 0} leads)</div>
       <div class="stat"><b>${sat.score == null ? "—" : sat.score + "%"}</b> helpful (${sat.up || 0} 👍 / ${sat.down || 0} 👎)</div>
-      <div class="stat"><b>${a.totals.leads}</b> leads this period</div>
+      <div class="stat"><b>${a.csat && a.csat.average != null ? a.csat.average + "/5" : "—"}</b> satisfaction (${(a.csat && a.csat.count) || 0} ratings)</div>
+      <div class="stat"><b>${a.totals.messagesThisPeriod}</b> messages this period</div>
     </div>
-    <div><h3>Top questions</h3><ul>${q}</ul></div>
+    <div class="chart-card"><h3>Questions per day <span class="muted tiny">last 14 days</span></h3>${barChart(days.map((d) => d.count), days.map((d) => d.date), { label: "Questions per day", short: (l) => l.slice(8) })}</div>
+    <div class="chart-card"><h3>Busiest hours <span class="muted tiny">${escapeHtml(a.timeZone || "")}${a.peakHour != null ? " · peak " + String(a.peakHour).padStart(2, "0") + ":00" : ""}</span></h3>${barChart(hours, hourLabels, { label: "Questions by hour", dense: true, highlight: a.peakHour, short: (l, i) => (i % 3 === 0 ? String(i) : "") })}</div>
+    <div><h3>Top questions</h3><ul class="hbars">${q}</ul></div>
+    <div><h3>Unanswered &amp; low-confidence answers</h3><p class="muted tiny">Fix an answer once and the bot uses your version next time someone asks something similar.</p><ul class="lowc-list">${low}</ul></div>
     <div><h3>Pages driving questions</h3><ul>${pages}</ul></div>
-    <div><h3>Unanswered gaps</h3><ul>${gaps}</ul></div>
+    ${a.languages && a.languages.length ? "<div><h3>Visitor languages</h3><p class='muted'>" + a.languages.map((l) => escapeHtml(l.lang) + " ×" + l.count).join(" · ") + "</p></div>" : ""}
+    ${a.upgradeHint ? "<p class='muted tiny'>" + escapeHtml(a.upgradeHint) + "</p>" : ""}
+    <div><h3>Your corrections</h3><div id="corrections" class="list"><p class="muted tiny">Loading…</p></div></div>
   `;
+  loadCorrections();
+}
+
+// ---- "Fix this answer" ----
+function openFix(logId, question, answer, id) {
+  const dlg = $("#fix-dialog");
+  const f = $("#fix-form");
+  f.logId.value = logId || "";
+  f.cid.value = id || "";
+  f.question.value = question || "";
+  f.answer.value = answer || "";
+  $("#fix-error").hidden = true;
+  dlg.showModal();
+  setTimeout(() => f.answer.focus(), 30);
+}
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-fix]");
+  if (!b) return;
+  openFix(b.dataset.fix, b.dataset.q || "", "");
+});
+$("#fix-cancel")?.addEventListener("click", () => $("#fix-dialog").close());
+$("#fix-form")?.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const f = ev.target;
+  try {
+    await req("/api/sites/" + state.site.id + "/corrections", { method: "POST", body: { logId: f.logId.value || null, id: f.cid.value || null, question: f.question.value, answer: f.answer.value } });
+    $("#fix-dialog").close();
+    toast("Saved. The bot will use your answer from now on.");
+    if (state.tab === "analytics") loadCorrections();
+  } catch (e) { $("#fix-error").textContent = e.message; $("#fix-error").hidden = false; }
+});
+async function loadCorrections() {
+  const box = $("#corrections");
+  if (!box || !state.site) return;
+  const { corrections } = await req("/api/sites/" + state.site.id + "/corrections").catch(() => ({ corrections: [] }));
+  box.innerHTML = corrections.length ? "" : "<p class='muted tiny'>No corrections yet. Use “Fix this answer” on a reply.</p>";
+  corrections.forEach((c) => {
+    const item = document.createElement("div");
+    item.className = "item";
+    item.innerHTML = "<div><strong>" + escapeHtml(c.question) + "</strong><div class='muted'>" + escapeHtml(c.answer.slice(0, 240)) + "</div></div>";
+    const row = document.createElement("span");
+    row.className = "row tight";
+    const edit = document.createElement("button"); edit.className = "btn tiny ghost"; edit.textContent = "Edit";
+    edit.addEventListener("click", () => openFix(c.log_id, c.question, c.answer, c.id));
+    const del = document.createElement("button"); del.className = "btn tiny ghost"; del.textContent = "Remove";
+    del.addEventListener("click", async () => { await req("/api/sites/" + state.site.id + "/corrections/" + c.id, { method: "DELETE" }); loadCorrections(); });
+    row.append(edit, del); item.appendChild(row); box.appendChild(item);
+  });
 }
 
 async function loadLeads() {

@@ -531,6 +531,18 @@
     </main>
   </section>
 
+  <dialog id="fix-dialog" class="glass">
+    <form id="fix-form" class="stack">
+      <h3>Fix this answer</h3>
+      <p class="muted tiny">Your answer is saved as a verified Q&amp;A. The bot uses it first whenever someone asks something similar.</p>
+      <input type="hidden" name="logId" /><input type="hidden" name="cid" />
+      <label>Visitor question <input name="question" placeholder="Filled in from the chat if left empty" maxlength="500" /></label>
+      <label>Correct answer <textarea name="answer" rows="6" required maxlength="4000" placeholder="Write the answer the bot should give"></textarea></label>
+      <p class="error" id="fix-error" hidden></p>
+      <div class="row"><button type="submit" class="btn primary">Save answer</button><button type="button" class="btn ghost" id="fix-cancel">Cancel</button></div>
+    </form>
+  </dialog>
+
   <dialog id="new-dialog" class="glass">
     <form id="new-form" class="stack">
       <h3>New site</h3>
