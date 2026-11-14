@@ -143,7 +143,7 @@ app.listen(config.port, () => {
   console.log(`GhostChat listening on ${config.publicUrl} (port ${config.port})`);
   if (resolveEmbeddingModel().provider === "local") {
     warmupLocalEmbeddings().then(
-      () => console.log("Local embeddings model ready (Xenova/all-MiniLM-L6-v2, 384-d)"),
+      () => console.log("Local embeddings model ready (hash/feature-384, 384-d)"),
       (err) => console.error("Failed to warm local embeddings:", err),
     );
   }

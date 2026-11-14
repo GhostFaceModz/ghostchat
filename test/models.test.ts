@@ -71,10 +71,10 @@ test("uses the owner's OpenRouter pick when the key is present", () => {
   delete process.env.OPENROUTER_API_KEY;
 });
 
-test("defaults embeddings to local MiniLM with no API key", () => {
+test("defaults embeddings to local hash embeddings with no API key", () => {
   const resolved = resolveEmbeddingModel();
   assert.equal(resolved.provider, "local");
-  assert.equal(resolved.model, "Xenova/all-MiniLM-L6-v2");
+  assert.equal(resolved.model, "hash/feature-384");
   assert.equal(resolved.apiKey, "");
 });
 

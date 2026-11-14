@@ -44,7 +44,7 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
     embeddings: {
       supported: false,
       dimensions: 384,
-      note: "OpenRouter has no embeddings API. GhostChat uses the local MiniLM model (free, no key) by default.",
+      note: "OpenRouter has no embeddings API. GhostChat uses the lightweight local hash embeddings (free, no key, free-tier friendly) by default.",
     },
   },
   grok: {
@@ -78,7 +78,7 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
       supported: true,
       model: "text-embedding-3-small",
       dimensions: 384,
-      note: "Requests 384 dimensions so vectors stay compatible with the local MiniLM index.",
+      note: "Requests 384 dimensions so vectors stay compatible with the local 384-d index.",
     },
   },
   gemini: {
@@ -94,7 +94,7 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
       supported: true,
       model: "gemini-embedding-001",
       dimensions: 384,
-      note: "Requests 384 dimensions so vectors stay compatible with the local MiniLM index.",
+      note: "Requests 384 dimensions so vectors stay compatible with the local 384-d index.",
     },
   },
 };
@@ -255,7 +255,7 @@ export function publicModelCatalog(): {
       supported: true,
       note:
         resolved.provider === "local"
-          ? "Default: local Xenova/all-MiniLM-L6-v2 (384-d, no API key, no cost)."
+          ? "Default: local hash/feature-384 (384-d, no API key, free-tier friendly)."
           : undefined,
     },
     providers: (Object.keys(PROVIDERS) as ProviderId[]).map((id) => ({
