@@ -4,9 +4,22 @@ import { detectInjection, hitsBannedTopic, sanitizeContext, UNSURE_REPLY } from 
 import { redactPii } from "./pii.js";
 import { incrementMessages } from "./usage.js";
 import { selectCards } from "./cards.js";
+import { resolveEmbeddingModel } from "./models.js";
 import type { ChatSource, ConversionCard, RetrievedChunk, Site } from "../types.js";
 
-const SIMILARITY_THRESHOLD = 0.72;
+/**
+ * Minimum cosine similarity for a chunk to count as relevant.
+ * Neural embeddings score real matches around 0.7+, but the free local feature-hash
+ * embedder scores them around 0.3-0.5, so it needs a lower bar (0.72 meant every
+ * question came back "not sure"). The system prompt still forces an "I'm not sure"
+ * reply when the retrieved context doesn't answer the question.
+ * Override with SIMILARITY_THRESHOLD if needed.
+ */
+export function similarityThreshold(): number {
+  const fromEnv = Number(process.env.SIMILARITY_THRESHOLD);
+  if (Number.isFinite(fromEnv) && fromEnv > 0 && fromEnv < 1) return fromEnv;
+  return resolveEmbeddingModel().provider === "local" ? 0.2 : 0.72;
+}
 
 export type ChatOutcome = {
   answer: string;
@@ -70,7 +83,7 @@ export async function retrieveChunks(siteId: string, question: string): Promise<
     query_embedding: embedding,
     match_site_id: siteId,
     match_count: 6,
-    match_threshold: SIMILARITY_THRESHOLD,
+    match_threshold: similarityThreshold(),
   });
   if (error) throw error;
   return (data ?? []) as RetrievedChunk[];
