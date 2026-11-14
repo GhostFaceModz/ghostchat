@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex" />
+  <meta name="referrer" content="no-referrer" />
+  <title>Signing you in · GhostChat</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E👻%3C/text%3E%3C/svg%3E" />
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; font-family: Inter, system-ui, sans-serif; color: #f6f3ff;
+      background: radial-gradient(900px 500px at 20% -10%, #8f6cff44, transparent 60%), radial-gradient(700px 400px at 100% 100%, #ff6ad522, transparent 60%), #07060f; }
+    .card { width: min(420px, 100%); text-align: center; padding: 34px 26px; border-radius: 26px; border: 1px solid rgba(224, 216, 255, .14); background: rgba(18, 13, 34, .7); backdrop-filter: blur(20px); }
+    .ghost { font-size: 44px; animation: bob 2.4s ease-in-out infinite; }
+    h1 { font-size: 20px; margin: 12px 0 6px; }
+    p { color: #aaa5c2; margin: 0 0 18px; line-height: 1.5; }
+    a { color: #ddd3ff; font-weight: 600; }
+    .spin { width: 26px; height: 26px; margin: 0 auto; border-radius: 50%; border: 3px solid #ffffff22; border-top-color: #b9a6ff; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes bob { 50% { transform: translateY(-6px); } }
+    @media (prefers-reduced-motion: reduce) { .ghost, .spin { animation: none; } }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="ghost" aria-hidden="true">👻</div>
+    <h1 id="title">Signing you in…</h1>
+    <p id="msg">Hang tight, this only takes a second.</p>
+    <div class="spin" id="spin" aria-hidden="true"></div>
+  </main>
+  <script>
+    // Supabase Auth (implicit flow) returns the session in the URL fragment. Exchange the
+    // access token for a GhostChat session; the Supabase tokens themselves are never stored.
+    (async () => {
+      const hash = new URLSearchParams(location.hash.slice(1));
+      const query = new URLSearchParams(location.search);
+      history.replaceState({}, "", location.pathname);
+      const fail = (message) => {
+        document.getElementById("title").textContent = "Sign-in didn't finish";
+        document.getElementById("msg").innerHTML = "";
+        document.getElementById("msg").append(message + " ");
+        const a = document.createElement("a");
+        a.href = "/login"; a.textContent = "Back to sign in";
+        document.getElementById("msg").append(a);
+        document.getElementById("spin").remove();
+      };
+      const err = hash.get("error_description") || query.get("error_description") || hash.get("error") || query.get("error");
+      if (err) return fail(err.replace(/\+/g, " ") + ".");
+      const accessToken = hash.get("access_token");
+      if (!accessToken) return fail("No sign-in details came back from Discord or Google.");
+      try {
+        const res = await fetch("/api/auth/supabase", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ access_token: accessToken })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.token) return fail(data.error || "Sign-in failed.");
+        localStorage.setItem("gc_token", data.token);
+        location.replace("/dashboard");
+      } catch {
+        fail("Couldn't reach GhostChat. Check your connection.");
+      }
+    })();
+  </script>
+</body>
+</html>

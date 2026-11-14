@@ -31,6 +31,10 @@ export const config = {
   publicUrl: (process.env.PUBLIC_URL ?? "http://localhost:3000").replace(/\/$/, ""),
   supabaseUrl: process.env.SUPABASE_URL ?? "https://rswtambjckwmlagydsvf.supabase.co",
   supabaseServiceKey: requiredInProd("SUPABASE_SERVICE_KEY") ?? process.env.SUPABASE_SERVICE_KEY ?? "",
+  // Public (publishable) key for the shared project. Safe in client code; used only to
+  // start Supabase Auth OAuth sign-in. Set SUPABASE_OAUTH=false to turn that off.
+  supabaseAnonKey: str("SUPABASE_ANON_KEY", "sb_publishable_Q6craxzJCpWq_an3BOjeDw_VY69vuYl"),
+  supabaseOAuth: bool("SUPABASE_OAUTH", true),
   aiBaseUrl: (process.env.AI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/$/, ""),
   aiApiKey: process.env.AI_API_KEY ?? "",
   aiModel: process.env.AI_MODEL ?? "gpt-4o-mini",
@@ -92,7 +96,32 @@ export const PLAN_LIMITS = {
 
 export type Plan = keyof typeof PLAN_LIMITS;
 
-export function oauthConfigured(provider: "discord" | "google"): boolean {
+export type OAuthProvider = "discord" | "google";
+
+/** Direct OAuth (GhostChat's own client ID/secret). Takes priority when set. */
+export function oauthConfigured(provider: OAuthProvider): boolean {
   if (provider === "discord") return Boolean(config.discordClientId && config.discordClientSecret);
   return Boolean(config.googleClientId && config.googleClientSecret);
+}
+
+/** Sign-in through Supabase Auth on the shared project (same Discord/Google apps as GhostFlix). */
+export function supabaseOAuthConfigured(): boolean {
+  return Boolean(config.supabaseOAuth && config.supabaseUrl && config.supabaseAnonKey && config.supabaseServiceKey);
+}
+
+export type OAuthMode = "direct" | "supabase" | null;
+
+export function oauthMode(provider: OAuthProvider): OAuthMode {
+  if (oauthConfigured(provider)) return "direct";
+  if (supabaseOAuthConfigured()) return "supabase";
+  return null;
+}
+
+/** Supabase Auth authorize URL; Supabase sends the user back to /auth/callback with a session. */
+export function supabaseAuthorizeUrl(provider: OAuthProvider): string {
+  const url = new URL(`${config.supabaseUrl.replace(/\/$/, "")}/auth/v1/authorize`);
+  url.searchParams.set("provider", provider);
+  url.searchParams.set("redirect_to", `${config.publicUrl}/auth/callback`);
+  if (provider === "discord") url.searchParams.set("scopes", "identify email");
+  return url.toString();
 }

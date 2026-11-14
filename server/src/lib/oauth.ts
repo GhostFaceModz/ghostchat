@@ -150,3 +150,44 @@ export async function exchangeGoogleCode(code: string, redirectUri: string): Pro
     avatarUrl: user.picture || null,
   };
 }
+
+type SupabaseIdentity = {
+  provider?: string;
+  id?: string;
+  identity_data?: Record<string, unknown> | null;
+};
+
+/**
+ * Turns a verified Supabase Auth user into an OAuthProfile. Provider IDs come from the
+ * Discord/Google identity (the same IDs direct OAuth stores), so both paths link to one owner.
+ */
+export function profileFromSupabaseUser(user: {
+  email?: string | null;
+  app_metadata?: Record<string, unknown> | null;
+  user_metadata?: Record<string, unknown> | null;
+  identities?: SupabaseIdentity[] | null;
+}): OAuthProfile {
+  const identities = user.identities || [];
+  const lastProvider = String(user.app_metadata?.provider || "");
+  const identity =
+    identities.find((i) => i.provider === lastProvider && (i.provider === "discord" || i.provider === "google")) ||
+    identities.find((i) => i.provider === "discord" || i.provider === "google");
+  if (!identity) throw new Error("Please sign in with Discord or Google.");
+  const provider = identity.provider as "discord" | "google";
+  const data = (identity.identity_data || {}) as Record<string, unknown>;
+  const meta = (user.user_metadata || {}) as Record<string, unknown>;
+  const pick = (...vals: unknown[]) => {
+    for (const v of vals) if (typeof v === "string" && v.trim()) return v.trim();
+    return null;
+  };
+  const providerId = pick(data.provider_id, data.sub, identity.id);
+  if (!providerId) throw new Error("That sign-in did not include an account ID.");
+  const customClaims = (data.custom_claims || meta.custom_claims || {}) as Record<string, unknown>;
+  return {
+    provider,
+    providerId,
+    email: pick(user.email, data.email, meta.email) || "",
+    name: pick(customClaims.global_name, data.full_name, meta.full_name, data.name, meta.name),
+    avatarUrl: pick(data.avatar_url, meta.avatar_url, data.picture, meta.picture),
+  };
+}

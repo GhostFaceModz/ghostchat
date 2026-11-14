@@ -2,26 +2,50 @@ import { Router } from "express";
 import { getDb } from "../lib/supabase.js";
 import { hashPassword, verifyPassword, signToken, isValidEmail, requireAuth, signOAuthState, verifyOAuthState } from "../lib/auth.js";
 import { clientIp, rateLimit } from "../lib/rateLimit.js";
-import { config, oauthConfigured, PLAN_LIMITS, type Plan } from "../config.js";
-import { exchangeDiscordCode, exchangeGoogleCode, upsertOwnerFromOAuth } from "../lib/oauth.js";
+import { config, oauthConfigured, oauthMode, supabaseAuthorizeUrl, PLAN_LIMITS, type Plan } from "../config.js";
+import { exchangeDiscordCode, exchangeGoogleCode, profileFromSupabaseUser, upsertOwnerFromOAuth } from "../lib/oauth.js";
 import type { AuthedRequest } from "../lib/auth.js";
 
 export const authRouter = Router();
 
-// Which sign-in methods are live. The redirect URIs are public values that must be
-// registered with Discord/Google, exposed here so the setup can be checked from the browser.
+// Which sign-in methods are live and where each button should go. Direct OAuth (own client
+// secret) wins when configured; otherwise sign-in runs through Supabase Auth on the shared project.
 authRouter.get("/providers", (_req, res) => {
+  const discord = oauthMode("discord");
+  const google = oauthMode("google");
+  const startUrl = (p: "discord" | "google", mode: typeof discord) =>
+    mode === "supabase" ? supabaseAuthorizeUrl(p) : mode === "direct" ? `/api/auth/${p}` : null;
   res.json({
-    providers: {
-      discord: oauthConfigured("discord"),
-      google: oauthConfigured("google"),
-      password: true,
-    },
+    providers: { discord: Boolean(discord), google: Boolean(google), password: true },
+    modes: { discord, google },
+    urls: { discord: startUrl("discord", discord), google: startUrl("google", google) },
     redirectUris: {
-      discord: `${config.publicUrl}/api/auth/discord/callback`,
-      google: `${config.publicUrl}/api/auth/google/callback`,
+      discord: discord === "supabase" ? `${config.publicUrl}/auth/callback` : `${config.publicUrl}/api/auth/discord/callback`,
+      google: google === "supabase" ? `${config.publicUrl}/auth/callback` : `${config.publicUrl}/api/auth/google/callback`,
     },
   });
+});
+
+// Exchange a Supabase Auth access token (from /auth/callback) for a GhostChat session.
+authRouter.post("/supabase", async (req, res) => {
+  const ip = clientIp(req);
+  const rl = rateLimit(`supabase-auth:${ip}`, 20, 15 * 60 * 1000);
+  if (!rl.ok) return res.status(429).json({ error: "Too many sign-in attempts. Try again shortly." });
+  const accessToken = String(req.body?.access_token || "").trim();
+  if (!accessToken || accessToken.length > 8192 || accessToken.split(".").length !== 3) {
+    return res.status(400).json({ error: "Missing or malformed sign-in token." });
+  }
+  const { data, error } = await getDb().auth.getUser(accessToken);
+  if (error || !data?.user) {
+    return res.status(401).json({ error: "That sign-in has expired or is invalid. Please try again." });
+  }
+  try {
+    const profile = profileFromSupabaseUser(data.user);
+    const { owner, token } = await upsertOwnerFromOAuth(profile);
+    res.json({ token, owner });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message || "Sign-in failed." });
+  }
 });
 
 authRouter.post("/signup", async (req, res) => {
@@ -84,8 +108,9 @@ function oauthSuccess(token: string) {
 }
 
 authRouter.get("/discord", (_req, res) => {
+  if (oauthMode("discord") === "supabase") return res.redirect(supabaseAuthorizeUrl("discord"));
   if (!oauthConfigured("discord")) {
-    return res.status(501).json({ error: "Discord sign-in is not configured. Set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET." });
+    return res.status(501).json({ error: "Discord sign-in is not configured." });
   }
   const redirectUri = `${config.publicUrl}/api/auth/discord/callback`;
   const url = new URL("https://discord.com/oauth2/authorize");
@@ -115,8 +140,9 @@ authRouter.get("/discord/callback", async (req, res) => {
 });
 
 authRouter.get("/google", (_req, res) => {
+  if (oauthMode("google") === "supabase") return res.redirect(supabaseAuthorizeUrl("google"));
   if (!oauthConfigured("google")) {
-    return res.status(501).json({ error: "Google sign-in is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET." });
+    return res.status(501).json({ error: "Google sign-in is not configured." });
   }
   const redirectUri = `${config.publicUrl}/api/auth/google/callback`;
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");

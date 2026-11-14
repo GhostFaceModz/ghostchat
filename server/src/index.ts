@@ -78,6 +78,11 @@ app.use(express.static(path.join(repoRoot, "public"), { maxAge: "5m" }));
 app.get(["/guide", "/getting-started", "/setup"], (_req, res) => {
   res.sendFile(path.join(repoRoot, "public", "guide.html"));
 });
+// Supabase Auth returns here after Discord/Google sign-in.
+app.get("/auth/callback", (_req, res) => {
+  res.setHeader("cache-control", "no-store");
+  res.sendFile(path.join(repoRoot, "public", "auth-callback.html"));
+});
 // Sign-in and sign-up are views of the dashboard app (it reads the path to pick the mode).
 app.get(["/login", "/signup"], (_req, res) => {
   res.sendFile(path.join(repoRoot, "dashboard", "index.html"));

@@ -135,12 +135,21 @@ Free Render web service (`render.yaml`, Frankfurt, Node 22; Node 20 crashes beca
 4. Deploy and check `/healthz`.
 5. Add Discord/Google redirect URIs and the Whop webhook URL if you use those.
 
-Live service: `https://ghostchat-nfoc.onrender.com`, so `PUBLIC_URL` must be exactly that. Redirect URIs to register:
+Live service: `https://ghostchat-nfoc.onrender.com`, so `PUBLIC_URL` must be exactly that.
 
-- Discord (Developer Portal → OAuth2 → Redirects): `https://ghostchat-nfoc.onrender.com/api/auth/discord/callback`
-- Google (Cloud Console → Credentials → OAuth client → Authorised redirect URIs): `https://ghostchat-nfoc.onrender.com/api/auth/google/callback`
+### Discord / Google sign-in
 
-`GET /api/auth/providers` shows which sign-in methods are live and the redirect URIs the server is using.
+By default the buttons sign in through **Supabase Auth** on the shared project, using the same Discord and Google apps as GhostFlix (no GhostChat client secrets needed):
+
+1. The button goes to `{SUPABASE_URL}/auth/v1/authorize?provider=discord|google&redirect_to={PUBLIC_URL}/auth/callback`.
+2. `/auth/callback` reads the Supabase session from the URL fragment and POSTs the access token to `POST /api/auth/supabase`.
+3. The server verifies it with the service key (`auth.getUser`), finds or creates the `ghostchat_owners` row by provider ID or email, and returns the normal GhostChat session token.
+
+Requirements: `https://ghostchat-nfoc.onrender.com/**` must be in Supabase → Authentication → URL Configuration → Redirect URLs (otherwise Supabase sends people to its Site URL instead). `SUPABASE_ANON_KEY` defaults to the project's public publishable key; set `SUPABASE_OAUTH=false` to hide the buttons.
+
+Fallback: if `DISCORD_CLIENT_ID`/`DISCORD_CLIENT_SECRET` (or the Google pair) are set, that provider uses direct OAuth instead, with redirect URI `{PUBLIC_URL}/api/auth/discord/callback` (or `/google/callback`).
+
+`GET /api/auth/providers` shows which mode each provider uses and where its button goes.
 
 ### Keep-awake ping
 

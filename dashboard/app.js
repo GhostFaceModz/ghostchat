@@ -112,19 +112,22 @@ async function boot() {
   }
 }
 
-// OAuth buttons always show; providers without server credentials get a "Soon" state.
+// OAuth buttons always show; a provider the server can't use yet gets a "Soon" state.
 async function loadProviders() {
-  let providers = {};
+  let data = {};
   try {
-    providers = (await fetch("/api/auth/providers").then((r) => r.json())).providers || {};
+    data = await fetch("/api/auth/providers").then((r) => r.json());
   } catch { /* treat as not configured */ }
+  const providers = data.providers || {};
+  const urls = data.urls || {};
   [["discord", "Discord"], ["google", "Google"]].forEach(([id, label]) => {
     const btn = $("#oauth-" + id);
     if (!btn) return;
-    const on = Boolean(providers[id]);
+    const on = Boolean(providers[id] && urls[id]);
     btn.classList.toggle("soon", !on);
     btn.setAttribute("aria-disabled", String(!on));
     btn.title = on ? "" : label + " sign-in is coming soon. Use email for now.";
+    if (on) btn.href = urls[id];
     btn.onclick = on ? null : (ev) => { ev.preventDefault(); toast(label + " sign-in is coming soon. Use email for now."); };
   });
 }
