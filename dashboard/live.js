@@ -149,6 +149,8 @@
     f.trigger.value = cfg.trigger;
     f.misses.value = cfg.misses;
     f.agent_name.value = cfg.agent_name || "";
+    f.claim_timeout_min.value = cfg.claim_timeout_min || 5;
+    f.timeout_fallback.value = cfg.timeout_fallback || "ai";
     f.agent_name.placeholder = "e.g. " + ((state.owner && state.owner.name || "").split(" ")[0] || "Sam");
     $$("input[name=status]", f).forEach((r) => { r.checked = r.value === cfg.status; });
     [...f.elements].forEach((el) => { el.disabled = locked; });
@@ -161,7 +163,7 @@
     $("#lp-site").textContent = state.site ? state.site.name : "Your site";
     $("#lp-sub").textContent = "You're chatting with " + name;
     $("#lp-name").textContent = "👤 " + name;
-    $("#lp-note").textContent = `I've let ${name} know — they'll join this chat shortly.`;
+    $("#lp-joined").textContent = `${name} joined the chat`;
     f.misses.closest("label").classList.toggle("hidden", f.trigger.value === "ask" || f.trigger.value === "never");
   }
   window.gcRenderLive = renderLivePanel;
@@ -171,6 +173,7 @@
     const body = {
       enabled: $("#live-enabled").checked,
       trigger: f.trigger.value, misses: Number(f.misses.value) || 2, agent_name: f.agent_name.value.trim(),
+      claim_timeout_min: Number(f.claim_timeout_min.value) || 5, timeout_fallback: f.timeout_fallback.value,
       status: ($("input[name=status]:checked", f) || {}).value || "online",
       ...(extra || {}),
     };

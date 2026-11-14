@@ -475,6 +475,17 @@
               <label>Unanswered questions before handing off
                 <input name="misses" type="number" min="1" max="5" value="2" />
               </label>
+              <div class="row two">
+                <label>Wait for someone to join (minutes)
+                  <input name="claim_timeout_min" type="number" min="1" max="30" value="5" />
+                </label>
+                <label>If nobody joins in time
+                  <select name="timeout_fallback">
+                    <option value="ai">The AI carries on</option>
+                    <option value="form">Ask for their email</option>
+                  </select>
+                </label>
+              </div>
               <label>Name shown to visitors
                 <input name="agent_name" maxlength="40" placeholder="e.g. Zane" />
               </label>
@@ -489,7 +500,8 @@
                 <div class="lp-head"><span class="lp-av">👤</span><div><b id="lp-site">Your site</b><small id="lp-sub">You're chatting with Zane</small></div></div>
                 <div class="lp-msgs">
                   <div class="lp-b user">Can I talk to a person?</div>
-                  <div class="lp-b sys" id="lp-note">I've let Zane know — they'll join this chat shortly.</div>
+                  <div class="lp-b sys" id="lp-note">Waiting for a team member…</div>
+                  <div class="lp-b sys" id="lp-joined">Zane joined the chat</div>
                   <div class="lp-name" id="lp-name">👤 Zane</div>
                   <div class="lp-b agent">Hi! I'm here — how can I help?</div>
                 </div>

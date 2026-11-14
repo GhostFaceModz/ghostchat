@@ -5,13 +5,14 @@ import type { AuthedRequest } from "../lib/auth.js";
 import { clientIp, rateLimit } from "../lib/rateLimit.js";
 import {
   LIVE_PLANS, channelWebhookSecret, encryptSecret, findRelay, getConversation, getConversationById, isTyping,
-  liveSettings, newLinkCode, normalizeLiveSettings, ownerChannels, setTyping, transcript, updateConversation,
+  liveSettings, newLinkCode, normalizeLiveSettings, handoffTimedOut, ownerChannels, setTyping, transcript, updateConversation,
   type Conversation,
 } from "../lib/live.js";
 import { agentNameFor, agentReply, agentTyping, handBack, loadSite, startHandoff, takeOver } from "../lib/handoff.js";
 import {
   DISCORD_INVITE_URL, TELEGRAM_BOT_USERNAME, discord, discordReady, discordTextChannels, telegramReady, telegramTokenFor, tg, verifyDiscordRelay,
 } from "../lib/relay.js";
+import { applyTimeout, handleClaimComponent, supportName, GCL } from "../lib/discordClaim.js";
 import type { Site } from "../types.js";
 
 const ownerOf = (req: Request) => (req as unknown as AuthedRequest).owner;
@@ -30,14 +31,19 @@ liveWidgetRouter.get("/:siteKey/:sessionId", async (req, res) => {
   if (!rateLimit(`live:poll:${clientIp(req)}`, 180, 60_000).ok) return res.status(429).json({ error: "Too many requests." });
   const site = await siteByKey(req.params.siteKey);
   if (!site) return res.status(404).json({ error: "Unknown site key." });
-  const conv = await getConversation(site.id, String(req.params.sessionId).slice(0, 80));
+  let conv = await getConversation(site.id, String(req.params.sessionId).slice(0, 80));
   if (!conv) return res.json({ status: "bot", messages: [] });
+  let fallback: "ai" | "form" | null = null;
+  if (handoffTimedOut(conv, liveSettings(site))) {
+    fallback = await applyTimeout(site, conv);
+    conv = { ...conv, status: "bot" };
+  }
   const after = typeof req.query.after === "string" && !Number.isNaN(Date.parse(req.query.after)) ? req.query.after : conv.created_at;
   const { data } = await getDb().from("ghostchat_logs").select("id, role, message, agent_name, created_at")
     .eq("site_id", site.id).eq("session_id", conv.session_id).in("role", ["agent", "system"]).gt("created_at", after)
     .order("created_at", { ascending: true }).limit(50);
   res.setHeader("cache-control", "no-store");
-  res.json({ status: conv.status, agentName: conv.agent_name, typing: isTyping(conv.id, "agent"), messages: data || [] });
+  res.json({ status: conv.status, agentName: conv.agent_name, typing: isTyping(conv.id, "agent"), messages: data || [], fallback });
 });
 
 liveWidgetRouter.post("/:siteKey/:sessionId/typing", async (req, res) => {
@@ -333,7 +339,17 @@ telegramWebhookRouter.post("/:channelId", async (req, res) => {
 });
 
 /** Relayed from the GhostBot gateway / interactions (HMAC-signed). */
-export async function handleDiscordRelay(body: Record<string, unknown>): Promise<{ status: number; reply?: string }> {
+export async function handleDiscordRelay(body: Record<string, unknown>): Promise<{ status: number; reply?: string; response?: Record<string, unknown> }> {
+  if (body.type === "component") {
+    if (!String(body.custom_id || "").startsWith(GCL)) return { status: 400 };
+    const response = await handleClaimComponent({
+      custom_id: String(body.custom_id), user_id: String(body.user_id || ""), user_name: String(body.user_name || "Team"),
+      permissions: typeof body.permissions === "string" ? body.permissions : undefined,
+      values: Array.isArray(body.values) ? body.values.map(String) : undefined,
+      resolved_names: (body.resolved_names && typeof body.resolved_names === "object") ? body.resolved_names as Record<string, string> : undefined,
+    });
+    return { status: 200, response };
+  }
   if (body.type === "link") {
     const code = String(body.code || "").toUpperCase();
     const { data } = await getDb().from("ghostchat_live_channels").select("*").eq("kind", "discord").eq("link_code", code).maybeSingle();
@@ -355,8 +371,8 @@ export async function handleDiscordRelay(body: Record<string, unknown>): Promise
     if (/^!back\b/i.test(content)) { await handBack(conv, "discord"); return { status: 200, reply: "🤖 Handed back to the AI assistant." }; }
     if (/^!take\b/i.test(content)) { await takeOver(conv); return { status: 200, reply: "🧑 You have the chat. The AI will stay quiet." }; }
     if (conv.status === "bot" || conv.status === "closed") return { status: 200, reply: "This chat was handed back to the AI. Type `!take` to jump back in." };
-    const name = typeof body.author_name === "string" ? body.author_name.slice(0, 40) : null;
-    await agentReply(conv, content, "discord", name);
+    const name = typeof body.author_name === "string" ? supportName(body.author_name) : null;
+    await agentReply(conv, content, "discord", conv.claimed_by_id && conv.claimed_by_id === String(body.author_id || "") ? conv.claimed_by_name : name);
     return { status: 200 };
   }
   return { status: 400 };
@@ -370,7 +386,7 @@ discordWebhookRouter.post("/", async (req, res) => {
   try { body = JSON.parse(raw); } catch { return res.status(400).end(); }
   try {
     const out = await handleDiscordRelay(body);
-    res.status(out.status).json({ ok: out.status === 200, reply: out.reply ?? null });
+    res.status(out.status).json({ ok: out.status === 200, reply: out.reply ?? null, response: out.response ?? null });
   } catch (err) {
     console.error("discord relay:", (err as Error).message);
     res.status(500).json({ ok: false });

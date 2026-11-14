@@ -661,7 +661,7 @@
     root.setAttribute("data-live", live.status === "human" ? "true" : live.status === "waiting" ? "waiting" : "false");
     avatar.innerHTML = on ? ICONS.person : botAvatarHtml();
     sub.textContent = live.status === "human" ? "You're chatting with " + (live.agent || "the team")
-      : live.status === "waiting" ? "Connecting you to " + (live.agent || "the team") + "…"
+      : live.status === "waiting" ? "Waiting for a team member…"
       : "AI assistant · Online";
     input.placeholder = on ? "Message " + (live.agent || "the team") + "…" : "Ask a question…";
   }
@@ -701,6 +701,7 @@
         });
         var prev = live.status;
         live.status = j.status === "human" || j.status === "waiting" ? j.status : "bot";
+        if (j.fallback === "form") addLeadForm(msgs.lastElementChild || addSystem(""), { title: "Leave your email", subtitle: "We'll get back to you as soon as someone's free." });
         showAgentTyping(live.status === "human" || live.status === "waiting" ? !!j.typing : false);
         if (prev !== live.status) setLiveUi();
         if (fresh) { playPop(); if (!state.open) setUnread(true); }

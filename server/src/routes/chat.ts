@@ -3,9 +3,8 @@ import { getDb } from "../lib/supabase.js";
 import { answerQuestion, streamAnswer } from "../lib/chat.js";
 import { clientIp, rateLimit, peekRateLimit } from "../lib/rateLimit.js";
 import { assertCanSend, dailyCapCheck } from "../lib/usage.js";
-import { addLog, countUnsure, getConversation, shouldStartLive, liveOnline, updateConversation } from "../lib/live.js";
-
-const LIVE_WAIT_MS = 10 * 60_000;
+import { addLog, countUnsure, getConversation, shouldStartLive, liveOnline, liveSettings, handoffTimedOut } from "../lib/live.js";
+import { applyTimeout } from "../lib/discordClaim.js";
 import { agentNameFor, startHandoff, visitorLiveMessage } from "../lib/handoff.js";
 import { HUMAN_REQUEST } from "../lib/guardrails.js";
 import type { Site } from "../types.js";
@@ -63,9 +62,9 @@ chatRouter.post("/", async (req, res) => {
 
   // Live chat: while a human has (or is joining) the conversation the AI stays silent and nothing is charged.
   let conv = await getConversation(site.id, sessionId).catch(() => null);
-  if (conv && conv.status === "waiting" && !conv.last_agent_at && Date.now() - Date.parse(conv.updated_at) > LIVE_WAIT_MS) {
-    // Nobody picked it up: let the AI carry on rather than leaving the visitor hanging.
-    await updateConversation(conv.id, { status: "bot" });
+  if (conv && handoffTimedOut(conv, liveSettings(site))) {
+    // Nobody picked it up in time: let the AI carry on rather than leaving the visitor hanging.
+    await applyTimeout(site, conv);
     conv = null;
   }
   if (conv && (conv.status === "waiting" || conv.status === "human")) {
@@ -80,7 +79,7 @@ chatRouter.post("/", async (req, res) => {
     await addLog({ site_id: site.id, session_id: sessionId, role: "user", message, page_url: pageUrl });
     const started = await startHandoff(site, sessionId, "asked", pageUrl);
     const name = started.agent_name || (await agentNameFor(site));
-    const live = { type: "live", status: "waiting", agentName: name, note: `I've let ${name} know — they'll join this chat shortly. You can keep typing here.` };
+    const live = { type: "live", status: "waiting", agentName: name, note: `I've asked the team to join. Waiting for a team member… you can keep typing here.` };
     if (!wantStream) return res.json({ live, answer: null });
     res.status(200).setHeader("content-type", "text/event-stream; charset=utf-8");
     res.write(`data: ${JSON.stringify(live)}\n\n`);
@@ -115,7 +114,7 @@ chatRouter.post("/", async (req, res) => {
         if (reason) {
           const started = await startHandoff(site, sessionId, reason, pageUrl);
           const name = started.agent_name || (await agentNameFor(site));
-          send({ type: "live", status: "waiting", agentName: name, note: `I couldn't find that, so I've asked ${name} to join — they'll reply here shortly.` });
+          send({ type: "live", status: "waiting", agentName: name, note: `I couldn't find that, so I've asked the team to join. Waiting for a team member…` });
         }
       }
     } catch (err) {
