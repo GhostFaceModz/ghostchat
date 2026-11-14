@@ -338,3 +338,4 @@ dialog::backdrop { background: rgba(5, 2, 12, .7); backdrop-filter: blur(6px); }
 details.scope { margin: 14px 0; border: 1px solid rgba(196,181,253,.18); border-radius: 12px; padding: 10px 12px; }
 details.scope summary { cursor: pointer; font-weight: 600; }
 details.scope form { margin-top: 10px; }
+.og-preview { display: block; width: 100%; max-width: 600px; height: auto; aspect-ratio: 1200 / 630; border-radius: 14px; border: 1px solid rgba(196,181,253,.18); margin-top: 8px; }

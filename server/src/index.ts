@@ -14,6 +14,7 @@ import { billingRouter, whopWebhookRouter } from "./routes/billing.js";
 import { modelsRouter } from "./routes/models.js";
 import { liveWidgetRouter, liveOwnerRouter, telegramWebhookRouter, discordWebhookRouter } from "./routes/live.js";
 import { resolveEmbeddingModel } from "./lib/models.js";
+import { shareRouter } from "./routes/share.js";
 import { warmupLocalEmbeddings } from "./lib/localEmbeddings.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -78,6 +79,7 @@ app.get("/widget.js", (_req, res) => {
 app.use("/dashboard", express.static(path.join(repoRoot, "dashboard"), { maxAge: "5m", index: "index.html" }));
 app.use("/demo", express.static(path.join(repoRoot, "widget"), { index: "index.html" }));
 // Marketing site: Krea-generated images are versioned by filename, so cache them longer.
+app.use(shareRouter(repoRoot)); // /og/<siteKey>.png, /c/<siteKey>, /pricing (with its own preview text)
 app.use("/img", express.static(path.join(repoRoot, "public", "img"), { maxAge: "7d" }));
 app.use(express.static(path.join(repoRoot, "public"), { maxAge: "5m" }));
 app.get(["/privacy", "/privacy-policy"], (_req, res) => {
@@ -86,9 +88,7 @@ app.get(["/privacy", "/privacy-policy"], (_req, res) => {
 app.get(["/terms", "/tos"], (_req, res) => {
   res.sendFile(path.join(repoRoot, "public", "terms.html"));
 });
-app.get("/pricing", (_req, res) => {
-  res.sendFile(path.join(repoRoot, "public", "index.html"));
-});
+
 app.get(["/guide", "/getting-started", "/setup"], (_req, res) => {
   res.sendFile(path.join(repoRoot, "public", "guide.html"));
 });
@@ -100,56 +100,6 @@ app.get("/auth/callback", (_req, res) => {
 // Sign-in and sign-up are views of the dashboard app (it reads the path to pick the mode).
 app.get(["/login", "/signup", "/account"], (_req, res) => {
   res.sendFile(path.join(repoRoot, "dashboard", "index.html"));
-});
-
-app.get("/c/:siteKey", (req, res) => {
-  const siteKey = encodeURIComponent(String(req.params.siteKey || ""));
-  const safeKey = siteKey.replace(/[^a-zA-Z0-9_\-]/g, "");
-  res.setHeader("content-type", "text/html; charset=utf-8");
-  res.send(`<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Chat · GhostChat</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <style>
-    :root { color-scheme: dark; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; min-height: 100vh; font-family: "Instrument Sans", system-ui, sans-serif;
-      background:
-        radial-gradient(1200px 600px at 10% -10%, rgba(167,139,250,.28), transparent 55%),
-        radial-gradient(900px 500px at 110% 10%, rgba(244,114,182,.16), transparent 50%),
-        #09060f;
-      color: #f5f3ff;
-      display: grid; place-items: center; padding: 32px 20px;
-    }
-    .card {
-      width: min(560px, 100%);
-      background: rgba(18, 10, 32, .72);
-      border: 1px solid rgba(196,181,253,.16);
-      border-radius: 28px;
-      padding: 36px 32px 28px;
-      backdrop-filter: blur(24px);
-      box-shadow: 0 30px 80px rgba(0,0,0,.4);
-      text-align: center;
-    }
-    h1 { font-family: Syne, sans-serif; font-weight: 800; margin: 0 0 8px; letter-spacing: -0.03em; }
-    p { color: #c4b5fd; margin: 0 0 18px; line-height: 1.5; }
-    a { color: #e9d5ff; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>GhostChat</h1>
-    <p>The assistant is opening in the corner. Ask anything about this site.</p>
-  </div>
-  <script src="/widget.js" data-id="${safeKey}" data-open="true" data-share="true"></script>
-</body>
-</html>`);
 });
 
 app.get("/dashboard/*", (_req, res) => {

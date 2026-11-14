@@ -236,6 +236,7 @@ function renderSite() {
   $("#share-link").value = share;
   $("#open-share").href = share;
   $("#share-qr").src = "/api/widget/qr/" + encodeURIComponent(s.site_key) + "?format=png";
+  $("#share-og").src = "/og/" + encodeURIComponent(s.site_key) + ".png?v=" + encodeURIComponent(s.updated_at || "");
 
   const basics = $("#site-basics");
   basics.name.value = s.name;
