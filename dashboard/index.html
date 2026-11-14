@@ -2,69 +2,116 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GhostChat dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>GhostChat · Dashboard</title>
+  <meta name="description" content="Sign in to GhostChat to train, style and embed your AI assistant." />
+  <meta name="theme-color" content="#8f6cff" />
+  <meta property="og:title" content="GhostChat · Sign in" />
+  <meta property="og:image" content="https://ghostchat-nfoc.onrender.com/img/og.jpg" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E👻%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&display=swap" />
   <link rel="stylesheet" href="/dashboard/styles.css" />
 </head>
 <body>
-  <div class="bg"></div>
+  <div class="scene" aria-hidden="true">
+    <div class="mesh"><span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span></div>
+    <div class="grain"></div><div class="vignette"></div>
+  </div>
 
+  <!-- Sign in / sign up (mode comes from /login, /signup or ?mode=) -->
   <section id="auth" class="auth hidden">
-    <div class="auth-card glass">
-      <div class="mark">👻</div>
-      <h1>GhostChat</h1>
-      <p class="lede">Train an assistant on your site. Drop in one script tag.</p>
-      <div class="tabs compact" id="auth-tabs">
-        <button type="button" data-mode="login" class="on">Sign in</button>
-        <button type="button" data-mode="signup">Create account</button>
+    <div class="auth-art">
+      <a class="brand" href="/"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V10a7 7 0 0 1 14 0v11l-3.5-2-3.5 2-3.5-2Z"/><path d="M9.5 10v1.5m5-1.5v1.5"/></svg></span>GhostChat</a>
+      <div class="auth-art-body">
+        <img src="/img/hero.webp" srcset="/img/hero-sm.webp 760w, /img/hero.webp 1376w" sizes="(max-width: 980px) 0px, 50vw" width="1376" height="768" alt="" />
+        <h2>Your site.<br /><span class="grad">Your answers.</span></h2>
+        <ul>
+          <li>Trained on your pages, docs and FAQs</li>
+          <li>Glass widget in your brand colours</li>
+          <li>One line of code to go live</li>
+        </ul>
       </div>
-      <div class="oauth" id="oauth-buttons" hidden>
-        <a class="btn oauth discord" id="oauth-discord" href="/api/auth/discord">Continue with Discord</a>
-        <a class="btn oauth google" id="oauth-google" href="/api/auth/google">Continue with Google</a>
-        <p class="muted tiny">or use email and password</p>
+      <p class="muted tiny">New here? Read the <a href="/guide">step-by-step setup guide</a>.</p>
+    </div>
+
+    <div class="auth-side">
+      <a class="brand auth-mobile-brand" href="/"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V10a7 7 0 0 1 14 0v11l-3.5-2-3.5 2-3.5-2Z"/><path d="M9.5 10v1.5m5-1.5v1.5"/></svg></span>GhostChat</a>
+      <div class="auth-card glass">
+        <h1 id="auth-title">Welcome back</h1>
+        <p class="muted" id="auth-sub">Sign in to manage your assistants.</p>
+
+        <div class="oauth-list" id="oauth-buttons">
+          <a class="btn oauth discord" id="oauth-discord" href="/api/auth/discord">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.32 4.37A19.8 19.8 0 0 0 15.4 2.85a.07.07 0 0 0-.08.04c-.21.38-.45.87-.61 1.25a18.3 18.3 0 0 0-5.49 0 12.6 12.6 0 0 0-.62-1.25.08.08 0 0 0-.08-.04 19.7 19.7 0 0 0-4.88 1.52.07.07 0 0 0-.03.03C.53 9.05-.32 13.58.1 18.06a.08.08 0 0 0 .03.06 19.9 19.9 0 0 0 5.99 3.03.08.08 0 0 0 .08-.03c.46-.63.87-1.3 1.22-2a.08.08 0 0 0-.04-.1 13.1 13.1 0 0 1-1.87-.9.08.08 0 0 1 0-.13l.37-.29a.07.07 0 0 1 .08-.01c3.93 1.8 8.18 1.8 12.07 0a.07.07 0 0 1 .08 0l.37.3a.08.08 0 0 1 0 .13c-.6.35-1.22.65-1.87.9a.08.08 0 0 0-.04.1c.36.7.77 1.36 1.22 2a.08.08 0 0 0 .08.02 19.8 19.8 0 0 0 6-3.03.08.08 0 0 0 .03-.05c.5-5.18-.84-9.67-3.55-13.66a.06.06 0 0 0-.03-.03ZM8.02 15.33c-1.18 0-2.16-1.08-2.16-2.42 0-1.33.96-2.42 2.16-2.42 1.21 0 2.18 1.1 2.16 2.42 0 1.34-.96 2.42-2.16 2.42Zm7.97 0c-1.18 0-2.15-1.08-2.15-2.42 0-1.33.95-2.42 2.15-2.42 1.21 0 2.18 1.1 2.16 2.42 0 1.34-.95 2.42-2.16 2.42Z"/></svg>
+            <span>Continue with Discord</span><em class="soon-badge">Soon</em>
+          </a>
+          <a class="btn oauth google" id="oauth-google" href="/api/auth/google">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.26-.96 2.33-2.04 3.05l3.3 2.56c1.92-1.77 3.03-4.38 3.03-7.48 0-.72-.06-1.41-.18-2.07H12Z"/><path fill="#34A853" d="M5.27 14.29l-.74.57-2.63 2.05C3.55 20.2 7.5 22.5 12 22.5c2.97 0 5.46-.98 7.28-2.66l-3.3-2.56c-.9.6-2.06.97-3.98.97-2.87 0-5.3-1.94-6.17-4.55l-.56.59Z"/><path fill="#4A90E2" d="M1.9 7.09A10.4 10.4 0 0 0 1.5 12c0 1.7.41 3.3 1.13 4.71l3.4-2.64A6.3 6.3 0 0 1 5.73 12c0-.72.13-1.42.35-2.07L2.64 7.25l-.74-.16Z"/><path fill="#FBBC05" d="M12 5.38c1.62 0 3.06.56 4.2 1.64l3.15-3.15C17.45 2.09 14.97 1.5 12 1.5 7.5 1.5 3.55 3.8 1.9 7.09l3.43 2.66C6.2 7.32 8.88 5.38 12 5.38Z"/></svg>
+            <span>Continue with Google</span><em class="soon-badge">Soon</em>
+          </a>
+        </div>
+        <div class="divider"><span>or with email</span></div>
+
+        <form id="auth-form" data-mode="login" novalidate>
+          <label class="signup-only hidden">Name <input name="name" autocomplete="name" placeholder="Your name" /></label>
+          <label>Email <input name="email" type="email" required autocomplete="email" inputmode="email" placeholder="you@yourbrand.com" /></label>
+          <label>Password
+            <span class="pw">
+              <input name="password" type="password" required minlength="8" autocomplete="current-password" placeholder="At least 8 characters" />
+              <button type="button" class="pw-toggle" id="pw-toggle" aria-label="Show password">Show</button>
+            </span>
+          </label>
+          <button type="submit" class="btn primary block" id="auth-submit">Sign in</button>
+          <p class="error" id="auth-error" role="alert" hidden></p>
+        </form>
+        <p class="switch" id="auth-switch">New to GhostChat? <a href="/signup" data-mode="signup">Create an account</a></p>
       </div>
-      <form id="auth-form">
-        <label class="signup-only hidden">Name <input name="name" autocomplete="name" /></label>
-        <label>Email <input name="email" type="email" required autocomplete="email" /></label>
-        <label>Password <input name="password" type="password" required minlength="8" autocomplete="current-password" /></label>
-        <button type="submit" class="btn primary">Continue</button>
-        <p class="error" id="auth-error" hidden></p>
-      </form>
+      <p class="muted tiny legal">By continuing you agree to use GhostChat responsibly. <a href="/guide">Need help getting started?</a></p>
     </div>
   </section>
 
   <section id="app" class="app hidden">
-    <aside class="rail glass">
-      <a class="brand" href="/">GhostChat</a>
-      <button type="button" class="btn primary small" id="new-site">+ New site</button>
-      <nav id="site-list" class="site-list"></nav>
+    <aside class="rail">
+      <div class="rail-top">
+        <a class="brand" href="/"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V10a7 7 0 0 1 14 0v11l-3.5-2-3.5 2-3.5-2Z"/><path d="M9.5 10v1.5m5-1.5v1.5"/></svg></span>GhostChat</a>
+        <button type="button" class="btn primary small" id="new-site">+ New site</button>
+      </div>
+      <div class="rail-label">Your sites</div>
+      <nav id="site-list" class="site-list" aria-label="Your sites"></nav>
       <div class="rail-foot">
-        <div id="owner-email" class="muted tiny"></div>
-        <button type="button" class="btn ghost tiny" id="open-billing">Plan &amp; billing</button>
+        <a class="btn ghost tiny" href="/guide" target="_blank" rel="noopener">📘 Setup guide</a>
+        <button type="button" class="btn ghost tiny" id="open-billing">💎 Plan &amp; billing</button>
+        <div class="owner">
+          <span class="avatar" id="owner-avatar">👻</span>
+          <span id="owner-email" class="muted tiny"></span>
+        </div>
         <button type="button" class="btn ghost tiny" id="sign-out">Sign out</button>
       </div>
     </aside>
 
     <main class="main">
       <div id="empty-state" class="empty glass hidden">
+        <img src="/img/hero-sm.webp" width="760" height="424" alt="" />
         <h2>Add your first site</h2>
-        <p>We’ll give you a site key, an embed snippet, and a place to train the bot.</p>
-        <button type="button" class="btn primary" id="empty-new">Add a site</button>
+        <p class="muted">You'll get a site key, a one-line embed snippet, and a place to train your bot.</p>
+        <div class="row center">
+          <button type="button" class="btn primary" id="empty-new">Add a site</button>
+          <a class="btn ghost" href="/guide" target="_blank" rel="noopener">Read the guide</a>
+        </div>
       </div>
 
       <div id="billing-view" class="hidden">
         <section class="panel glass">
           <h3>Plan &amp; billing</h3>
-          <p class="muted" id="billing-intro">Plans are unlocked by Whop. Use the same email as your GhostChat account.</p>
+          <p class="muted" id="billing-intro">Upgrades are handled by Whop. Check out with the same email as your GhostChat account and your plan unlocks automatically.</p>
           <div id="billing-body"></div>
         </section>
       </div>
 
       <div id="site-view" class="hidden">
-        <header class="top">
+        <header class="top glass">
           <div>
             <h2 id="site-title">Site</h2>
             <div class="meta">
@@ -89,19 +136,32 @@
         </nav>
 
         <section class="panel glass" data-panel="setup">
-          <h3>Embed on your site</h3>
-          <p class="muted">One script tag. The bot answers from your own content.</p>
+          <div class="checklist">
+            <div class="checklist-head">
+              <h3>Getting started</h3>
+              <a class="tiny" href="/guide" target="_blank" rel="noopener">Full guide →</a>
+            </div>
+            <ol>
+              <li><button type="button" data-goto="train"><b>Train it</b><span>Crawl your site or paste your FAQ</span></button></li>
+              <li><button type="button" data-goto="persona"><b>Set the voice</b><span>Pick a template and greeting</span></button></li>
+              <li><button type="button" data-goto="appearance"><b>Match your brand</b><span>Colour and light or dark mode</span></button></li>
+              <li><button type="button" data-goto="embed"><b>Paste the snippet</b><span>Copy it below, then test the demo</span></button></li>
+            </ol>
+          </div>
+          <h3 id="embed-head">Embed on your site</h3>
+          <p class="muted">Paste this one line just before <code>&lt;/body&gt;</code>. The bot answers from your own content.</p>
           <label>Site key <input id="site-key" readonly /></label>
           <label>Embed snippet <textarea id="embed" readonly rows="3"></textarea></label>
           <div class="row">
             <button type="button" class="btn" id="copy-key">Copy key</button>
-            <button type="button" class="btn" id="copy-embed">Copy snippet</button>
+            <button type="button" class="btn primary" id="copy-embed">Copy snippet</button>
             <a class="btn ghost" id="open-demo" href="/demo" target="_blank">Open demo</a>
           </div>
           <form id="site-basics" class="stack">
+            <h3>Site details</h3>
             <label>Display name <input name="name" required /></label>
             <label>Site URL <input name="url" required /></label>
-            <button type="submit" class="btn primary">Save</button>
+            <button type="submit" class="btn">Save</button>
           </form>
         </section>
 
@@ -121,7 +181,7 @@
           <form id="notion-form" class="stack">
             <label>Import a Notion page (URL or ID) <input name="url" placeholder="https://www.notion.so/..." /></label>
             <button type="submit" class="btn">Import from Notion</button>
-            <p class="muted tiny">Requires NOTION_API_KEY and that the page is shared with your GhostChat integration.</p>
+            <p class="muted tiny">Share the Notion page with the GhostChat integration first, then paste its link.</p>
           </form>
           <div id="doc-list" class="list"></div>
         </section>
@@ -257,7 +317,7 @@
     </form>
   </dialog>
 
-  <div id="toast" hidden></div>
+  <div id="toast" role="status" hidden></div>
   <script src="/dashboard/app.js"></script>
 </body>
 </html>

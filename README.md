@@ -35,7 +35,12 @@ The widget also picks up theme, greeting, starter questions, branding, booking, 
 - Booking URL and conversion cards
 - Transcripts, analytics (full analytics on Pro+), leads with transcripts
 - Shareable chat link + QR
-- Plan & billing (Whop checkout links + webhook URL)
+- Plan & billing (Whop checkout links; the webhook URL is below under *Whop webhook*)
+- Sign-in at `/login`, sign-up at `/signup`; Discord/Google buttons show a "Soon" state until their env vars are set
+
+### Marketing site
+- Landing page (`/`) and buyer setup guide (`/guide`), styled after ghostapps.org
+- Images in `public/img/` were generated with Krea and converted to WebP (`og.jpg` is the 1200×630 social card)
 
 ### Backend
 - Multi-model chat over an OpenAI-compatible adapter: OpenRouter (default: `deepseek/deepseek-v4-flash`), plus Grok, OpenAI, and Gemini when their keys exist. The picker also lists OpenRouter `:free` models for a $0 chat option. DeepSeek V4 Flash is extremely cheap, but not strictly free — OpenRouter has no truly-free DeepSeek variant.
@@ -129,6 +134,17 @@ Free Render web service (`render.yaml`, Frankfurt, Node 20). Owner does this —
 3. Set `PUBLIC_URL`, `SESSION_SECRET`, `SUPABASE_SERVICE_KEY`, and `OPENROUTER_API_KEY`. Leave `EMBEDDING_PROVIDER=local`. Add OAuth/Whop keys later if you want those features.
 4. Deploy and check `/healthz`.
 5. Add Discord/Google redirect URIs and the Whop webhook URL if you use those.
+
+Live service: `https://ghostchat-nfoc.onrender.com`, so `PUBLIC_URL` must be exactly that. Redirect URIs to register:
+
+- Discord (Developer Portal → OAuth2 → Redirects): `https://ghostchat-nfoc.onrender.com/api/auth/discord/callback`
+- Google (Cloud Console → Credentials → OAuth client → Authorised redirect URIs): `https://ghostchat-nfoc.onrender.com/api/auth/google/callback`
+
+`GET /api/auth/providers` shows which sign-in methods are live and the redirect URIs the server is using.
+
+### Keep-awake ping
+
+Render's free plan sleeps after ~15 minutes idle. `.github/workflows/keepalive.yml` curls `/healthz` every 10 minutes (and can be run by hand from the Actions tab). GitHub pauses scheduled workflows after 60 days without repo activity; re-enable it from the Actions tab if that happens.
 
 ## Plan limits
 

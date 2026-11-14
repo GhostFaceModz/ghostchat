@@ -58,10 +58,10 @@ app.use("/api/leads", leadsRouter);
 app.use("/api/widget", widgetRouter);
 app.use("/api/billing", requireAuth, billingRouter);
 app.use("/api/models", requireAuth, modelsRouter);
-app.get("/api/templates", (_req, res, next) => {
-  // convenience alias
-  _req.url = "/templates";
-  widgetRouter(_req, res, next);
+// Alias for /api/widget/templates.
+app.get("/api/templates", (req, res, next) => {
+  req.url = "/templates";
+  widgetRouter(req, res, next);
 });
 
 app.use("/widget", express.static(path.join(repoRoot, "widget"), { maxAge: "1h" }));
@@ -72,7 +72,16 @@ app.get("/widget.js", (_req, res) => {
 });
 app.use("/dashboard", express.static(path.join(repoRoot, "dashboard"), { maxAge: "5m", index: "index.html" }));
 app.use("/demo", express.static(path.join(repoRoot, "widget"), { index: "index.html" }));
+// Marketing site: Krea-generated images are versioned by filename, so cache them longer.
+app.use("/img", express.static(path.join(repoRoot, "public", "img"), { maxAge: "7d" }));
 app.use(express.static(path.join(repoRoot, "public"), { maxAge: "5m" }));
+app.get(["/guide", "/getting-started", "/setup"], (_req, res) => {
+  res.sendFile(path.join(repoRoot, "public", "guide.html"));
+});
+// Sign-in and sign-up are views of the dashboard app (it reads the path to pick the mode).
+app.get(["/login", "/signup"], (_req, res) => {
+  res.sendFile(path.join(repoRoot, "dashboard", "index.html"));
+});
 
 app.get("/c/:siteKey", (req, res) => {
   const siteKey = encodeURIComponent(String(req.params.siteKey || ""));

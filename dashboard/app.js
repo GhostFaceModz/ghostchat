@@ -1,3 +1,4 @@
+// GhostChat owner dashboard: auth (email + optional OAuth), sites, training, styling, billing.
 const api = "";
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -36,6 +37,44 @@ async function req(path, opts = {}) {
 function showAuth(on) {
   $("#auth").classList.toggle("hidden", !on);
   $("#app").classList.toggle("hidden", on);
+  document.title = on ? (authMode === "signup" ? "Create your account · GhostChat" : "Sign in · GhostChat") : "GhostChat · Dashboard";
+  // Keep the address bar tidy: /login or /signup while signed out, /dashboard once in.
+  const want = on ? "/" + authMode : "/dashboard";
+  if (location.pathname !== want && (on || /^\/(login|signup)\/?$/.test(location.pathname))) {
+    history.replaceState({}, "", want + location.search + location.hash);
+  }
+}
+
+// ---- Auth mode (sign in vs create account) ----
+let authMode = /^\/signup/.test(location.pathname) || new URLSearchParams(location.search).get("mode") === "signup" ? "signup" : "login";
+
+function setAuthMode(mode) {
+  authMode = mode === "signup" ? "signup" : "login";
+  const signup = authMode === "signup";
+  $("#auth-form").dataset.mode = authMode;
+  $$(".signup-only").forEach((n) => n.classList.toggle("hidden", !signup));
+  $("#auth-title").textContent = signup ? "Create your account" : "Welcome back";
+  $("#auth-sub").textContent = signup ? "Free to start. Your assistant can be live in minutes." : "Sign in to manage your assistants.";
+  $("#auth-submit").textContent = signup ? "Create account" : "Sign in";
+  $("#auth-form").password.setAttribute("autocomplete", signup ? "new-password" : "current-password");
+  $("#auth-switch").innerHTML = signup
+    ? 'Already have an account? <a href="/login" data-mode="login">Sign in</a>'
+    : 'New to GhostChat? <a href="/signup" data-mode="signup">Create an account</a>';
+  $("#auth-error").hidden = true;
+  if (!$("#auth").classList.contains("hidden")) showAuth(true);
+}
+
+function showOwner(owner) {
+  $("#owner-email").textContent = owner.email + (owner.plan ? " · " + owner.plan : "");
+  const av = $("#owner-avatar");
+  if (owner.avatar_url) {
+    const img = document.createElement("img");
+    img.src = owner.avatar_url;
+    img.alt = "";
+    av.replaceChildren(img);
+  } else {
+    av.textContent = (owner.name || owner.email || "?").trim().charAt(0).toUpperCase() || "👻";
+  }
 }
 
 async function boot() {
@@ -49,6 +88,7 @@ async function boot() {
     const next = params.toString();
     history.replaceState({}, "", location.pathname + (next ? "?" + next : ""));
   }
+  setAuthMode(authMode);
   loadTemplates();
   loadProviders();
   if (authError) {
@@ -63,7 +103,7 @@ async function boot() {
     const { owner } = await req("/api/auth/me");
     state.owner = owner;
     showAuth(false);
-    $("#owner-email").textContent = owner.email + (owner.plan ? " · " + owner.plan : "");
+    showOwner(owner);
     await refreshSites();
   } catch {
     state.token = "";
@@ -72,16 +112,21 @@ async function boot() {
   }
 }
 
+// OAuth buttons always show; providers without server credentials get a "Soon" state.
 async function loadProviders() {
+  let providers = {};
   try {
-    const data = await fetch("/api/auth/providers").then((r) => r.json());
-    const box = $("#oauth-buttons");
-    if (!box) return;
-    const any = data.providers && (data.providers.discord || data.providers.google);
-    box.hidden = !any;
-    $("#oauth-discord").style.display = data.providers && data.providers.discord ? "" : "none";
-    $("#oauth-google").style.display = data.providers && data.providers.google ? "" : "none";
-  } catch { /* leave hidden */ }
+    providers = (await fetch("/api/auth/providers").then((r) => r.json())).providers || {};
+  } catch { /* treat as not configured */ }
+  [["discord", "Discord"], ["google", "Google"]].forEach(([id, label]) => {
+    const btn = $("#oauth-" + id);
+    if (!btn) return;
+    const on = Boolean(providers[id]);
+    btn.classList.toggle("soon", !on);
+    btn.setAttribute("aria-disabled", String(!on));
+    btn.title = on ? "" : label + " sign-in is coming soon. Use email for now.";
+    btn.onclick = on ? null : (ev) => { ev.preventDefault(); toast(label + " sign-in is coming soon. Use email for now."); };
+  });
 }
 
 async function loadTemplates() {
@@ -198,13 +243,20 @@ function escapeHtml(s) {
 function lines(v) { return String(v || "").split(/\n/).map((s) => s.trim()).filter(Boolean); }
 function csv(v) { return String(v || "").split(/,/).map((s) => s.trim()).filter(Boolean); }
 
-$("#auth-tabs").addEventListener("click", (ev) => {
-  const btn = ev.target.closest("button");
-  if (!btn) return;
-  $$("#auth-tabs button").forEach((b) => b.classList.toggle("on", b === btn));
-  const signup = btn.dataset.mode === "signup";
-  $(".signup-only").forEach((n) => n.classList.toggle("hidden", !signup));
-  $("#auth-form").dataset.mode = btn.dataset.mode;
+$("#auth-switch").addEventListener("click", (ev) => {
+  const link = ev.target.closest("a[data-mode]");
+  if (!link) return;
+  ev.preventDefault();
+  setAuthMode(link.dataset.mode);
+  $("#auth-form").email.focus();
+});
+
+$("#pw-toggle").addEventListener("click", () => {
+  const input = $("#auth-form").password;
+  const show = input.type === "password";
+  input.type = show ? "text" : "password";
+  $("#pw-toggle").textContent = show ? "Hide" : "Show";
+  $("#pw-toggle").setAttribute("aria-label", show ? "Hide password" : "Show password");
 });
 
 $("#auth-form").addEventListener("submit", async (ev) => {
@@ -213,26 +265,41 @@ $("#auth-form").addEventListener("submit", async (ev) => {
   err.hidden = true;
   const fd = new FormData(ev.target);
   const mode = ev.target.dataset.mode || "login";
+  const email = String(fd.get("email") || "").trim();
+  const password = String(fd.get("password") || "");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = "Enter a valid email address."; err.hidden = false; return; }
+  if (password.length < 8) { err.textContent = "Password must be at least 8 characters."; err.hidden = false; return; }
+  const submit = $("#auth-submit");
+  const label = submit.textContent;
+  submit.disabled = true;
+  submit.setAttribute("aria-busy", "true");
+  submit.textContent = mode === "signup" ? "Creating account…" : "Signing in…";
   try {
     const data = await req("/api/auth/" + (mode === "signup" ? "signup" : "login"), {
       method: "POST",
-      body: { email: fd.get("email"), password: fd.get("password"), name: fd.get("name") }
+      body: { email, password, name: fd.get("name") }
     });
     state.token = data.token;
     state.owner = data.owner;
     localStorage.setItem("gc_token", data.token);
     showAuth(false);
-    $("#owner-email").textContent = data.owner.email;
+    showOwner(data.owner);
+    if (mode === "signup") toast("Welcome to GhostChat! Add your first site to begin.");
     await refreshSites();
   } catch (e) {
     err.textContent = e.message;
     err.hidden = false;
+  } finally {
+    submit.disabled = false;
+    submit.removeAttribute("aria-busy");
+    submit.textContent = label;
   }
 });
 
 $("#sign-out").addEventListener("click", () => {
   state.token = ""; state.owner = null; state.site = null;
   localStorage.removeItem("gc_token");
+  setAuthMode("login");
   showAuth(true);
 });
 
@@ -276,6 +343,14 @@ $("#tabs").addEventListener("click", (ev) => {
   if (state.tab === "analytics") loadAnalytics();
   if (state.tab === "leads") loadLeads();
 });
+
+// Getting-started checklist: jump to the matching tab (or the embed snippet).
+$$(".checklist [data-goto]").forEach((btn) => btn.addEventListener("click", () => {
+  const goto = btn.dataset.goto;
+  if (goto === "embed") { $("#embed-head").scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+  $("#tabs button[data-tab='" + goto + "']")?.click();
+  $("#tabs").scrollIntoView({ behavior: "smooth", block: "start" });
+}));
 
 $("#copy-key").addEventListener("click", () => navigator.clipboard.writeText($("#site-key").value).then(() => toast("Site key copied")));
 $("#copy-embed").addEventListener("click", () => navigator.clipboard.writeText($("#embed").value).then(() => toast("Snippet copied")));
@@ -527,20 +602,25 @@ async function showBilling() {
     const data = await req("/api/billing");
     const b = data.billing;
     state.billing = b;
-    const limits = b.limits || {};
-    box.innerHTML =
-      "<div class='stat-row'>" +
-        "<div class='stat'><b>" + escapeHtml(b.plan || "free") + "</b> current plan</div>" +
-        "<div class='stat'><b>" + (limits.monthlyMessages || "—") + "</b> messages / month</div>" +
-        "<div class='stat'><b>" + (limits.monthlyLeads || "—") + "</b> leads / month</div>" +
-      "</div>" +
-      "<p class='muted'>Webhook URL (paste this in Whop): <code>" + escapeHtml(b.webhookUrl || "") + "</code></p>" +
-      (b.configured
-        ? "<div class='row'>" +
-            (b.checkout && b.checkout.pro ? "<a class='btn primary' href='" + b.checkout.pro + "' target='_blank' rel='noopener'>Upgrade to Pro</a>" : "") +
-            (b.checkout && b.checkout.business ? "<a class='btn' href='" + b.checkout.business + "' target='_blank' rel='noopener'>Upgrade to Business</a>" : "") +
-          "</div>"
-        : "<p class='muted'>Whop is not connected yet. Set WHOP_WEBHOOK_SECRET and the checkout URLs, then subscribe with the same email as this account.</p>");
+    const current = b.plan || "free";
+    const plans = [
+      { id: "free", name: "Free", msgs: "200", extra: ["2 sites", "15 leads / month", "GhostChat badge"] },
+      { id: "pro", name: "Pro", msgs: "5,000", extra: ["10 sites", "1,000 leads / month", "Remove the badge"], url: b.checkout && b.checkout.pro },
+      { id: "business", name: "Business", msgs: "25,000", extra: ["50 sites", "10,000 leads / month", "50 conversion cards"], url: b.checkout && b.checkout.business }
+    ];
+    box.innerHTML = "<div class='plan-grid'>" + plans.map((p) => {
+      const isCurrent = p.id === current;
+      let action = "";
+      if (isCurrent) action = "<span class='btn ghost' aria-disabled='true'>Current plan</span>";
+      else if (p.url) action = "<a class='btn primary' href='" + escapeHtml(p.url) + "' target='_blank' rel='noopener'>Upgrade to " + p.name + "</a>";
+      else if (p.id !== "free") action = "<span class='btn ghost' aria-disabled='true'>Coming soon</span>";
+      return "<div class='plan-card" + (isCurrent ? " current" : "") + "'>" +
+        "<span class='pill'>" + (isCurrent ? "Your plan" : p.name) + "</span>" +
+        "<h4>" + p.name + "</h4><p class='muted tiny'>" + p.msgs + " messages / month</p>" +
+        "<ul>" + p.extra.map((x) => "<li>" + x + "</li>").join("") + "</ul>" + action + "</div>";
+    }).join("") + "</div>" +
+      "<p class='muted tiny' style='margin-top:16px'>Already paid? Your plan updates within a minute. Make sure the email on your Whop purchase matches <b>" +
+      escapeHtml((state.owner && state.owner.email) || "your account email") + "</b>.</p>";
   } catch (e) {
     box.innerHTML = "<p class='error'>" + escapeHtml(e.message) + "</p>";
   }

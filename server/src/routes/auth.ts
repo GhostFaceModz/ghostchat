@@ -8,12 +8,18 @@ import type { AuthedRequest } from "../lib/auth.js";
 
 export const authRouter = Router();
 
+// Which sign-in methods are live. The redirect URIs are public values that must be
+// registered with Discord/Google, exposed here so the setup can be checked from the browser.
 authRouter.get("/providers", (_req, res) => {
   res.json({
     providers: {
       discord: oauthConfigured("discord"),
       google: oauthConfigured("google"),
       password: true,
+    },
+    redirectUris: {
+      discord: `${config.publicUrl}/api/auth/discord/callback`,
+      google: `${config.publicUrl}/api/auth/google/callback`,
     },
   });
 });
