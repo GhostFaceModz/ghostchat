@@ -8,7 +8,7 @@ services:
     plan: free
     region: frankfurt
     branch: main
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci && npm run build && npm run prefetch:embeddings
     startCommand: npm start
     healthCheckPath: /healthz
     autoDeployTrigger: commit
@@ -25,18 +25,20 @@ services:
         sync: false
       - key: SESSION_SECRET
         sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: deepseek/deepseek-v4-flash
+      - key: AI_PROVIDER
+        value: openrouter
+      - key: EMBEDDING_PROVIDER
+        value: local
       - key: GROK_API_KEY
         sync: false
-      - key: GROK_MODEL
-        value: grok-4.7
       - key: OPENAI_API_KEY
-        sync: false
-      - key: OPENROUTER_API_KEY
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: EMBEDDING_PROVIDER
-        value: grok
       - key: DISCORD_CLIENT_ID
         sync: false
       - key: DISCORD_CLIENT_SECRET

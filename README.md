@@ -2,7 +2,7 @@
 
 A premium, embeddable AI chatbot any website owner can add with one script tag. It answers questions about **their own site** using retrieval over content crawled or uploaded by the owner — and says “I’m not sure” instead of making things up.
 
-GhostChat is a GhostApps project. The default chat model is **Grok (xAI)**.
+GhostChat is a GhostApps project. The default chat model is **DeepSeek V4 Flash** via OpenRouter. Embeddings default to a **local, key-free MiniLM model** so retrieval works with only an OpenRouter key.
 
 ## One-line embed
 
@@ -38,23 +38,26 @@ The widget also picks up theme, greeting, starter questions, branding, booking, 
 - Plan & billing (Whop checkout links + webhook URL)
 
 ### Backend
-- Multi-model chat over an OpenAI-compatible adapter: Grok (default), OpenAI, OpenRouter, Gemini
-- Retrieval over `pgvector` (1536-d). Default embeddings: Grok `v1` when a Grok key is set
+- Multi-model chat over an OpenAI-compatible adapter: OpenRouter (default: `deepseek/deepseek-v4-flash`), plus Grok, OpenAI, and Gemini when their keys exist. The picker also lists OpenRouter `:free` models for a $0 chat option. DeepSeek V4 Flash is extremely cheap, but not strictly free — OpenRouter has no truly-free DeepSeek variant.
+- Retrieval over `pgvector` (384-d). Default embeddings: local `Xenova/all-MiniLM-L6-v2` (no API key, no cost). OpenRouter does not provide embeddings.
 - Prompt-injection guards, rate limits, SSRF-safe crawler, PII-redacted logs
 - Per-site isolation and Whop-driven Free / Pro / Business limits
 
 ## Models
 
-Chat is **per site**. Owners pick a provider and model in the dashboard. If that provider’s key is not configured, the bot **falls back to Grok**.
+Chat is **per site**. Owners pick a provider and model in the dashboard. If that provider’s key is not configured, the bot **falls back to OpenRouter** (`deepseek/deepseek-v4-flash`).
 
-| Provider | Env key(s) | Default / example chat models | Embeddings (must be 1536-d) |
+`deepseek/deepseek-v4-flash` is extremely cheap, but not strictly $0. OpenRouter does not offer a truly-free DeepSeek variant. For a $0 chat option, pick one of the `:free` models in the dashboard (for example `google/gemma-4-31b-it:free`).
+
+| Provider | Env key(s) | Default / example chat models | Embeddings (must be 384-d) |
 | --- | --- | --- | --- |
-| **Grok (xAI)** — default | `GROK_API_KEY` or `XAI_API_KEY` | `grok-4.7` (default), `grok-4.6`, `grok-4.5` | Yes — model `v1`, requested at 1536-d. Queries/passages are prefixed as xAI recommends. |
-| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini`, `gpt-4o`, `gpt-4.1-mini` | Yes — `text-embedding-3-small` (1536-d) |
-| OpenRouter | `OPENROUTER_API_KEY` | `x-ai/grok-4.7`, `openai/gpt-4o-mini`, `google/gemini-2.5-flash` | Chat only by default. Point `EMBEDDING_PROVIDER` at Grok, OpenAI, or Gemini. |
-| Google Gemini | `GEMINI_API_KEY` or `GOOGLE_AI_API_KEY` | `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash` | Yes — `gemini-embedding-001` with `dimensions: 1536` |
+| **OpenRouter** — default | `OPENROUTER_API_KEY` | `deepseek/deepseek-v4-flash` (default), plus `:free` models such as `google/gemma-4-31b-it:free`, `meta-llama/llama-3.3-70b-instruct:free`, `qwen/qwen3-8b:free` | No embeddings API. Leave `EMBEDDING_PROVIDER=local`. |
+| **Local MiniLM** — default embeddings | none | n/a (embeddings only) | Yes — `Xenova/all-MiniLM-L6-v2` at 384-d, runs on the server, no key, no cost. |
+| Grok (xAI) | `GROK_API_KEY` or `XAI_API_KEY` | `grok-4.7`, `grok-4.6`, `grok-4.5` | Optional — model `v1` with `dimensions: 384`. |
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini`, `gpt-4o`, `gpt-4.1-mini` | Optional — `text-embedding-3-small` with `dimensions: 384`. |
+| Google Gemini | `GEMINI_API_KEY` or `GOOGLE_AI_API_KEY` | `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash` | Optional — `gemini-embedding-001` with `dimensions: 384`. |
 
-Embeddings are **global** (not per-site) so every bot shares the same vector index. Only keys that are set enable that provider. A OpenRouter key can be added later without a code change.
+Embeddings are **global** (not per-site) so every bot shares the same vector index. Local MiniLM is the default so a site works with only an OpenRouter chat key.
 
 ## Local development
 
@@ -62,7 +65,7 @@ Needs Node 20+ and the env vars in `.env.example`.
 
 ```bash
 cp .env.example .env
-# fill SUPABASE_SERVICE_KEY, SESSION_SECRET, and GROK_API_KEY (or XAI_API_KEY)
+# fill SUPABASE_SERVICE_KEY, SESSION_SECRET, and OPENROUTER_API_KEY
 npm install
 npm test
 npm run dev
@@ -79,11 +82,13 @@ See `.env.example` for the full list. Important ones:
 | `PUBLIC_URL` | Public origin (share links, OAuth redirects, Whop webhook URL) |
 | `SUPABASE_SERVICE_KEY` | **Server only.** Never expose this to the widget. |
 | `SESSION_SECRET` | Signs dashboard tokens (`openssl rand -hex 32`) |
-| `GROK_API_KEY` / `XAI_API_KEY` | Grok (xAI) — default chat + embeddings |
-| `OPENAI_API_KEY` | Optional OpenAI |
-| `OPENROUTER_API_KEY` | Optional OpenRouter |
-| `GEMINI_API_KEY` | Optional Gemini |
-| `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` | Override the global embeddings provider |
+| `OPENROUTER_API_KEY` | Default chat provider |
+| `OPENROUTER_MODEL` | Default chat model, `deepseek/deepseek-v4-flash` |
+| `OPENAI_API_KEY` | Optional OpenAI chat (and optional 384-d embeddings) |
+| `GROK_API_KEY` / `XAI_API_KEY` | Optional Grok chat (and optional 384-d embeddings) |
+| `GEMINI_API_KEY` | Optional Gemini chat (and optional 384-d embeddings) |
+| `EMBEDDING_PROVIDER` | Default `local`. Set `openai`, `gemini`, or `grok` to use a paid embeddings API (must stay 384-d). |
+| `EMBEDDING_MODEL` | Override the embeddings model id |
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Discord sign-in. Redirect: `{PUBLIC_URL}/api/auth/discord/callback` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google sign-in. Redirect: `{PUBLIC_URL}/api/auth/google/callback` |
 | `WHOP_WEBHOOK_SECRET` | Verifies Whop Standard Webhooks at `POST {PUBLIC_URL}/api/webhooks/whop` |
@@ -109,6 +114,7 @@ Shared project `rswtambjckwmlagydsvf`, **`ghostchat_` tables only**. Migrations:
 
 - `supabase/migrations/20261114120000_create_ghostchat_tables.sql`
 - `supabase/migrations/20261114140000_ghostchat_oauth_billing_training.sql`
+- `supabase/migrations/20261114153000_ghostchat_local_embeddings_384.sql`
 
 Tables: `ghostchat_owners`, `ghostchat_sites`, `ghostchat_documents`, `ghostchat_chunks`, `ghostchat_logs`, `ghostchat_leads`, `ghostchat_billing_events`, plus `ghostchat_match_chunks(...)`.
 
@@ -120,7 +126,7 @@ Free Render web service (`render.yaml`, Frankfurt, Node 20). Owner does this —
 
 1. Confirm both `ghostchat_` migrations have been applied.
 2. Create the service from this repo / Blueprint.
-3. Set `PUBLIC_URL`, `SESSION_SECRET`, `SUPABASE_SERVICE_KEY`, and `GROK_API_KEY` (plus any other keys you want).
+3. Set `PUBLIC_URL`, `SESSION_SECRET`, `SUPABASE_SERVICE_KEY`, and `OPENROUTER_API_KEY`. Leave `EMBEDDING_PROVIDER=local`. Add OAuth/Whop keys later if you want those features.
 4. Deploy and check `/healthz`.
 5. Add Discord/Google redirect URIs and the Whop webhook URL if you use those.
 

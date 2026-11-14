@@ -1,4 +1,5 @@
 import { EMBEDDING_DIMENSIONS, resolveChatModel, resolveEmbeddingModel, type ResolvedModel } from "./models.js";
+import { localEmbed } from "./localEmbeddings.js";
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
@@ -28,6 +29,9 @@ export async function embedTexts(texts: string[], kind: "query" | "passage" = "p
   const resolved = resolveEmbeddingModel();
   const prefix = kind === "query" ? resolved.queryPrefix : resolved.passagePrefix;
   const input = prefix ? texts.map((t) => (t.startsWith(prefix) ? t : prefix + t)) : texts;
+  if (resolved.provider === "local") {
+    return localEmbed(input);
+  }
   const vectors: number[][] = [];
   const batchSize = 32;
   for (let i = 0; i < input.length; i += batchSize) {

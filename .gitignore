@@ -12,3 +12,5 @@ coverage/
 uploads/
 tmp/
 .supabase/
+
+.cache/

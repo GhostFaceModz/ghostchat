@@ -1,10 +1,13 @@
 import { config } from "../config.js";
+import { LOCAL_EMBEDDING_MODEL } from "./localEmbeddings.js";
 
-export type ProviderId = "grok" | "openai" | "openrouter" | "gemini";
+export type ProviderId = "openrouter" | "grok" | "openai" | "gemini";
+export type EmbeddingProviderId = ProviderId | "local";
 
 export type ChatModelOption = {
   id: string;
   label: string;
+  free?: boolean;
 };
 
 export type ProviderDef = {
@@ -15,7 +18,7 @@ export type ProviderDef = {
   embeddings: {
     supported: boolean;
     model?: string;
-    dimensions: 1536;
+    dimensions: number;
     queryPrefix?: string;
     passagePrefix?: string;
     note?: string;
@@ -25,21 +28,41 @@ export type ProviderDef = {
 const PUBLIC_URL = config.publicUrl;
 
 export const PROVIDERS: Record<ProviderId, ProviderDef> = {
+  openrouter: {
+    id: "openrouter",
+    name: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    chatModels: [
+      { id: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash (default, very cheap)" },
+      { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B IT (free)", free: true },
+      { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (free)", free: true },
+      { id: "qwen/qwen3-8b:free", label: "Qwen3 8B (free)", free: true },
+      { id: "openai/gpt-4o-mini", label: "GPT-4o mini via OpenRouter" },
+      { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash via OpenRouter" },
+      { id: "x-ai/grok-4.7", label: "Grok 4.7 via OpenRouter" },
+    ],
+    embeddings: {
+      supported: false,
+      dimensions: 384,
+      note: "OpenRouter has no embeddings API. GhostChat uses the local MiniLM model (free, no key) by default.",
+    },
+  },
   grok: {
     id: "grok",
     name: "Grok (xAI)",
     baseUrl: "https://api.x.ai/v1",
     chatModels: [
-      { id: "grok-4.7", label: "Grok 4.7 (default)" },
+      { id: "grok-4.7", label: "Grok 4.7" },
       { id: "grok-4.6", label: "Grok 4.6" },
       { id: "grok-4.5", label: "Grok 4.5" },
     ],
     embeddings: {
       supported: true,
       model: "v1",
-      dimensions: 1536,
+      dimensions: 384,
       queryPrefix: "query: ",
       passagePrefix: "passage: ",
+      note: "Supports a dimensions parameter; GhostChat requests 384 to match the local default index.",
     },
   },
   openai: {
@@ -51,21 +74,11 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
       { id: "gpt-4o", label: "GPT-4o" },
       { id: "gpt-4.1-mini", label: "GPT-4.1 mini" },
     ],
-    embeddings: { supported: true, model: "text-embedding-3-small", dimensions: 1536 },
-  },
-  openrouter: {
-    id: "openrouter",
-    name: "OpenRouter",
-    baseUrl: "https://openrouter.ai/api/v1",
-    chatModels: [
-      { id: "x-ai/grok-4.7", label: "Grok 4.7 via OpenRouter" },
-      { id: "openai/gpt-4o-mini", label: "GPT-4o mini via OpenRouter" },
-      { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash via OpenRouter" },
-    ],
     embeddings: {
-      supported: false,
-      dimensions: 1536,
-      note: "Chat only by default. You can point EMBEDDING_PROVIDER at OpenAI, Grok, or Gemini instead.",
+      supported: true,
+      model: "text-embedding-3-small",
+      dimensions: 384,
+      note: "Requests 384 dimensions so vectors stay compatible with the local MiniLM index.",
     },
   },
   gemini: {
@@ -77,13 +90,19 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
       { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
       { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
     ],
-    embeddings: { supported: true, model: "gemini-embedding-001", dimensions: 1536 },
+    embeddings: {
+      supported: true,
+      model: "gemini-embedding-001",
+      dimensions: 384,
+      note: "Requests 384 dimensions so vectors stay compatible with the local MiniLM index.",
+    },
   },
 };
 
-export const DEFAULT_CHAT_PROVIDER: ProviderId = "grok";
-export const DEFAULT_CHAT_MODEL = "grok-4.7";
-export const EMBEDDING_DIMENSIONS = 1536;
+export const DEFAULT_CHAT_PROVIDER: ProviderId = "openrouter";
+export const DEFAULT_CHAT_MODEL = "deepseek/deepseek-v4-flash";
+export const DEFAULT_EMBEDDING_PROVIDER: EmbeddingProviderId = "local";
+export const EMBEDDING_DIMENSIONS = 384;
 
 function firstEnv(names: string[]): string {
   for (const name of names) {
@@ -95,12 +114,12 @@ function firstEnv(names: string[]): string {
 
 export function providerKey(id: ProviderId): string {
   switch (id) {
+    case "openrouter":
+      return firstEnv(["OPENROUTER_API_KEY"]);
     case "grok":
       return firstEnv(["GROK_API_KEY", "XAI_API_KEY"]);
     case "openai":
       return firstEnv(["OPENAI_API_KEY", "AI_API_KEY"]);
-    case "openrouter":
-      return firstEnv(["OPENROUTER_API_KEY"]);
     case "gemini":
       return firstEnv(["GEMINI_API_KEY", "GOOGLE_AI_API_KEY"]);
   }
@@ -125,7 +144,7 @@ export function extraHeaders(id: ProviderId): Record<string, string> {
 }
 
 export type ResolvedModel = {
-  provider: ProviderId;
+  provider: EmbeddingProviderId;
   model: string;
   baseUrl: string;
   apiKey: string;
@@ -135,7 +154,11 @@ export type ResolvedModel = {
 
 export function resolveChatModel(choice?: { chat_provider?: string | null; chat_model?: string | null }): ResolvedModel {
   const requestedProvider = (choice?.chat_provider || process.env.AI_PROVIDER || DEFAULT_CHAT_PROVIDER) as ProviderId;
-  const requestedModel = choice?.chat_model || process.env.GROK_MODEL || process.env.AI_MODEL || DEFAULT_CHAT_MODEL;
+  const requestedModel =
+    choice?.chat_model ||
+    process.env.OPENROUTER_MODEL ||
+    process.env.AI_MODEL ||
+    DEFAULT_CHAT_MODEL;
 
   const tryResolve = (provider: ProviderId, model: string): ResolvedModel | null => {
     const def = PROVIDERS[provider];
@@ -153,9 +176,9 @@ export function resolveChatModel(choice?: { chat_provider?: string | null; chat_
   const preferred = PROVIDERS[requestedProvider] ? tryResolve(requestedProvider, requestedModel) : null;
   if (preferred) return preferred;
 
-  const grok = tryResolve(DEFAULT_CHAT_PROVIDER, DEFAULT_CHAT_MODEL);
-  if (grok) {
-    return { ...grok, fallbackFrom: { provider: requestedProvider, model: requestedModel } };
+  const openrouter = tryResolve(DEFAULT_CHAT_PROVIDER, DEFAULT_CHAT_MODEL);
+  if (openrouter) {
+    return { ...openrouter, fallbackFrom: { provider: requestedProvider, model: requestedModel } };
   }
 
   for (const id of enabledProviders()) {
@@ -165,7 +188,7 @@ export function resolveChatModel(choice?: { chat_provider?: string | null; chat_
     }
   }
 
-  throw new Error("No chat model provider is configured. Set GROK_API_KEY (or XAI_API_KEY) to use Grok by default.");
+  throw new Error("No chat model provider is configured. Set OPENROUTER_API_KEY to use DeepSeek V4 Flash by default.");
 }
 
 export type ResolvedEmbedding = ResolvedModel & {
@@ -173,22 +196,30 @@ export type ResolvedEmbedding = ResolvedModel & {
   passagePrefix: string;
 };
 
-export function resolveEmbeddingModel(): ResolvedEmbedding {
-  const requested = (process.env.EMBEDDING_PROVIDER || process.env.AI_EMBEDDING_PROVIDER || "") as ProviderId | "";
-  const requestedModel = process.env.EMBEDDING_MODEL || process.env.AI_EMBEDDING_MODEL || "";
-  const order: ProviderId[] = requested && PROVIDERS[requested]
-    ? [requested, "grok", "openai", "gemini"]
-    : ["grok", "openai", "gemini"];
+function localEmbedding(): ResolvedEmbedding {
+  return {
+    provider: "local",
+    model: process.env.EMBEDDING_MODEL?.trim() || LOCAL_EMBEDDING_MODEL,
+    baseUrl: "",
+    apiKey: "",
+    headers: {},
+    queryPrefix: "",
+    passagePrefix: "",
+  };
+}
 
-  const seen = new Set<ProviderId>();
-  for (const id of order) {
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const def = PROVIDERS[id];
-    if (!def.embeddings.supported || !providerKey(id)) continue;
+export function resolveEmbeddingModel(): ResolvedEmbedding {
+  const requested = (process.env.EMBEDDING_PROVIDER || process.env.AI_EMBEDDING_PROVIDER || DEFAULT_EMBEDDING_PROVIDER).trim() || DEFAULT_EMBEDDING_PROVIDER;
+  const requestedModel = process.env.EMBEDDING_MODEL || process.env.AI_EMBEDDING_MODEL || "";
+
+  if (requested === "local") return localEmbedding();
+
+  const id = requested as ProviderId;
+  const def = PROVIDERS[id];
+  if (def?.embeddings.supported && providerKey(id)) {
     return {
       provider: id,
-      model: requested && id === requested && requestedModel ? requestedModel : def.embeddings.model || requestedModel,
+      model: requestedModel || def.embeddings.model || "",
       baseUrl: def.baseUrl,
       apiKey: providerKey(id),
       headers: extraHeaders(id),
@@ -196,13 +227,15 @@ export function resolveEmbeddingModel(): ResolvedEmbedding {
       passagePrefix: def.embeddings.passagePrefix || "",
     };
   }
-  throw new Error("No embeddings provider is configured. Set GROK_API_KEY or OPENAI_API_KEY (1536-d embeddings required).");
+
+  // If a paid embeddings provider was requested but has no key, fall back to local.
+  return { ...localEmbedding(), fallbackFrom: { provider: requested, model: requestedModel } };
 }
 
 export function publicModelCatalog(): {
   defaultProvider: ProviderId;
   defaultModel: string;
-  embedding: { provider?: ProviderId; model?: string; dimensions: number; supported: boolean; note?: string };
+  embedding: { provider?: EmbeddingProviderId; model?: string; dimensions: number; supported: boolean; note?: string };
   providers: Array<{
     id: ProviderId;
     name: string;
@@ -211,27 +244,20 @@ export function publicModelCatalog(): {
     embeddings: ProviderDef["embeddings"];
   }>;
 } {
-  let embedding: { provider?: ProviderId; model?: string; dimensions: number; supported: boolean; note?: string } = {
-    dimensions: EMBEDDING_DIMENSIONS,
-    supported: false,
-    note: "No embeddings key is configured yet.",
-  };
-  try {
-    const resolved = resolveEmbeddingModel();
-    embedding = {
+  const resolved = resolveEmbeddingModel();
+  return {
+    defaultProvider: DEFAULT_CHAT_PROVIDER,
+    defaultModel: DEFAULT_CHAT_MODEL,
+    embedding: {
       provider: resolved.provider,
       model: resolved.model,
       dimensions: EMBEDDING_DIMENSIONS,
       supported: true,
-    };
-  } catch {
-    // leave the note
-  }
-
-  return {
-    defaultProvider: DEFAULT_CHAT_PROVIDER,
-    defaultModel: DEFAULT_CHAT_MODEL,
-    embedding,
+      note:
+        resolved.provider === "local"
+          ? "Default: local Xenova/all-MiniLM-L6-v2 (384-d, no API key, no cost)."
+          : undefined,
+    },
     providers: (Object.keys(PROVIDERS) as ProviderId[]).map((id) => ({
       id,
       name: PROVIDERS[id].name,

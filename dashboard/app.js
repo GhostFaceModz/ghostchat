@@ -468,7 +468,7 @@ async function loadCatalog() {
     const data = await req("/api/models");
     state.catalog = data.catalog;
   } catch {
-    state.catalog = { providers: [], defaultProvider: "grok", defaultModel: "grok-4.7", embedding: { dimensions: 1536, supported: false } };
+    state.catalog = { providers: [], defaultProvider: "openrouter", defaultModel: "deepseek/deepseek-v4-flash", embedding: { dimensions: 384, supported: true } };
   }
   return state.catalog;
 }
@@ -505,15 +505,15 @@ async function fillModelForm() {
   if (note) {
     const enabled = (catalog.providers || []).filter((p) => p.enabled).map((p) => p.name);
     note.textContent = enabled.length
-      ? "Enabled now: " + enabled.join(", ") + ". Missing keys fall back to Grok."
-      : "No provider keys are set yet. Add GROK_API_KEY (or XAI_API_KEY) so Grok can run by default.";
+      ? "Enabled now: " + enabled.join(", ") + ". Missing keys fall back to OpenRouter (DeepSeek V4 Flash)."
+      : "No provider keys are set yet. Add OPENROUTER_API_KEY so DeepSeek V4 Flash can run by default.";
   }
   const emb = $("#embedding-note");
   if (emb && catalog.embedding) {
     emb.textContent = catalog.embedding.supported
       ? "Embeddings are global (not per-site) so every bot shares the same search index: " +
         (catalog.embedding.provider || "") + " / " + (catalog.embedding.model || "") + " at " + catalog.embedding.dimensions + " dimensions."
-      : "Embeddings are not configured yet. Set GROK_API_KEY or OPENAI_API_KEY. Vectors must stay 1536-d.";
+      : "Embeddings are not configured yet. Set GROK_API_KEY or OPENAI_API_KEY. Vectors must stay 384-d to match the local MiniLM index.";
   }
 }
 

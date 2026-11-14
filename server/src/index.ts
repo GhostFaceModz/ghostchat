@@ -12,6 +12,8 @@ import { leadsRouter } from "./routes/leads.js";
 import { widgetRouter } from "./routes/widget.js";
 import { billingRouter, whopWebhookRouter } from "./routes/billing.js";
 import { modelsRouter } from "./routes/models.js";
+import { resolveEmbeddingModel } from "./lib/models.js";
+import { warmupLocalEmbeddings } from "./lib/localEmbeddings.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -139,4 +141,10 @@ if (!config.supabaseServiceKey && config.nodeEnv === "production") {
 
 app.listen(config.port, () => {
   console.log(`GhostChat listening on ${config.publicUrl} (port ${config.port})`);
+  if (resolveEmbeddingModel().provider === "local") {
+    warmupLocalEmbeddings().then(
+      () => console.log("Local embeddings model ready (Xenova/all-MiniLM-L6-v2, 384-d)"),
+      (err) => console.error("Failed to warm local embeddings:", err),
+    );
+  }
 });

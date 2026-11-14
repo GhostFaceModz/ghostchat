@@ -1,9 +1,26 @@
 import assert from "node:assert/strict";
 import { test, before, after } from "node:test";
-import { resolveChatModel, isProviderEnabled, DEFAULT_CHAT_MODEL } from "../server/src/lib/models.ts";
+import {
+  resolveChatModel,
+  resolveEmbeddingModel,
+  isProviderEnabled,
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_CHAT_PROVIDER,
+  EMBEDDING_DIMENSIONS,
+} from "../server/src/lib/models.ts";
 
 const saved: Record<string, string | undefined> = {};
-const keys = ["GROK_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "AI_API_KEY"];
+const keys = [
+  "GROK_API_KEY",
+  "XAI_API_KEY",
+  "OPENAI_API_KEY",
+  "OPENROUTER_API_KEY",
+  "GEMINI_API_KEY",
+  "AI_API_KEY",
+  "AI_PROVIDER",
+  "OPENROUTER_MODEL",
+  "EMBEDDING_PROVIDER",
+];
 
 before(() => {
   for (const key of keys) {
@@ -19,6 +36,12 @@ after(() => {
   }
 });
 
+test("default chat provider is OpenRouter DeepSeek V4 Flash", () => {
+  assert.equal(DEFAULT_CHAT_PROVIDER, "openrouter");
+  assert.equal(DEFAULT_CHAT_MODEL, "deepseek/deepseek-v4-flash");
+  assert.equal(EMBEDDING_DIMENSIONS, 384);
+});
+
 test("enabled providers follow whichever keys are set", () => {
   process.env.OPENROUTER_API_KEY = "or-test";
   assert.equal(isProviderEnabled("openrouter"), true);
@@ -26,21 +49,39 @@ test("enabled providers follow whichever keys are set", () => {
   delete process.env.OPENROUTER_API_KEY;
 });
 
-test("falls back to Grok when the chosen provider has no key", () => {
-  process.env.GROK_API_KEY = "grok-test";
+test("falls back to OpenRouter when the chosen provider has no key", () => {
+  process.env.OPENROUTER_API_KEY = "or-test";
   const resolved = resolveChatModel({ chat_provider: "openai", chat_model: "gpt-4o-mini" });
-  assert.equal(resolved.provider, "grok");
+  assert.equal(resolved.provider, "openrouter");
   assert.equal(resolved.model, DEFAULT_CHAT_MODEL);
-  assert.equal(resolved.baseUrl, "https://api.x.ai/v1");
+  assert.equal(resolved.baseUrl, "https://openrouter.ai/api/v1");
   assert.ok(resolved.fallbackFrom);
-  delete process.env.GROK_API_KEY;
+  delete process.env.OPENROUTER_API_KEY;
 });
 
-test("uses the owner's Grok pick when the Grok key is present", () => {
-  process.env.XAI_API_KEY = "xai-test";
-  const resolved = resolveChatModel({ chat_provider: "grok", chat_model: "grok-4.5" });
-  assert.equal(resolved.provider, "grok");
-  assert.equal(resolved.model, "grok-4.5");
+test("uses the owner's OpenRouter pick when the key is present", () => {
+  process.env.OPENROUTER_API_KEY = "or-test";
+  const resolved = resolveChatModel({
+    chat_provider: "openrouter",
+    chat_model: "google/gemma-4-31b-it:free",
+  });
+  assert.equal(resolved.provider, "openrouter");
+  assert.equal(resolved.model, "google/gemma-4-31b-it:free");
   assert.equal(resolved.fallbackFrom, undefined);
-  delete process.env.XAI_API_KEY;
+  delete process.env.OPENROUTER_API_KEY;
+});
+
+test("defaults embeddings to local MiniLM with no API key", () => {
+  const resolved = resolveEmbeddingModel();
+  assert.equal(resolved.provider, "local");
+  assert.equal(resolved.model, "Xenova/all-MiniLM-L6-v2");
+  assert.equal(resolved.apiKey, "");
+});
+
+test("falls back to local embeddings when a paid provider has no key", () => {
+  process.env.EMBEDDING_PROVIDER = "openai";
+  const resolved = resolveEmbeddingModel();
+  assert.equal(resolved.provider, "local");
+  assert.ok(resolved.fallbackFrom);
+  delete process.env.EMBEDDING_PROVIDER;
 });
