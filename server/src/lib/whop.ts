@@ -58,6 +58,7 @@ export function extractWhopBilling(event: WhopEvent): {
   planId: string | null;
   productId: string | null;
   metadataOwnerId: string | null;
+  metadataPlan: Plan | null;
 } {
   const data = event.data;
   const user = asRecord(data.user) || asRecord(data.member) || asRecord(data.customer);
@@ -68,13 +69,21 @@ export function extractWhopBilling(event: WhopEvent): {
   const emailRaw = user?.email || data.email;
   return {
     email: typeof emailRaw === "string" ? emailRaw.trim().toLowerCase() : null,
-    membershipId: membership && typeof membership.id === "string" ? membership.id : typeof data.id === "string" ? data.id : null,
+    membershipId:
+      typeof data.membership === "string" ? data.membership
+      : typeof data.membership_id === "string" ? data.membership_id
+      : membership && typeof membership.id === "string" ? membership.id
+      : typeof data.id === "string" ? data.id : null,
     customerId:
       (user && typeof user.id === "string" && user.id) ||
       (typeof data.user_id === "string" ? data.user_id : null),
     planId: (plan && typeof plan.id === "string" && plan.id) || (typeof data.plan_id === "string" ? data.plan_id : null),
     productId: (product && typeof product.id === "string" && product.id) || (typeof data.product_id === "string" ? data.product_id : null),
-    metadataOwnerId: metadata && typeof metadata.owner_id === "string" ? metadata.owner_id : null,
+    metadataOwnerId:
+      metadata && typeof metadata.ghostchat_owner_id === "string" ? metadata.ghostchat_owner_id
+      : metadata && typeof metadata.owner_id === "string" ? metadata.owner_id : null,
+    // Set on a membership when the customer switches Business -> Pro from the cancel flow.
+    metadataPlan: metadata && (metadata.ghostchat_plan === "pro" || metadata.ghostchat_plan === "business") ? (metadata.ghostchat_plan as Plan) : null,
   };
 }
 
@@ -92,4 +101,65 @@ export function isUpgradeEvent(type: string): boolean {
 
 export function isDowngradeEvent(type: string): boolean {
   return /went_invalid|deactivated|cancelled|canceled|expired/i.test(type) && !/cancel_at_period_end/i.test(type);
+}
+
+// ---- Whop REST API (needs WHOP_API_KEY with membership read/cancel/update permissions) ----
+const WHOP_API = "https://api.whop.com/api/v1";
+export const WHOP_MANAGE_URL = "https://whop.com/@me/settings/orders/";
+export const RETENTION_PROMO_CODE = process.env.WHOP_RETENTION_PROMO_CODE || "GCSTAY50";
+
+export function whopApiConfigured(): boolean {
+  return Boolean(config.whopApiKey);
+}
+
+async function whopApi<T = Record<string, unknown>>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(WHOP_API + path, {
+    method,
+    headers: { authorization: `Bearer ${config.whopApiKey}`, "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const err = asRecord(json.error);
+    throw new Error((err && typeof err.message === "string" && err.message) || (typeof json.message === "string" && json.message) || `Whop API ${res.status}`);
+  }
+  return json as T;
+}
+
+export type MembershipInfo = {
+  id: string;
+  status: string | null;
+  cancel_at_period_end: boolean;
+  renewal_period_end: string | null;
+  plan_id: string | null;
+  promo_applied: boolean;
+};
+
+function toMembershipInfo(m: Record<string, unknown>): MembershipInfo {
+  const plan = asRecord(m.plan) || asRecord(m.variant);
+  const end = m.renewal_period_end ?? m.current_period_end ?? m.expires_at ?? null;
+  const endIso = typeof end === "number" ? new Date(end * 1000).toISOString() : typeof end === "string" ? end : null;
+  return {
+    id: String(m.id || ""),
+    status: typeof m.status === "string" ? m.status : null,
+    cancel_at_period_end: Boolean(m.cancel_at_period_end),
+    renewal_period_end: endIso,
+    plan_id: (plan && typeof plan.id === "string" && plan.id) || (typeof m.plan_id === "string" ? m.plan_id : null),
+    promo_applied: Boolean(m.promo_code),
+  };
+}
+
+export async function getMembership(id: string): Promise<MembershipInfo> {
+  return toMembershipInfo(await whopApi("GET", `/memberships/${encodeURIComponent(id)}`));
+}
+export async function cancelMembershipAtPeriodEnd(id: string): Promise<MembershipInfo> {
+  return toMembershipInfo(await whopApi("POST", `/memberships/${encodeURIComponent(id)}/cancel`, { cancellation_mode: "at_period_end" }));
+}
+export async function applyRetentionPromo(id: string): Promise<void> {
+  await whopApi("POST", `/memberships/${encodeURIComponent(id)}/apply_promo_code`, { promo_code: RETENTION_PROMO_CODE });
+}
+export async function scheduleDowngradeToPro(id: string, proPrice: number): Promise<MembershipInfo> {
+  // Lower the renewal price first (Whop allows only one field per update), then tag the plan.
+  await whopApi("PATCH", `/memberships/${encodeURIComponent(id)}`, { renewal_price: proPrice });
+  return toMembershipInfo(await whopApi("PATCH", `/memberships/${encodeURIComponent(id)}`, { metadata: { ghostchat_plan: "pro" } }));
 }

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getDb } from "../lib/supabase.js";
-import { hashPassword, verifyPassword, signToken, isValidEmail, requireAuth, signOAuthState, verifyOAuthState } from "../lib/auth.js";
+import { hashPassword, verifyPassword, signToken, sessionTtl, isValidEmail, requireAuth, signOAuthState, verifyOAuthState } from "../lib/auth.js";
 import { clientIp, rateLimit } from "../lib/rateLimit.js";
 import { config, oauthConfigured, oauthMode, supabaseAuthorizeUrl, PLAN_LIMITS, type Plan } from "../config.js";
 import { exchangeDiscordCode, exchangeGoogleCode, profileFromSupabaseUser, upsertOwnerFromOAuth } from "../lib/oauth.js";
@@ -71,7 +71,7 @@ authRouter.post("/signup", async (req, res) => {
     .single();
   if (error) return res.status(500).json({ error: "Could not create the account." });
 
-  const token = signToken({ id: data.id, email: data.email, name: data.name });
+  const token = signToken({ id: data.id, email: data.email, name: data.name }, sessionTtl(req.body?.remember));
   res.status(201).json({ token, owner: data });
 });
 
@@ -96,7 +96,7 @@ authRouter.post("/login", async (req, res) => {
   }
 
   const owner = { id: data.id, email: data.email, name: data.name, plan: data.plan, avatar_url: data.avatar_url };
-  const token = signToken(owner);
+  const token = signToken(owner, sessionTtl(req.body?.remember));
   res.json({ token, owner });
 });
 
@@ -176,7 +176,7 @@ authRouter.get("/me", requireAuth, async (req, res) => {
   const session = (req as AuthedRequest).owner;
   const { data, error } = await getDb()
     .from("ghostchat_owners")
-    .select("id, email, name, plan, avatar_url, discord_id, google_id, whop_membership_id, is_admin")
+    .select("id, email, name, plan, avatar_url, discord_id, google_id, whop_membership_id, is_admin, password_hash, created_at")
     .eq("id", session.id)
     .maybeSingle();
   if (error || !data) return res.status(401).json({ error: "Please sign in" });
@@ -191,6 +191,8 @@ authRouter.get("/me", requireAuth, async (req, res) => {
       discord_linked: Boolean(data.discord_id),
       google_linked: Boolean(data.google_id),
       is_admin: Boolean(data.is_admin),
+      has_password: Boolean(data.password_hash),
+      created_at: data.created_at,
     },
     limits: PLAN_LIMITS[plan],
     billing: {
@@ -198,4 +200,60 @@ authRouter.get("/me", requireAuth, async (req, res) => {
       membership: Boolean(data.whop_membership_id),
     },
   });
+});
+
+// ---- My account ----
+authRouter.patch("/me", requireAuth, async (req, res) => {
+  const { id } = (req as AuthedRequest).owner;
+  const name = String(req.body?.name ?? "").trim().slice(0, 80);
+  if (!name) return res.status(400).json({ error: "Enter a name." });
+  const { error } = await getDb().from("ghostchat_owners").update({ name, updated_at: new Date().toISOString() }).eq("id", id);
+  if (error) return res.status(500).json({ error: "Could not save your name." });
+  res.json({ ok: true, name });
+});
+
+authRouter.post("/password", requireAuth, async (req, res) => {
+  const { id } = (req as AuthedRequest).owner;
+  const rl = rateLimit(`pw:${id}`, 8, 15 * 60 * 1000);
+  if (!rl.ok) return res.status(429).json({ error: "Too many attempts. Try again shortly." });
+  const current = String(req.body?.current_password || "");
+  const next = String(req.body?.new_password || "");
+  if (next.length < 8) return res.status(400).json({ error: "New password must be at least 8 characters." });
+  const db = getDb();
+  const { data } = await db.from("ghostchat_owners").select("password_hash").eq("id", id).maybeSingle();
+  if (!data?.password_hash) return res.status(400).json({ error: "This account signs in with Discord or Google, so it has no password to change." });
+  if (!(await verifyPassword(current, data.password_hash))) return res.status(401).json({ error: "Your current password isn't right." });
+  // Changing the password signs out every other session; this device gets a fresh token.
+  const now = new Date();
+  const { error } = await db
+    .from("ghostchat_owners")
+    .update({ password_hash: await hashPassword(next), sessions_valid_after: now.toISOString(), updated_at: now.toISOString() })
+    .eq("id", id);
+  if (error) return res.status(500).json({ error: "Could not change the password." });
+  const owner = (req as AuthedRequest).owner;
+  res.json({ ok: true, token: signToken(owner, sessionTtl(req.body?.remember)) });
+});
+
+authRouter.post("/logout-all", requireAuth, async (req, res) => {
+  const { id } = (req as AuthedRequest).owner;
+  const { error } = await getDb()
+    .from("ghostchat_owners")
+    .update({ sessions_valid_after: new Date(Date.now() + 1000).toISOString() })
+    .eq("id", id);
+  if (error) return res.status(500).json({ error: "Could not sign out everywhere." });
+  res.json({ ok: true });
+});
+
+authRouter.delete("/me", requireAuth, async (req, res) => {
+  const owner = (req as AuthedRequest).owner;
+  const confirm = String(req.body?.confirm_email || "").trim().toLowerCase();
+  if (!confirm || confirm !== owner.email.toLowerCase()) {
+    return res.status(400).json({ error: "Type your account email exactly to confirm." });
+  }
+  const db = getDb();
+  const { data } = await db.from("ghostchat_owners").select("is_admin").eq("id", owner.id).maybeSingle();
+  if (data?.is_admin) return res.status(403).json({ error: "The GhostChat owner (admin) account can't be deleted from the dashboard." });
+  const { error } = await db.from("ghostchat_owners").delete().eq("id", owner.id);
+  if (error) return res.status(500).json({ error: "Could not delete the account." });
+  res.json({ ok: true });
 });

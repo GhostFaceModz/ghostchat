@@ -210,3 +210,27 @@ dialog::backdrop { background: rgba(5, 2, 12, .7); backdrop-filter: blur(6px); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---- My account ---- */
+#account-view { display: grid; gap: 18px; }
+.acct-head { display: flex; align-items: center; gap: 14px; margin: 6px 0 10px; }
+.avatar.lg { width: 52px; height: 52px; font-size: 20px; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.row .grow { flex: 1 1 220px; }
+.row.end { justify-content: flex-end; }
+.methods { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }
+.methods li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 14px; border: 1px solid var(--line); background: rgba(5, 3, 12, .3); }
+.methods .on { color: #86efac; font-size: 13px; }
+.methods .off { color: var(--soft); font-size: 13px; }
+.linklike { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; font: inherit; font-size: 13px; cursor: pointer; }
+.linklike:hover { color: var(--text); }
+.cancel-line { margin: 16px 0 0; }
+.btn.danger { background: rgba(251, 113, 133, .14); border: 1px solid rgba(251, 113, 133, .45); color: #fecdd3; }
+.btn.danger:hover { background: rgba(251, 113, 133, .24); }
+.danger-zone { border-color: rgba(251, 113, 133, .25); }
+.dlg { width: min(460px, calc(100vw - 24px)); border-radius: 22px; padding: 22px; color: var(--text); border: 1px solid var(--line); }
+.dlg::backdrop { background: rgba(5, 2, 12, .7); backdrop-filter: blur(4px); }
+.dlg h3 { margin: 0 0 6px; }
+.dlg select, .dlg textarea { width: 100%; }
+.remember { margin: 2px 0 4px; font-size: 13.5px; }
+.plan-card h4 .price { font-family: var(--font-body, inherit); font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 6px; }

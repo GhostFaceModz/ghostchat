@@ -81,6 +81,9 @@ app.get(["/privacy", "/privacy-policy"], (_req, res) => {
 app.get(["/terms", "/tos"], (_req, res) => {
   res.sendFile(path.join(repoRoot, "public", "terms.html"));
 });
+app.get("/pricing", (_req, res) => {
+  res.sendFile(path.join(repoRoot, "public", "index.html"));
+});
 app.get(["/guide", "/getting-started", "/setup"], (_req, res) => {
   res.sendFile(path.join(repoRoot, "public", "guide.html"));
 });
@@ -90,7 +93,7 @@ app.get("/auth/callback", (_req, res) => {
   res.sendFile(path.join(repoRoot, "public", "auth-callback.html"));
 });
 // Sign-in and sign-up are views of the dashboard app (it reads the path to pick the mode).
-app.get(["/login", "/signup"], (_req, res) => {
+app.get(["/login", "/signup", "/account"], (_req, res) => {
   res.sendFile(path.join(repoRoot, "dashboard", "index.html"));
 });
 

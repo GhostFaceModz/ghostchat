@@ -30,3 +30,14 @@ test("extracts email and plan ids from a Whop payload", () => {
   assert.equal(info.planId, "plan_pro");
   assert.equal(info.membershipId, "mem_1");
 });
+
+test("reads the membership id from payment events and the owner/plan from metadata", () => {
+  const event = parseWhopEvent(JSON.stringify({
+    type: "payment.succeeded",
+    data: { id: "pay_1", membership: "mem_9", metadata: { ghostchat_owner_id: "owner-1", ghostchat_plan: "pro" } },
+  }));
+  const info = extractWhopBilling(event);
+  assert.equal(info.membershipId, "mem_9");
+  assert.equal(info.metadataOwnerId, "owner-1");
+  assert.equal(info.metadataPlan, "pro");
+});

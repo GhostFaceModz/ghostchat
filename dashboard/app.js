@@ -3,8 +3,21 @@ const api = "";
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
+// Session token: localStorage when "Remember me" is on (about 30 days), sessionStorage otherwise.
+const tokenStore = {
+  get() { try { return localStorage.getItem("gc_token") || sessionStorage.getItem("gc_token") || ""; } catch { return ""; } },
+  set(t, remember = true) {
+    try {
+      localStorage.removeItem("gc_token"); sessionStorage.removeItem("gc_token");
+      (remember ? localStorage : sessionStorage).setItem("gc_token", t);
+    } catch {}
+  },
+  remembered() { try { return Boolean(localStorage.getItem("gc_token")); } catch { return true; } },
+  clear() { try { localStorage.removeItem("gc_token"); sessionStorage.removeItem("gc_token"); } catch {} }
+};
+
 const state = {
-  token: localStorage.getItem("gc_token") || "",
+  token: tokenStore.get(),
   owner: null,
   sites: [],
   site: null,
@@ -83,7 +96,7 @@ async function boot() {
   const authError = params.get("auth_error");
   if (token) {
     state.token = token;
-    localStorage.setItem("gc_token", token);
+    tokenStore.set(token, true);
     params.delete("token");
     const next = params.toString();
     history.replaceState({}, "", location.pathname + (next ? "?" + next : ""));
@@ -107,9 +120,12 @@ async function boot() {
     await refreshSites();
   } catch {
     state.token = "";
-    localStorage.removeItem("gc_token");
+    tokenStore.clear();
     showAuth(true);
+    return;
   }
+  if (/^\/account\/?$/.test(location.pathname) || location.hash === "#account") showAccount();
+  else if (location.hash === "#billing") showBilling();
 }
 
 // OAuth buttons always show; a provider the server can't use yet gets a "Soon" state.
@@ -166,7 +182,10 @@ async function selectSite(id) {
   state.site = site;
   $$("#site-list button").forEach((b, i) => b.classList.toggle("on", state.sites[i] && state.sites[i].id === id));
   $("#empty-state").classList.add("hidden");
+  $("#billing-view")?.classList.add("hidden");
+  $("#account-view")?.classList.add("hidden");
   $("#site-view").classList.remove("hidden");
+  if (location.pathname === "/account") history.replaceState({}, "", "/dashboard");
   renderSite();
   if (state.tab === "train") loadDocs();
   if (state.tab === "transcripts") loadLogs();
@@ -280,11 +299,11 @@ $("#auth-form").addEventListener("submit", async (ev) => {
   try {
     const data = await req("/api/auth/" + (mode === "signup" ? "signup" : "login"), {
       method: "POST",
-      body: { email, password, name: fd.get("name") }
+      body: { email, password, name: fd.get("name"), remember: fd.get("remember") === "on" }
     });
     state.token = data.token;
     state.owner = data.owner;
-    localStorage.setItem("gc_token", data.token);
+    tokenStore.set(data.token, fd.get("remember") === "on");
     showAuth(false);
     showOwner(data.owner);
     if (mode === "signup") toast("Welcome to GhostChat! Add your first site to begin.");
@@ -299,12 +318,13 @@ $("#auth-form").addEventListener("submit", async (ev) => {
   }
 });
 
-$("#sign-out").addEventListener("click", () => {
+function signOutLocal() {
   state.token = ""; state.owner = null; state.site = null;
-  localStorage.removeItem("gc_token");
+  tokenStore.clear();
   setAuthMode("login");
   showAuth(true);
-});
+}
+$("#sign-out").addEventListener("click", signOutLocal);
 
 function openNew() { $("#new-dialog").showModal(); }
 $("#new-site").addEventListener("click", openNew);
@@ -337,6 +357,7 @@ $("#tabs").addEventListener("click", (ev) => {
   $$("#tabs button").forEach((b) => b.classList.toggle("on", b === btn));
   state.view = "sites";
   $("#billing-view")?.classList.add("hidden");
+  $("#account-view")?.classList.add("hidden");
   $("#site-view")?.classList.toggle("hidden", !state.site);
   $$(".panel").forEach((p) => p.classList.toggle("hidden", p.dataset.panel !== state.tab));
   if (state.tab === "model") fillModelForm();
@@ -597,6 +618,7 @@ async function fillModelForm() {
 
 async function showBilling() {
   state.view = "billing";
+  $("#account-view")?.classList.add("hidden");
   $("#site-view")?.classList.add("hidden");
   $("#empty-state")?.classList.add("hidden");
   $("#billing-view")?.classList.remove("hidden");
@@ -607,23 +629,23 @@ async function showBilling() {
     state.billing = b;
     const current = b.plan || "free";
     const plans = [
-      { id: "free", name: "Free", msgs: "200", extra: ["2 sites", "15 leads / month", "GhostChat badge"] },
-      { id: "pro", name: "Pro", msgs: "5,000", extra: ["10 sites", "1,000 leads / month", "Remove the badge"], url: b.checkout && b.checkout.pro },
-      { id: "business", name: "Business", msgs: "25,000", extra: ["50 sites", "10,000 leads / month", "50 conversion cards"], url: b.checkout && b.checkout.business }
+      ...planCatalog(b)
     ];
     box.innerHTML = "<div class='plan-grid'>" + plans.map((p) => {
       const isCurrent = p.id === current;
       let action = "";
       if (isCurrent) action = "<span class='btn ghost' aria-disabled='true'>Current plan</span>";
-      else if (p.url) action = "<a class='btn primary' href='" + escapeHtml(p.url) + "' target='_blank' rel='noopener'>Upgrade to " + p.name + "</a>";
+      else if (p.url && current !== "business") action = "<a class='btn primary' href='" + escapeHtml(checkoutUrl(p.url)) + "' target='_blank' rel='noopener'>Upgrade to " + p.name + "</a>";
       else if (p.id !== "free") action = "<span class='btn ghost' aria-disabled='true'>Coming soon</span>";
       return "<div class='plan-card" + (isCurrent ? " current" : "") + "'>" +
         "<span class='pill'>" + (isCurrent ? "Your plan" : p.name) + "</span>" +
-        "<h4>" + p.name + "</h4><p class='muted tiny'>" + p.msgs + " messages / month</p>" +
+        "<h4>" + p.name + " <small class='price'>" + p.price + "</small></h4><p class='muted tiny'>" + p.msgs + " messages / month</p>" +
         "<ul>" + p.extra.map((x) => "<li>" + x + "</li>").join("") + "</ul>" + action + "</div>";
     }).join("") + "</div>" +
       "<p class='muted tiny' style='margin-top:16px'>Already paid? Your plan updates within a minute. Make sure the email on your Whop purchase matches <b>" +
-      escapeHtml((state.owner && state.owner.email) || "your account email") + "</b>.</p>";
+      escapeHtml((state.owner && state.owner.email) || "your account email") + "</b>.</p>" +
+      (b.membership && current !== "free" ? "<p class='tiny'><a href='/account#billing' id='billing-manage-link'>Manage or cancel your subscription</a></p>" : "");
+    $("#billing-manage-link")?.addEventListener("click", (ev) => { ev.preventDefault(); showAccount(); });
   } catch (e) {
     box.innerHTML = "<p class='error'>" + escapeHtml(e.message) + "</p>";
   }
@@ -683,5 +705,204 @@ document.getElementById("model-form")?.addEventListener("submit", async (ev) => 
   toast("Model saved");
 });
 
+
+// ---- Plans (prices and limits shown everywhere in the dashboard) ----
+function fmt(n) { return Number(n).toLocaleString("en-GB"); }
+function planCatalog(b) {
+  const L = (b && b.plans) || {};
+  const row = (id, name, price, extra, url) => ({
+    id, name, price, url,
+    msgs: fmt((L[id] && L[id].monthlyMessages) || 0),
+    extra: L[id] ? [fmt(L[id].maxSites) + " sites", fmt(L[id].monthlyLeads) + " leads / month"].concat(extra) : extra
+  });
+  return [
+    row("free", "Free", "£0", ["“Powered by GhostChat” badge"]),
+    row("pro", "Pro", "£9/mo", ["Remove the badge", "Full analytics"], b && b.checkout && b.checkout.pro),
+    row("business", "Business", "£29/mo", ["Remove the badge", "50 conversion cards"], b && b.checkout && b.checkout.business)
+  ];
+}
+// Prefill and lock the account email in Whop checkout so the purchase maps to this account.
+function checkoutUrl(url) {
+  try {
+    const u = new URL(url);
+    if (state.owner && state.owner.email) {
+      u.searchParams.set("email", state.owner.email);
+      u.searchParams.set("email.disabled", "1");
+    }
+    return u.toString();
+  } catch { return url; }
+}
+
+// ---- My account ----
+function setAvatar(el, owner) {
+  if (owner.avatar_url) {
+    const img = document.createElement("img");
+    img.src = owner.avatar_url; img.alt = "";
+    el.replaceChildren(img);
+  } else {
+    el.textContent = (owner.name || owner.email || "?").trim().charAt(0).toUpperCase() || "👻";
+  }
+}
+function fmtDate(iso) {
+  try { return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }); } catch { return iso; }
+}
+
+async function showAccount() {
+  state.view = "account";
+  ["#site-view", "#empty-state", "#billing-view"].forEach((s) => $(s)?.classList.add("hidden"));
+  $("#account-view").classList.remove("hidden");
+  if (location.pathname !== "/account") history.replaceState({}, "", "/account");
+  let owner = state.owner;
+  try { owner = (await req("/api/auth/me")).owner; state.owner = owner; } catch (e) { toast(e.message); }
+  if (!owner) return;
+  setAvatar($("#acct-avatar"), owner);
+  $("#acct-name").textContent = owner.name || "Your account";
+  $("#acct-email").textContent = owner.email + (owner.is_admin ? " · owner" : "");
+  $$(".acct-email-inline").forEach((n) => { n.textContent = owner.email; });
+  $("#acct-name-form").name.value = owner.name || "";
+  const methods = [
+    ["Google", owner.google_linked],
+    ["Discord", owner.discord_linked],
+    ["Email and password", owner.has_password]
+  ];
+  $("#acct-methods").innerHTML = methods.map(([n, on]) =>
+    "<li><span>" + n + "</span><span class='" + (on ? "on'>Connected" : "off'>Not connected") + "</span></li>").join("");
+  $("#acct-password").classList.toggle("hidden", !owner.has_password);
+  $("#acct-delete").disabled = Boolean(owner.is_admin);
+  $("#acct-delete-sub").textContent = owner.is_admin ? " The owner (admin) account can't be deleted here." : " If you pay through Whop, cancel the subscription first.";
+  renderAccountBilling();
+}
+
+async function renderAccountBilling() {
+  const planBox = $("#acct-plan"), grid = $("#acct-upgrades");
+  try {
+    const { billing: b } = await req("/api/billing");
+    state.billing = b;
+    const current = b.plan || "free";
+    const cat = planCatalog(b);
+    const me = cat.find((p) => p.id === current) || cat[0];
+    const m = b.membership || null;
+    let status = "";
+    if (state.owner && state.owner.is_admin) status = "Owner account: Business features are included free.";
+    else if (m && m.cancel_at_period_end && m.renewal_period_end) status = "Cancelled. You keep " + me.name + " until " + fmtDate(m.renewal_period_end) + ".";
+    else if (m && m.renewal_period_end) status = "Renews on " + fmtDate(m.renewal_period_end) + ".";
+    planBox.innerHTML = "<div class='plan-card current'><span class='pill'>Your plan</span><h4>" + me.name + " <small class='price'>" + me.price + "</small></h4>" +
+      "<p class='muted tiny'>" + me.msgs + " messages / month · " + me.extra.join(" · ") + "</p>" + (status ? "<p class='tiny'>" + escapeHtml(status) + "</p>" : "") +
+      (b.manageUrl && m ? "<a class='btn ghost small' href='" + escapeHtml(b.manageUrl) + "' target='_blank' rel='noopener'>Manage billing on Whop</a>" : "") + "</div>";
+    const ups = cat.filter((p) => p.id !== "free" && p.id !== current && !(current === "business"));
+    grid.innerHTML = ups.map((p) => "<div class='plan-card'><h4>" + p.name + " <small class='price'>" + p.price + "</small></h4><p class='muted tiny'>" + p.msgs + " messages / month</p><ul>" +
+      p.extra.map((x) => "<li>" + x + "</li>").join("") + "</ul>" +
+      (p.url ? "<a class='btn primary' href='" + escapeHtml(checkoutUrl(p.url)) + "' target='_blank' rel='noopener'>Upgrade to " + p.name + "</a>" : "<span class='btn ghost' aria-disabled='true'>Coming soon</span>") +
+      (current === "pro" && m ? "<p class='muted tiny'>Your account moves to Business as soon as it's paid. Then cancel the Pro order on Whop so you're not billed twice.</p>" : "") + "</div>").join("");
+    const paid = current !== "free" && m && !m.cancel_at_period_end && !(state.owner && state.owner.is_admin);
+    $("#acct-cancel-line").hidden = !paid;
+    $("#acct-cancel-note").hidden = true;
+  } catch (e) {
+    planBox.innerHTML = "<p class='error'>" + escapeHtml(e.message) + "</p>";
+  }
+}
+
+$("#open-account").addEventListener("click", showAccount);
+$("#owner-avatar").addEventListener("click", showAccount);
+
+$("#acct-name-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  try {
+    const { name } = await req("/api/auth/me", { method: "PATCH", body: { name: ev.target.name.value } });
+    state.owner.name = name; $("#acct-name").textContent = name; toast("Name saved");
+  } catch (e) { toast(e.message); }
+});
+
+$("#acct-pw-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const err = $("#acct-pw-error"); err.hidden = true;
+  const fd = new FormData(ev.target);
+  try {
+    const { token } = await req("/api/auth/password", { method: "POST", body: { current_password: fd.get("current_password"), new_password: fd.get("new_password"), remember: tokenStore.remembered() } });
+    state.token = token; tokenStore.set(token, tokenStore.remembered());
+    ev.target.reset(); toast("Password changed. Other devices are signed out.");
+  } catch (e) { err.textContent = e.message; err.hidden = false; }
+});
+
+$("#acct-logout-all").addEventListener("click", async () => {
+  if (!confirm("Sign out of GhostChat on every device, including this one?")) return;
+  try { await req("/api/auth/logout-all", { method: "POST" }); } catch (e) { toast(e.message); return; }
+  signOutLocal(); toast("Signed out everywhere");
+});
+
+$("#acct-delete").addEventListener("click", () => {
+  $("#delete-email").textContent = state.owner.email;
+  $("#delete-form").reset(); $("#delete-error").hidden = true;
+  $("#delete-dialog").showModal();
+});
+$("#delete-cancel").addEventListener("click", () => $("#delete-dialog").close());
+$("#delete-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  try {
+    await req("/api/auth/me", { method: "DELETE", body: { confirm_email: ev.target.confirm_email.value } });
+    $("#delete-dialog").close(); signOutLocal(); toast("Your account has been deleted");
+  } catch (e) { $("#delete-error").textContent = e.message; $("#delete-error").hidden = false; }
+});
+
+// ---- Cancel subscription: offer, optional reason, confirm. Two clicks: the link, then Confirm. ----
+$("#acct-cancel").addEventListener("click", () => {
+  const b = state.billing || {};
+  const plan = b.plan;
+  const offers = (b.retention || {});
+  const parts = [];
+  const actions = $("#cancel-offer-actions"); actions.innerHTML = "";
+  if (offers.discount) {
+    parts.push("Stay and get your next month at 50% off.");
+    const btn = document.createElement("button"); btn.type = "button"; btn.className = "btn primary small"; btn.textContent = "Take 50% off next month";
+    btn.addEventListener("click", () => retention("discount")); actions.appendChild(btn);
+  }
+  if (plan === "business" && offers.downgrade) {
+    parts.push("Or switch to Pro (£9/mo) and keep removing the badge.");
+    const btn = document.createElement("button"); btn.type = "button"; btn.className = "btn small"; btn.textContent = "Switch to Pro instead";
+    btn.addEventListener("click", () => retention("downgrade")); actions.appendChild(btn);
+  }
+  $("#cancel-offer-text").textContent = parts.join(" ") || "You can keep your plan, or cancel below.";
+  $("#cancel-form").reset(); $("#cancel-error").hidden = true;
+  $("#cancel-dialog").showModal();
+});
+$("#cancel-keep").addEventListener("click", () => $("#cancel-dialog").close());
+
+async function retention(offer) {
+  const err = $("#cancel-error"); err.hidden = true;
+  const b = state.billing || {};
+  // Open Whop inside the click so popup blockers allow it (when we can't apply it in-app).
+  if (!b.canCancelInApp && b.manageUrl) window.open(b.manageUrl, "_blank", "noopener");
+  try {
+    const r = await req("/api/billing/retention", { method: "POST", body: { offer } });
+    $("#cancel-dialog").close();
+    toast(r.message || "Done");
+    renderAccountBilling();
+  } catch (e) { err.textContent = e.message; err.hidden = false; }
+}
+
+$("#cancel-confirm").addEventListener("click", async () => {
+  const fd = new FormData($("#cancel-form"));
+  const err = $("#cancel-error"); err.hidden = true;
+  const btn = $("#cancel-confirm"); btn.disabled = true;
+  const b = state.billing || {};
+  if (!b.canCancelInApp && b.manageUrl) window.open(b.manageUrl, "_blank", "noopener");
+  try {
+    const r = await req("/api/billing/cancel", { method: "POST", body: { reason: fd.get("reason"), details: fd.get("details") } });
+    $("#cancel-dialog").close();
+    const note = $("#acct-cancel-note");
+    const show = () => {
+      note.textContent = r.message + " ";
+      if (r.manageUrl && !r.cancelled) {
+        const a = document.createElement("a"); a.href = r.manageUrl; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Open Whop orders";
+        note.appendChild(a);
+      }
+      note.hidden = false;
+    };
+    show();
+    if (r.cancelled) $("#acct-cancel-line").hidden = true;
+    renderAccountBilling().then(show);
+  } catch (e) { err.textContent = e.message; err.hidden = false; }
+  finally { btn.disabled = false; }
+});
 
 boot();

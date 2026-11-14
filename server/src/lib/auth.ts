@@ -2,6 +2,7 @@ import { createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual } from "no
 import { promisify } from "node:util";
 import type { Request, Response, NextFunction } from "express";
 import { config } from "../config.js";
+import { getDb } from "./supabase.js";
 import type { Owner } from "../types.js";
 
 const scrypt = promisify(scryptCb);
@@ -23,20 +24,29 @@ export async function verifyPassword(password: string, stored: string | null | u
   return timingSafeEqual(key, expected);
 }
 
-type TokenPayload = { sub: string; email: string; name: string | null; exp: number };
+type TokenPayload = { sub: string; email: string; name: string | null; exp: number; iat?: number };
+
+/** "Remember me" sessions last about 30 days; unticked ones last a day and live in sessionStorage. */
+export const REMEMBER_TTL = 60 * 60 * 24 * 30;
+export const SESSION_TTL = 60 * 60 * 24;
+export function sessionTtl(remember: unknown): number {
+  return remember === false || remember === "false" || remember === "0" ? SESSION_TTL : REMEMBER_TTL;
+}
 
 function b64url(input: Buffer | string): string {
   const buf = Buffer.isBuffer(input) ? input : Buffer.from(input);
   return buf.toString("base64url");
 }
 
-export function signToken(owner: Owner, ttlSeconds = 60 * 60 * 24 * 14): string {
+export function signToken(owner: Owner, ttlSeconds = REMEMBER_TTL): string {
   if (!config.sessionSecret) throw new Error("SESSION_SECRET is not set");
+  const now = Math.floor(Date.now() / 1000);
   const payload: TokenPayload = {
     sub: owner.id,
     email: owner.email,
     name: owner.name,
-    exp: Math.floor(Date.now() / 1000) + ttlSeconds,
+    iat: now,
+    exp: now + ttlSeconds,
   };
   const body = b64url(JSON.stringify(payload));
   const sig = b64url(createHmac("sha256", config.sessionSecret).update(body).digest());
@@ -74,8 +84,19 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     res.status(401).json({ error: "Please sign in" });
     return;
   }
-  (req as AuthedRequest).owner = { id: payload.sub, email: payload.email, name: payload.name };
-  next();
+  // Deleted accounts and "sign out of all devices" invalidate existing tokens.
+  getDb()
+    .from("ghostchat_owners")
+    .select("id, email, name, sessions_valid_after")
+    .eq("id", payload.sub)
+    .maybeSingle()
+    .then(({ data, error }) => {
+      if (error) return res.status(503).json({ error: "Please try again in a moment." });
+      const cutoff = data?.sessions_valid_after ? Math.floor(new Date(data.sessions_valid_after).getTime() / 1000) : 0;
+      if (!data || (payload.iat ?? 0) < cutoff) return res.status(401).json({ error: "Please sign in" });
+      (req as AuthedRequest).owner = { id: data.id, email: data.email, name: data.name };
+      next();
+    }, () => res.status(503).json({ error: "Please try again in a moment." }));
 }
 
 export function isValidEmail(email: string): boolean {

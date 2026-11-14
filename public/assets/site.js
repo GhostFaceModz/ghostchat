@@ -43,6 +43,46 @@
     });
   });
 
+  // Signed-in visitors see an account menu instead of "Sign in" / "Start free".
+  const readToken = () => { try { return localStorage.getItem("gc_token") || sessionStorage.getItem("gc_token") || ""; } catch { return ""; } };
+  const clearToken = () => { try { localStorage.removeItem("gc_token"); sessionStorage.removeItem("gc_token"); } catch {} };
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const token = readToken();
+  if (nav && token) {
+    fetch("/api/auth/me", { headers: { authorization: "Bearer " + token } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then(({ owner }) => {
+        if (!owner) return;
+        const label = owner.name || owner.email.split("@")[0];
+        const initial = (label || "?").trim().charAt(0).toUpperCase();
+        const avatar = owner.avatar_url
+          ? `<img src="${esc(owner.avatar_url)}" alt="" referrerpolicy="no-referrer" />`
+          : `<span>${esc(initial)}</span>`;
+        const wrap = document.createElement("div");
+        wrap.className = "acct-menu";
+        wrap.innerHTML =
+          `<button type="button" class="acct-btn" aria-haspopup="menu" aria-expanded="false"><span class="acct-av">${avatar}</span><span class="acct-name">${esc(label)}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>` +
+          `<div class="acct-drop" role="menu" hidden><div class="acct-who"><b>${esc(label)}</b><small>${esc(owner.email)}</small></div>` +
+          `<a role="menuitem" href="/account">My account</a><a role="menuitem" href="/dashboard">Dashboard</a><button type="button" role="menuitem" class="acct-out">Log out</button></div>`;
+        const btn = wrap.querySelector(".acct-btn"), drop = wrap.querySelector(".acct-drop");
+        const setOpen = (open) => { drop.hidden = !open; btn.setAttribute("aria-expanded", String(open)); };
+        btn.addEventListener("click", (e) => { e.stopPropagation(); setOpen(drop.hidden); });
+        document.addEventListener("click", (e) => { if (!wrap.contains(e.target)) setOpen(false); });
+        document.addEventListener("keydown", (e) => { if (e.key === "Escape") setOpen(false); });
+        wrap.querySelector(".acct-out").addEventListener("click", () => { clearToken(); location.reload(); });
+        const inner = nav.querySelector(".wrap") || nav;
+        inner.insertBefore(wrap, nav.querySelector(".menu-btn"));
+        nav.classList.add("signed-in");
+        // In-page "Start free" / "Sign in" buttons go straight to the dashboard.
+        // Footer: swap "Sign in" / "Sign up" for account links.
+        document.querySelectorAll('footer a[href="/login"]').forEach((a) => { a.href = "/account"; a.textContent = "My account"; });
+        document.querySelectorAll('footer a[href="/signup"]').forEach((a) => { a.href = "/dashboard"; a.textContent = "Dashboard"; });
+        document.querySelectorAll('main a[href="/signup"], main a[href="/login"]').forEach((a) => { a.href = "/dashboard"; if (/start free|create your account|sign up/i.test(a.textContent)) a.textContent = "Open your dashboard →"; });
+      })
+      .catch((status) => { if (status === 401) clearToken(); });
+  }
+  if (location.pathname === "/pricing") document.getElementById("plans")?.scrollIntoView();
+
   document.querySelectorAll("[data-year]").forEach((el) => { el.textContent = String(new Date().getFullYear()); });
 
   // Lightweight floating particles; skipped when the user prefers less motion.

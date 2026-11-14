@@ -63,6 +63,7 @@
               <button type="button" class="pw-toggle" id="pw-toggle" aria-label="Show password">Show</button>
             </span>
           </label>
+          <label class="check remember"><input name="remember" type="checkbox" checked /> Remember me for 30 days</label>
           <button type="submit" class="btn primary block" id="auth-submit">Sign in</button>
           <p class="error" id="auth-error" role="alert" hidden></p>
         </form>
@@ -83,6 +84,7 @@
       <div class="rail-foot">
         <a class="btn ghost tiny" href="/guide" target="_blank" rel="noopener">📘 Setup guide</a>
         <button type="button" class="btn ghost tiny" id="open-billing">💎 Plan &amp; billing</button>
+        <button type="button" class="btn ghost tiny" id="open-account">👤 My account</button>
         <div class="owner">
           <span class="avatar" id="owner-avatar">👻</span>
           <span id="owner-email" class="muted tiny"></span>
@@ -109,6 +111,100 @@
           <div id="billing-body"></div>
         </section>
       </div>
+
+      <div id="account-view" class="hidden">
+        <section class="panel glass acct">
+          <h3>My account</h3>
+          <div class="acct-head">
+            <span class="avatar lg" id="acct-avatar">👻</span>
+            <div><b id="acct-name"></b><div class="muted tiny" id="acct-email"></div></div>
+          </div>
+          <form id="acct-name-form" class="row">
+            <label class="grow">Display name <input name="name" maxlength="80" autocomplete="name" /></label>
+            <button class="btn" type="submit">Save name</button>
+          </form>
+        </section>
+
+        <section class="panel glass acct">
+          <h3>Sign-in methods</h3>
+          <ul class="methods" id="acct-methods"></ul>
+          <p class="muted tiny">Discord and Google sign-ins link to this account automatically when their verified email matches <b class="acct-email-inline"></b>.</p>
+        </section>
+
+        <section class="panel glass acct" id="acct-password">
+          <h3>Change password</h3>
+          <form id="acct-pw-form" class="stack">
+            <label>Current password <input name="current_password" type="password" autocomplete="current-password" required /></label>
+            <label>New password <input name="new_password" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters" /></label>
+            <p class="muted tiny">Changing it signs you out on your other devices.</p>
+            <div><button class="btn primary" type="submit">Change password</button></div>
+            <p class="error" id="acct-pw-error" hidden></p>
+          </form>
+        </section>
+
+        <section class="panel glass acct" id="acct-billing">
+          <h3>Plan &amp; billing</h3>
+          <div id="acct-plan"></div>
+          <div id="acct-upgrades" class="plan-grid"></div>
+          <p class="cancel-line" id="acct-cancel-line" hidden><button type="button" class="linklike" id="acct-cancel">Cancel subscription</button></p>
+          <p class="muted tiny" id="acct-cancel-note" hidden></p>
+        </section>
+
+        <section class="panel glass acct">
+          <h3>Sessions</h3>
+          <p class="muted">Signed in on a shared or lost device? Sign out everywhere, including here.</p>
+          <button type="button" class="btn" id="acct-logout-all">Sign out of all devices</button>
+        </section>
+
+        <section class="panel glass acct danger-zone">
+          <h3>Delete account</h3>
+          <p class="muted">Deletes your account, every site, all training content, transcripts and leads. This can't be undone.<span id="acct-delete-sub"> If you pay through Whop, cancel the subscription first.</span></p>
+          <button type="button" class="btn danger" id="acct-delete">Delete my account…</button>
+        </section>
+      </div>
+
+      <dialog id="cancel-dialog" class="glass dlg">
+        <form method="dialog" class="stack" id="cancel-form">
+          <div data-step="offer">
+            <h3>Before you go</h3>
+            <p class="muted" id="cancel-offer-text"></p>
+            <div class="row" id="cancel-offer-actions"></div>
+          </div>
+          <div data-step="reason">
+            <label>Why are you leaving? <span class="muted tiny">(optional)</span>
+              <select name="reason">
+                <option value="">Prefer not to say</option>
+                <option value="too_expensive">It's too expensive</option>
+                <option value="not_using">I'm not using it enough</option>
+                <option value="missing_features">It's missing something I need</option>
+                <option value="answers_quality">The answers weren't good enough</option>
+                <option value="switching">I'm switching to another tool</option>
+                <option value="temporary">I only needed it for a short time</option>
+                <option value="other">Something else</option>
+              </select>
+            </label>
+            <textarea name="details" rows="2" maxlength="500" placeholder="Anything else? (optional)"></textarea>
+          </div>
+          <p class="error" id="cancel-error" hidden></p>
+          <div class="row end">
+            <button type="button" class="btn ghost" id="cancel-keep">Keep my plan</button>
+            <button type="button" class="btn danger" id="cancel-confirm">Confirm cancellation</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="delete-dialog" class="glass dlg">
+        <form class="stack" id="delete-form">
+          <h3>Delete your account?</h3>
+          <p class="muted">Type <b id="delete-email"></b> to confirm. Everything is removed straight away.</p>
+          <input name="confirm_email" autocomplete="off" spellcheck="false" />
+          <p class="error" id="delete-error" hidden></p>
+          <div class="row end">
+            <button type="button" class="btn ghost" id="delete-cancel">Keep my account</button>
+            <button type="submit" class="btn danger">Delete forever</button>
+          </div>
+        </form>
+      </dialog>
 
       <div id="site-view" class="hidden">
         <header class="top glass">
