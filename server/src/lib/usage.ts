@@ -127,6 +127,9 @@ export async function assertCanCaptureLead(site: Site): Promise<Site> {
 export async function applyOwnerPlan(ownerId: string, plan: Plan, extra?: Record<string, unknown>): Promise<void> {
   const db = getDb();
   const now = new Date().toISOString();
+  // Admin (house) accounts stay on Business no matter what billing events say.
+  const { data: current } = await db.from("ghostchat_owners").select("is_admin").eq("id", ownerId).maybeSingle();
+  if (current?.is_admin) plan = "business";
   const { error: ownerErr } = await db
     .from("ghostchat_owners")
     .update({ plan, updated_at: now, ...(extra || {}) })

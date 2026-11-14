@@ -44,3 +44,19 @@ test("authorize URL points at Supabase with the GhostChat callback", () => {
   assert.equal(u.searchParams.get("provider"), "discord");
   assert.ok(u.searchParams.get("redirect_to")!.endsWith("/auth/callback"));
 });
+
+test("unverified provider emails are flagged so they can't claim an existing account", () => {
+  const p = profileFromSupabaseUser({
+    email: "someone@example.com",
+    email_confirmed_at: null,
+    app_metadata: { provider: "discord" },
+    identities: [{ provider: "discord", id: "42", identity_data: { provider_id: "42", email_verified: false } }],
+  });
+  assert.equal(p.emailVerified, false);
+  const ok = profileFromSupabaseUser({
+    email: "someone@example.com",
+    app_metadata: { provider: "google" },
+    identities: [{ provider: "google", id: "7", identity_data: { sub: "7", email_verified: true } }],
+  });
+  assert.equal(ok.emailVerified, true);
+});

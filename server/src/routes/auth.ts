@@ -176,7 +176,7 @@ authRouter.get("/me", requireAuth, async (req, res) => {
   const session = (req as AuthedRequest).owner;
   const { data, error } = await getDb()
     .from("ghostchat_owners")
-    .select("id, email, name, plan, avatar_url, discord_id, google_id, whop_membership_id")
+    .select("id, email, name, plan, avatar_url, discord_id, google_id, whop_membership_id, is_admin")
     .eq("id", session.id)
     .maybeSingle();
   if (error || !data) return res.status(401).json({ error: "Please sign in" });
@@ -190,6 +190,7 @@ authRouter.get("/me", requireAuth, async (req, res) => {
       avatar_url: data.avatar_url,
       discord_linked: Boolean(data.discord_id),
       google_linked: Boolean(data.google_id),
+      is_admin: Boolean(data.is_admin),
     },
     limits: PLAN_LIMITS[plan],
     billing: {

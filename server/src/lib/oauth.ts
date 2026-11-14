@@ -9,12 +9,17 @@ export type OAuthProfile = {
   email: string;
   name: string | null;
   avatarUrl: string | null;
+  /** False when the provider says the email is unverified. Unverified emails never link or create owners. */
+  emailVerified?: boolean;
 };
 
 export async function upsertOwnerFromOAuth(profile: OAuthProfile): Promise<{ owner: Owner; token: string }> {
   const email = profile.email.trim().toLowerCase();
   if (!isValidEmail(email)) {
     throw new Error("That sign-in account does not have an email address we can use.");
+  }
+  if (profile.emailVerified === false) {
+    throw new Error(`Please verify your email address with ${profile.provider === "discord" ? "Discord" : "Google"} first, then try again.`);
   }
   const db = getDb();
   const idCol = profile.provider === "discord" ? "discord_id" : "google_id";
@@ -99,6 +104,7 @@ export async function exchangeDiscordCode(code: string, redirectUri: string): Pr
   const user = (await userRes.json()) as {
     id: string;
     email?: string | null;
+    verified?: boolean;
     username?: string;
     global_name?: string | null;
     avatar?: string | null;
@@ -112,6 +118,7 @@ export async function exchangeDiscordCode(code: string, redirectUri: string): Pr
     email: user.email || "",
     name: user.global_name || user.username || null,
     avatarUrl,
+    emailVerified: user.verified !== false,
   };
 }
 
@@ -139,6 +146,7 @@ export async function exchangeGoogleCode(code: string, redirectUri: string): Pro
   const user = (await userRes.json()) as {
     id: string;
     email?: string;
+    verified_email?: boolean;
     name?: string;
     picture?: string;
   };
@@ -148,6 +156,7 @@ export async function exchangeGoogleCode(code: string, redirectUri: string): Pro
     email: user.email || "",
     name: user.name || null,
     avatarUrl: user.picture || null,
+    emailVerified: user.verified_email !== false,
   };
 }
 
@@ -163,6 +172,7 @@ type SupabaseIdentity = {
  */
 export function profileFromSupabaseUser(user: {
   email?: string | null;
+  email_confirmed_at?: string | null;
   app_metadata?: Record<string, unknown> | null;
   user_metadata?: Record<string, unknown> | null;
   identities?: SupabaseIdentity[] | null;
@@ -189,5 +199,7 @@ export function profileFromSupabaseUser(user: {
     email: pick(user.email, data.email, meta.email) || "",
     name: pick(customClaims.global_name, data.full_name, meta.full_name, data.name, meta.name),
     avatarUrl: pick(data.avatar_url, meta.avatar_url, data.picture, meta.picture),
+    // Supabase copies the provider's verified flag into identity_data.email_verified.
+    emailVerified: data.email_verified === false ? Boolean(user.email_confirmed_at) : true,
   };
 }

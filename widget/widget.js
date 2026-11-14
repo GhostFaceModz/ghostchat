@@ -1,4 +1,6 @@
-/* GhostChat embeddable widget — dependency-free */
+/* GhostChat embeddable widget — dependency-free.
+ * Host pages can position it with CSS custom properties on #ghostchat-host:
+ *   --gc-offset-bottom, --gc-offset-right (default 22px) and --gc-z (default 2147483000). */
 (function () {
   "use strict";
 
@@ -108,13 +110,13 @@
     ".gc-root { font-family: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif; color: var(--gc-text); }",
     ".gc-root { --gc-primary: #a78bfa; --gc-bg: rgba(16,10,28,.78); --gc-text: #f5f3ff; --gc-muted: #c4b5fd; --gc-line: rgba(196,181,253,.18); --gc-user: #2a1848; --gc-bubble: #110818; --gc-panel: rgba(12,8,20,.78); }",
     ".gc-root[data-mode='light'] { --gc-bg: rgba(255,255,255,.86); --gc-text: #1e1133; --gc-muted: #6b528c; --gc-line: rgba(88,40,140,.14); --gc-user: #efe7ff; --gc-bubble: #f7f2ff; --gc-panel: rgba(255,255,255,.8); }",
-    ".gc-launcher { position: fixed; right: 22px; bottom: 22px; z-index: 2147483000; width: 64px; height: 64px; border: 0; border-radius: 20px; cursor: pointer; background: linear-gradient(160deg, var(--gc-primary), #7c3aed); box-shadow: 0 16px 40px rgba(124,58,237,.38), inset 0 1px 0 rgba(255,255,255,.25); display: grid; place-items: center; transition: transform .2s ease, box-shadow .2s; }",
+    ".gc-launcher { position: fixed; right: var(--gc-offset-right, 22px); bottom: var(--gc-offset-bottom, 22px); z-index: var(--gc-z, 2147483000); width: 64px; height: 64px; border: 0; border-radius: 20px; cursor: pointer; background: linear-gradient(160deg, var(--gc-primary), var(--gc-accent, #7c3aed)); box-shadow: 0 16px 40px color-mix(in srgb, var(--gc-accent, #7c3aed) 38%, transparent), inset 0 1px 0 rgba(255,255,255,.25); display: grid; place-items: center; transition: transform .2s ease, box-shadow .2s; }",
     ".gc-launcher:hover { transform: translateY(-2px) scale(1.03); }",
     ".gc-ghost { width: 36px; height: 36px; animation: gc-float 3.2s ease-in-out infinite; }",
     ".gc-root[data-thinking='true'] .gc-ghost { animation: gc-think .7s ease-in-out infinite; }",
     "@keyframes gc-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }",
     "@keyframes gc-think { 0%,100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-5px) rotate(6deg); } }",
-    ".gc-panel { position: fixed; right: 22px; bottom: 98px; z-index: 2147483000; width: min(400px, calc(100vw - 24px)); height: min(640px, calc(100vh - 130px)); display: flex; flex-direction: column; border-radius: 24px; overflow: hidden; background: var(--gc-panel); border: 1px solid var(--gc-line); box-shadow: 0 30px 80px rgba(0,0,0,.4); backdrop-filter: blur(22px) saturate(1.3); -webkit-backdrop-filter: blur(22px) saturate(1.3); opacity: 0; pointer-events: none; transform: translateY(16px) scale(.98); transition: opacity .22s ease, transform .22s ease; }",
+    ".gc-panel { position: fixed; right: max(12px, var(--gc-offset-right, 22px)); bottom: calc(var(--gc-offset-bottom, 22px) + 76px); z-index: var(--gc-z, 2147483000); width: min(400px, calc(100vw - 24px)); height: min(640px, calc(100vh - var(--gc-offset-bottom, 22px) - 108px)); height: min(640px, calc(100dvh - var(--gc-offset-bottom, 22px) - 108px)); display: flex; flex-direction: column; border-radius: 24px; overflow: hidden; background: var(--gc-panel); border: 1px solid var(--gc-line); box-shadow: 0 30px 80px rgba(0,0,0,.4); backdrop-filter: blur(22px) saturate(1.3); -webkit-backdrop-filter: blur(22px) saturate(1.3); opacity: 0; pointer-events: none; transform: translateY(16px) scale(.98); transition: opacity .22s ease, transform .22s ease; }",
     ".gc-root[data-open='true'] .gc-panel { opacity: 1; pointer-events: auto; transform: none; }",
     ".gc-head { display: flex; align-items: center; gap: 10px; padding: 14px 14px 12px; border-bottom: 1px solid var(--gc-line); }",
     ".gc-head h2 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -.02em; flex: 1; color: var(--gc-text); }",
@@ -139,8 +141,13 @@
     ".gc-composer textarea { flex: 1; resize: none; min-height: 44px; max-height: 120px; border-radius: 14px; border: 1px solid var(--gc-line); background: transparent; color: var(--gc-text); padding: 10px 12px; font: inherit; }",
     ".gc-send { width: 44px; border: 0; border-radius: 14px; background: var(--gc-primary); color: #160b27; font-weight: 800; cursor: pointer; }",
     ".gc-send:disabled { opacity: .5; cursor: default; }",
-    ".gc-brand { text-align: center; font-size: 11px; color: var(--gc-muted); padding: 0 12px 10px; }",
-    ".gc-brand a { color: inherit; }",
+    ".gc-brand { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 14px 11px; font-size: 11px; line-height: 1; letter-spacing: .01em; }",
+    ".gc-brand a { color: var(--gc-muted); text-decoration: none; opacity: .72; display: inline-flex; align-items: center; gap: 5px; transition: opacity .18s, color .18s; white-space: nowrap; }",
+    ".gc-brand a:hover, .gc-brand a:focus-visible { opacity: 1; color: var(--gc-text); outline: none; }",
+    ".gc-brand b { font-weight: 700; color: var(--gc-text); }",
+    ".gc-brand svg { width: 12px; height: 12px; }",
+    ".gc-brand .gc-add { opacity: .9; padding: 5px 9px; border-radius: 999px; border: 1px solid var(--gc-line); background: linear-gradient(135deg, color-mix(in srgb, var(--gc-primary) 14%, transparent), transparent); }",
+    ".gc-brand .gc-add:hover { border-color: var(--gc-primary); }",
     ".gc-typing { display: flex; gap: 4px; padding: 8px 4px; }",
     ".gc-typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--gc-muted); animation: gc-dots 1s infinite; }",
     ".gc-typing i:nth-child(2) { animation-delay: .15s; }",
@@ -156,7 +163,7 @@
     ".gc-card p { margin: 0 0 8px; font-size: 12px; color: var(--gc-muted); }",
     ".gc-card .gc-cta, .gc-copy { border: 0; border-radius: 10px; padding: 6px 10px; background: var(--gc-primary); color: #160b27; font-weight: 700; cursor: pointer; font-size: 12px; text-decoration: none; display: inline-block; }",
     ".gc-codechip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; padding: 4px 8px; border: 1px dashed var(--gc-line); border-radius: 8px; margin-right: 6px; }",
-    ".gc-modal { position: fixed; inset: 0; z-index: 2147483001; background: rgba(5,2,12,.72); display: none; place-items: center; padding: 16px; }",
+    ".gc-modal { position: fixed; inset: 0; z-index: calc(var(--gc-z, 2147483000) + 1); background: rgba(5,2,12,.72); display: none; place-items: center; padding: 16px; }",
     ".gc-modal.on { display: grid; }",
     ".gc-modal-box { width: min(440px, 100%); height: min(640px, 90vh); background: var(--gc-panel); border: 1px solid var(--gc-line); border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; }",
     ".gc-modal-box header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--gc-line); color: var(--gc-text); font-weight: 700; }",
@@ -165,8 +172,13 @@
 
   var host = el("div", { class: "gc-host", id: "ghostchat-host" });
   var shadow = host.attachShadow({ mode: "open" });
-  var font = el("link", { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" });
-  document.head.appendChild(font);
+  // Load the widget font only when the panel first opens, so the host page's load isn't slowed.
+  var fontLoaded = false;
+  function loadFont() {
+    if (fontLoaded) return;
+    fontLoaded = true;
+    document.head.appendChild(el("link", { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" }));
+  }
 
   var ghostSvg = '<svg class="gc-ghost" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M32 6c-12 0-22 9.4-22 22.2V52c0 2.6 3 3.8 4.8 1.8L21 47l6.2 7.2c1 1.2 2.8 1.2 3.8 0L37 47l6.2 6.8c1.8 2 4.8.8 4.8-1.8V28.2C48 15.4 44 6 32 6z" fill="white" fill-opacity=".95"/><circle cx="24.5" cy="27" r="3.2" fill="#2a1848"/><circle cx="39.5" cy="27" r="3.2" fill="#2a1848"/><path d="M25 36c2.4 3 11.6 3 14 0" stroke="#2a1848" stroke-width="2" stroke-linecap="round"/></svg>';
 
@@ -227,6 +239,7 @@
     state.open = open;
     root.setAttribute("data-open", open ? "true" : "false");
     if (open) {
+      loadFont();
       input.focus();
       maybeGreet();
     }
@@ -237,7 +250,12 @@
   }
   function setBranding() {
     if (state.showBranding) {
-      brand.innerHTML = 'Powered by <a href="https://github.com/GhostFaceModz/ghostchat" target="_blank" rel="noopener">GhostChat</a>';
+      var ref = "?utm_source=widget&utm_medium=referral&utm_campaign=" + encodeURIComponent(window.location.hostname || "embed");
+      brand.innerHTML =
+        '<a class="gc-pb" href="' + API_BASE + '/' + ref + '" target="_blank" rel="noopener">' +
+        '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 6c-12 0-22 9.4-22 22.2V52c0 2.6 3 3.8 4.8 1.8L21 47l6.2 7.2c1 1.2 2.8 1.2 3.8 0L37 47l6.2 6.8c1.8 2 4.8.8 4.8-1.8V28.2C48 15.4 44 6 32 6z" fill="currentColor"/></svg>' +
+        'Powered by <b>GhostChat</b></a>' +
+        '<a class="gc-add" href="' + API_BASE + '/signup' + ref + '" target="_blank" rel="noopener">Add to your website →</a>';
       brand.style.display = "";
     } else {
       brand.style.display = "none";
@@ -553,6 +571,7 @@
     if (cfg.theme) {
       if (cfg.theme.mode) state.themeMode = cfg.theme.mode;
       if (cfg.theme.primary) state.primary = cfg.theme.primary;
+      if (cfg.theme.accent && /^#[0-9a-f]{3,8}$/i.test(cfg.theme.accent)) root.style.setProperty("--gc-accent", cfg.theme.accent);
     }
     if (typeof cfg.showBranding === "boolean") state.showBranding = cfg.showBranding;
     if (typeof cfg.voiceEnabled === "boolean") state.voice = cfg.voiceEnabled;
@@ -570,17 +589,23 @@
   setOpen(state.open);
   soundBtn.style.color = state.sound ? "var(--gc-primary)" : "";
 
+  // Proactive open: data-delay wins, then the site's setting, then 4s. 0 turns it off.
+  function scheduleProactive() {
+    var delay = isNaN(state.delay) ? 4000 : state.delay;
+    if (!state.open && delay > 0) {
+      setTimeout(function () {
+        if (!state.open) setOpen(true);
+      }, delay);
+    }
+  }
+
   if (SITE_KEY) {
     fetch(API_BASE + "/api/widget/config/" + encodeURIComponent(SITE_KEY))
       .then(function (r) { return r.json(); })
       .then(function (j) { applyConfig(j.config); if (state.open) maybeGreet(); })
-      .catch(function () {});
-  }
-
-  var delay = isNaN(state.delay) ? 4000 : state.delay;
-  if (!state.open && delay > 0) {
-    setTimeout(function () {
-      if (!state.open) setOpen(true);
-    }, delay);
+      .catch(function () {})
+      .then(scheduleProactive);
+  } else {
+    scheduleProactive();
   }
 })();
