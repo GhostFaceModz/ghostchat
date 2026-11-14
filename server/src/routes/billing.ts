@@ -190,7 +190,7 @@ billingRouter.post("/retention", requireAuth, async (req, res) => {
     }
     await scheduleDowngradeToPro(b.whop_membership_id, 9);
     await logCancellation(base);
-    return res.json({ ok: true, message: "Done. You keep Business until your next renewal, then switch to Pro at £9/month." });
+    return res.json({ ok: true, message: "Done. You keep Business until your next renewal, then switch to Pro at £9/month + VAT." });
   } catch (e) {
     await logCancellation({ ...base, outcome: "error", error: (e as Error).message.slice(0, 300) });
     return res.status(502).json({ error: "Whop couldn't apply that just now: " + (e as Error).message });

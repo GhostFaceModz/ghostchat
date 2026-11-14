@@ -161,3 +161,5 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -.03em; line-heig
 }
 .plan .price { margin: 4px 0 6px; color: var(--muted); }
 .plan .price b { font-family: var(--font-display); font-size: 34px; color: var(--ink); letter-spacing: -.02em; margin-right: 4px; }
+
+.plan .price .vat{font-size:.72em;opacity:.65;font-weight:500;margin-left:2px}

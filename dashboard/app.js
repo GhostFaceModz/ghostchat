@@ -717,8 +717,8 @@ function planCatalog(b) {
   });
   return [
     row("free", "Free", "£0", ["“Powered by GhostChat” badge"]),
-    row("pro", "Pro", "£9/mo", ["Remove the badge", "Full analytics"], b && b.checkout && b.checkout.pro),
-    row("business", "Business", "£29/mo", ["Remove the badge", "50 conversion cards"], b && b.checkout && b.checkout.business)
+    row("pro", "Pro", "£9/mo + VAT", ["Remove the badge", "Full analytics"], b && b.checkout && b.checkout.pro),
+    row("business", "Business", "£29/mo + VAT", ["Remove the badge", "50 conversion cards"], b && b.checkout && b.checkout.business)
   ];
 }
 // Prefill and lock the account email in Whop checkout so the purchase maps to this account.
@@ -857,7 +857,7 @@ $("#acct-cancel").addEventListener("click", () => {
     btn.addEventListener("click", () => retention("discount")); actions.appendChild(btn);
   }
   if (plan === "business" && offers.downgrade) {
-    parts.push("Or switch to Pro (£9/mo) and keep removing the badge.");
+    parts.push("Or switch to Pro (£9/mo + VAT) and keep removing the badge.");
     const btn = document.createElement("button"); btn.type = "button"; btn.className = "btn small"; btn.textContent = "Switch to Pro instead";
     btn.addEventListener("click", () => retention("downgrade")); actions.appendChild(btn);
   }
