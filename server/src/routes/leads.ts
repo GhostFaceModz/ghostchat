@@ -4,15 +4,21 @@ import { isValidEmail } from "../lib/auth.js";
 import { clientIp, rateLimit } from "../lib/rateLimit.js";
 import { incrementLeads, assertCanCaptureLead } from "../lib/usage.js";
 import { redactPii } from "../lib/pii.js";
+import { chatForm, SUPPORT_FORM_FIELDS, submissionNotes, validateSubmission } from "../lib/forms.js";
+import { openTicket } from "../lib/tickets.js";
+import { ticketPriority } from "../lib/modes.js";
+import { notifyOwner } from "../lib/relay.js";
 import type { Site } from "../types.js";
 
 export const leadsRouter = Router();
 
 leadsRouter.post("/", async (req, res) => {
   const siteKey = String(req.body?.siteKey || req.body?.site_key || "");
+  const kind = req.body?.kind === "support" ? "support" : req.body?.kind === "form" ? "form" : "email";
   const email = String(req.body?.email || "").trim().toLowerCase();
-  const name = String(req.body?.name || "").trim() || null;
-  const notes = String(req.body?.notes || "").trim() || null;
+  let name = String(req.body?.name || "").trim().slice(0, 200) || null;
+  let notes = String(req.body?.notes || "").trim().slice(0, 2000) || null;
+  let formValues: Record<string, string> = {};
   const sessionId = String(req.body?.sessionId || req.body?.session_id || "").trim() || null;
 
   if (!isValidEmail(email)) return res.status(400).json({ error: "Enter a valid email address." });
@@ -28,6 +34,15 @@ leadsRouter.post("/", async (req, res) => {
     .maybeSingle();
   if (siteErr || !site) return res.status(404).json({ error: "Unknown site key." });
   const typed = site as Site;
+  if (kind !== "email") {
+    // In-chat forms: validate against the owner's fields (or the support ticket fields).
+    const fields = kind === "support" ? SUPPORT_FORM_FIELDS : chatForm(typed).fields;
+    const checked = validateSubmission(fields, { ...req.body, email });
+    if (!checked.ok) return res.status(400).json({ error: checked.error });
+    formValues = checked.values;
+    name = formValues.name || name;
+    notes = submissionNotes(formValues) || notes;
+  }
   try {
     await assertCanCaptureLead(typed);
   } catch (err) {
@@ -65,5 +80,15 @@ leadsRouter.post("/", async (req, res) => {
     .single();
   if (error) return res.status(500).json({ error: "Could not save that email." });
   await incrementLeads(typed.id);
-  res.status(201).json({ lead: data });
+  let ticket: { id: string; number: number | null } | null = null;
+  if (kind === "support" && sessionId) {
+    const t = await openTicket(typed, sessionId, {
+      name, email, subject: formValues.message || "Support request", priority: ticketPriority(formValues.message || ""),
+      details: { order: formValues.order || null, message: formValues.message || null }, source: "form",
+    }).catch((e) => { console.error("ticket:", (e as Error).message); return null; });
+    ticket = t ? { id: t.id, number: t.number } : null;
+  } else if (kind === "form") {
+    notifyOwner(typed.owner_id, `📝 New ${typed.name} enquiry from ${[name, email].filter(Boolean).join(" · ")}\n${notes || ""}`.trim()).catch(() => {});
+  }
+  res.status(201).json({ lead: data, ticket });
 });

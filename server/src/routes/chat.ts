@@ -7,6 +7,11 @@ import { addLog, countUnsure, getConversation, shouldStartLive, liveOnline, live
 import { applyTimeout } from "../lib/discordClaim.js";
 import { agentNameFor, startHandoff, visitorLiveMessage } from "../lib/handoff.js";
 import { HUMAN_REQUEST } from "../lib/guardrails.js";
+import { detectLanguage } from "../lib/lang.js";
+import { loadVisitor, memoryOn, memoryPrompt, rememberVisitor, forgetVisitor, VISITOR_ID_RE, type Visitor } from "../lib/memory.js";
+import { botMode, detectAnger, supportSettings, ticketPriority, withinSupportHours } from "../lib/modes.js";
+import { openTicket } from "../lib/tickets.js";
+import type { PromptContext } from "../lib/chat.js";
 import type { Site } from "../types.js";
 
 export const chatRouter = Router();
@@ -60,6 +65,15 @@ chatRouter.post("/", async (req, res) => {
   const site = await loadSiteByKey(siteKey);
   if (!site) return res.status(404).json({ error: "Unknown site key." });
 
+  // Visitor language (reply in it) and returning-visitor memory (anonymous id, opt-out respected).
+  const langHint = typeof req.body?.lang === "string" ? req.body.lang.slice(0, 20) : null;
+  const lang = site.multilingual !== false ? detectLanguage(message, langHint) : "en";
+  const visitorId = typeof req.body?.visitorId === "string" && VISITOR_ID_RE.test(req.body.visitorId) && req.body?.memory !== false && memoryOn(site) ? req.body.visitorId : null;
+  let visitor: Visitor | null = null;
+  if (visitorId) visitor = await loadVisitor(site.id, visitorId).catch(() => null);
+  const ctx: PromptContext = { lang, memory: memoryPrompt(visitor) };
+  const remember = () => { if (visitorId) rememberVisitor(site.id, visitorId, sessionId, message, lang, visitor).catch(() => {}); };
+
   // Live chat: while a human has (or is joining) the conversation the AI stays silent and nothing is charged.
   let conv = await getConversation(site.id, sessionId).catch(() => null);
   if (conv && handoffTimedOut(conv, liveSettings(site))) {
@@ -75,8 +89,14 @@ chatRouter.post("/", async (req, res) => {
     res.write(`data: ${JSON.stringify(live)}\n\n`);
     return res.end();
   }
-  if (HUMAN_REQUEST.test(message) && shouldStartLive(site, message, 0) === "asked") {
+  // Support mode: hand over to a human when asked, or when the visitor is clearly upset (in support hours).
+  const support = botMode(site) === "support";
+  const angry = support && detectAnger(message);
+  const inHours = !support || withinSupportHours(supportSettings(site));
+  if ((HUMAN_REQUEST.test(message) || angry) && inHours && shouldStartLive(site, angry ? "talk to a human" : message, 0) === "asked") {
     await addLog({ site_id: site.id, session_id: sessionId, role: "user", message, page_url: pageUrl });
+    remember();
+    if (support) openTicket(site, sessionId, { subject: message, priority: ticketPriority(message), details: { reason: angry ? "upset" : "asked for a human" }, source: "handoff" }).catch((e) => console.error("ticket:", (e as Error).message));
     const started = await startHandoff(site, sessionId, "asked", pageUrl);
     const name = started.agent_name || (await agentNameFor(site));
     const live = { type: "live", status: "waiting", agentName: name, note: `I've asked the team to join. Waiting for a team member… you can keep typing here.` };
@@ -108,7 +128,8 @@ chatRouter.post("/", async (req, res) => {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
     };
     try {
-      const outcome = await streamAnswer({ site, message, sessionId, pageUrl, onEvent: send });
+      const outcome = await streamAnswer({ site, message, sessionId, pageUrl, ctx, onEvent: send });
+      remember();
       if (outcome.unsure && liveOnline(site)) {
         const reason = shouldStartLive(site, message, await countUnsure(site.id, sessionId));
         if (reason) {
@@ -126,7 +147,8 @@ chatRouter.post("/", async (req, res) => {
   }
 
   try {
-    const outcome = await answerQuestion({ site, message, sessionId, pageUrl });
+    const outcome = await answerQuestion({ site, message, sessionId, pageUrl, ctx });
+    remember();
     let live: Record<string, unknown> | undefined;
     if (outcome.unsure && liveOnline(site)) {
       const reason = shouldStartLive(site, message, await countUnsure(site.id, sessionId));
@@ -159,5 +181,33 @@ chatRouter.post("/feedback", async (req, res) => {
     .maybeSingle();
   if (error) return res.status(500).json({ error: "Could not save feedback." });
   if (!data) return res.status(404).json({ error: "Message not found." });
+  res.json({ ok: true });
+});
+
+/** End-of-chat satisfaction rating (1-5; thumbs map to 5 and 1). One per conversation, latest wins. */
+chatRouter.post("/csat", async (req, res) => {
+  const site = await loadSiteByKey(String(req.body?.siteKey || ""));
+  if (!site) return res.status(404).json({ error: "Unknown site key." });
+  const sessionId = String(req.body?.sessionId || "").trim();
+  const raw = req.body?.rating;
+  const rating = raw === "up" ? 5 : raw === "down" ? 1 : Number(raw);
+  if (!sessionId || sessionId.length > 80 || !Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: "Rating must be 1 to 5." });
+  if (!rateLimit(`csat:${clientIp(req)}`, 20, 3_600_000).ok) return res.status(429).json({ error: "Too many ratings." });
+  const comment = typeof req.body?.comment === "string" ? req.body.comment.trim().slice(0, 500) || null : null;
+  const db = getDb();
+  const { data: ticket } = await db.from("ghostchat_tickets").select("id").eq("site_id", site.id).eq("session_id", sessionId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const { error } = await db.from("ghostchat_csat").upsert({ site_id: site.id, session_id: sessionId, rating, comment, ticket_id: ticket?.id ?? null }, { onConflict: "site_id,session_id" });
+  if (error) return res.status(500).json({ error: "Could not save your rating." });
+  if (ticket?.id) await db.from("ghostchat_tickets").update({ rating }).eq("id", ticket.id);
+  res.json({ ok: true });
+});
+
+/** Visitor opted out of memory: delete what we remembered about them on this site. */
+chatRouter.post("/forget", async (req, res) => {
+  const site = await loadSiteByKey(String(req.body?.siteKey || ""));
+  if (!site) return res.status(404).json({ error: "Unknown site key." });
+  const visitorId = String(req.body?.visitorId || "");
+  if (!VISITOR_ID_RE.test(visitorId)) return res.status(400).json({ error: "Invalid visitor." });
+  await forgetVisitor(site.id, visitorId).catch(() => {});
   res.json({ ok: true });
 });

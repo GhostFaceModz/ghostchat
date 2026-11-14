@@ -4,6 +4,8 @@ import { getDb } from "../lib/supabase.js";
 import { effectiveBranding } from "../lib/usage.js";
 import { config } from "../config.js";
 import { BOT_TEMPLATES } from "../lib/templates.js";
+import { botMode, supportSettings } from "../lib/modes.js";
+import { suggestionLimit } from "../lib/chat.js";
 import type { Site } from "../types.js";
 
 export const widgetRouter = Router();
@@ -17,7 +19,7 @@ widgetRouter.get("/config/:siteKey", async (req, res) => {
   const { data, error } = await getDb()
     .from("ghostchat_sites")
     .select(
-      "name, url, theme, greeting, starter_questions, proactive_delay_ms, sound_default, show_branding, plan, site_key, booking_url, booking_provider, voice_enabled",
+      "name, url, theme, greeting, starter_questions, proactive_delay_ms, sound_default, show_branding, plan, site_key, booking_url, booking_provider, voice_enabled, greetings, memory_enabled, multilingual, bot_mode, support, live_lookup, max_suggestions",
     )
     .eq("site_key", siteKey)
     .maybeSingle();
@@ -35,7 +37,17 @@ widgetRouter.get("/config/:siteKey", async (req, res) => {
       showBranding: effectiveBranding(site),
       bookingUrl: site.booking_url || null,
       bookingProvider: site.booking_provider || null,
-      voiceEnabled: Boolean(config.voiceEnabled && site.voice_enabled),
+      // Voice mode is a Pro feature (browser speech APIs; the widget falls back gracefully).
+      voiceEnabled: Boolean(config.voiceEnabled && site.voice_enabled && site.plan !== "free"),
+      greetings: Array.isArray(site.greetings) ? site.greetings : [],
+      memory: site.memory_enabled !== false,
+      multilingual: site.multilingual !== false,
+      liveLookup: site.live_lookup !== false,
+      mode: botMode(site),
+      // Support quick replies respect the chip limit (2 by default, owner can raise it to 3).
+      quickReplies: botMode(site) === "support" ? supportSettings(site).quick_replies.slice(0, suggestionLimit(site)) : [],
+      csat: botMode(site) === "support" ? supportSettings(site).csat : null,
+      supportGreeting: botMode(site) === "support" ? supportSettings(site).greeting : null,
     },
   });
 });

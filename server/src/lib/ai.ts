@@ -1,4 +1,4 @@
-import { EMBEDDING_DIMENSIONS, resolveChatModel, resolveEmbeddingModel, type ResolvedModel } from "./models.js";
+import { EMBEDDING_DIMENSIONS, planChatChoice, resolveChatModel, resolveEmbeddingModel, type ResolvedModel } from "./models.js";
 import { localEmbed } from "./localEmbeddings.js";
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
@@ -94,9 +94,9 @@ export async function embedTexts(texts: string[], kind: "query" | "passage" = "p
 
 export async function completeChat(
   messages: ChatMessage[],
-  opts?: { maxTokens?: number; temperature?: number; json?: boolean; fast?: boolean; site?: { chat_provider?: string | null; chat_model?: string | null } },
+  opts?: { maxTokens?: number; temperature?: number; json?: boolean; fast?: boolean; primary?: boolean; site?: { plan?: string | null; chat_provider?: string | null; chat_model?: string | null } },
 ): Promise<string> {
-  const resolved = resolveChatModel(opts?.site);
+  const resolved = resolveChatModel(planChatChoice(opts?.site, opts?.primary));
   const res = await aiFetch(resolved, "/chat/completions", {
     model: resolved.model,
     messages,
@@ -112,9 +112,9 @@ export async function completeChat(
 
 export async function* streamChat(
   messages: ChatMessage[],
-  opts?: { maxTokens?: number; temperature?: number; site?: { chat_provider?: string | null; chat_model?: string | null } },
+  opts?: { maxTokens?: number; temperature?: number; primary?: boolean; site?: { plan?: string | null; chat_provider?: string | null; chat_model?: string | null } },
 ): AsyncGenerator<string> {
-  const resolved = resolveChatModel(opts?.site);
+  const resolved = resolveChatModel(planChatChoice(opts?.site, opts?.primary));
   const res = await aiFetch(
     resolved,
     "/chat/completions",

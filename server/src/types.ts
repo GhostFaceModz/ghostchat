@@ -20,6 +20,9 @@ export type ConversionCard = {
   cta?: string;
   code?: string;
   triggers?: string[];
+  /** In-chat forms: which fields to collect, and whether a submission is a lead or a support ticket. */
+  kind?: "lead" | "support";
+  fields?: Array<{ key: string; label: string; required: boolean }>;
 };
 
 export type Owner = {

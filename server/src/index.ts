@@ -16,6 +16,10 @@ import { liveWidgetRouter, liveOwnerRouter, telegramWebhookRouter, discordWebhoo
 import { resolveEmbeddingModel } from "./lib/models.js";
 import { shareRouter } from "./routes/share.js";
 import { warmupLocalEmbeddings } from "./lib/localEmbeddings.js";
+import { cronRouter } from "./routes/cron.js";
+import { metaWebhookRouter } from "./routes/meta.js";
+import { ticketsRouter } from "./routes/tickets.js";
+import { startRecrawlScheduler } from "./lib/recrawl.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -47,6 +51,7 @@ app.use((_req, res, next) => {
 app.use(cors({ origin: true }));
 app.use("/api/webhooks/whop", express.raw({ type: "application/json" }), whopWebhookRouter);
 app.use("/api/webhooks/discord", express.raw({ type: "application/json" }), discordWebhookRouter);
+app.use("/api/webhooks/meta", express.raw({ type: "*/*", limit: "1mb" }), metaWebhookRouter);
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false }));
 
@@ -55,7 +60,9 @@ app.get("/healthz", (_req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/sites", requireAuth, ticketsRouter);
 app.use("/api/sites", requireAuth, sitesRouter);
+app.use("/api/cron", cronRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/leads", leadsRouter);
 app.use("/api/widget", widgetRouter);
@@ -119,6 +126,7 @@ if (!config.supabaseServiceKey && config.nodeEnv === "production") {
 
 app.listen(config.port, () => {
   console.log(`GhostChat listening on ${config.publicUrl} (port ${config.port})`);
+  startRecrawlScheduler();
   if (resolveEmbeddingModel().provider === "local") {
     warmupLocalEmbeddings().then(
       () => console.log("Local embeddings model ready (hash/feature-384, 384-d)"),

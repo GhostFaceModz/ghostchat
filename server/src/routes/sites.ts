@@ -17,6 +17,11 @@ import { importNotionPage } from "../lib/notion.js";
 import { detectBookingProvider, normalizeCards } from "../lib/cards.js";
 import { analyticsLevel, getOwnerPlan, maxCards } from "../lib/usage.js";
 import { computeAnalytics, type LogRow } from "../lib/analytics.js";
+import { SCHEDULES } from "../lib/recrawl.js";
+import { normalizeGreetings } from "../lib/greetings.js";
+import { normalizeChatForm } from "../lib/forms.js";
+import { BOT_MODES, normalizeSupport } from "../lib/modes.js";
+import { normalizeChannels } from "../lib/meta.js";
 import { saveCorrection } from "../lib/corrections.js";
 import type { Site, Theme } from "../types.js";
 
@@ -172,6 +177,37 @@ sitesRouter.patch("/:id", async (req, res) => {
     }
   }
   if (typeof body.chat_model === "string") patch.chat_model = body.chat_model.trim() || null;
+  // ---- v2 settings ----
+  if (SCHEDULES.includes(body.recrawl_schedule)) patch.recrawl_schedule = body.recrawl_schedule;
+  if (typeof body.live_lookup === "boolean") patch.live_lookup = body.live_lookup;
+  if (typeof body.lookup_search_url === "string") {
+    const raw = body.lookup_search_url.trim();
+    if (!raw) patch.lookup_search_url = null;
+    else {
+      try {
+        const u = new URL(raw, patch.url as string || site.url);
+        if (u.host !== new URL(patch.url as string || site.url).host) throw new Error("must be on your site's domain");
+        if (!u.href.includes("%7Bquery%7D") && !raw.includes("{query}")) throw new Error("include {query} where the search words go");
+        await assertPublicHttpUrl(u.href.replace(/%7Bquery%7D/g, "x"));
+        patch.lookup_search_url = u.href.replace(/%7Bquery%7D/g, "{query}");
+      } catch (err) {
+        return res.status(400).json({ error: `Site search URL: ${(err as Error).message}` });
+      }
+    }
+  }
+  if (Array.isArray(body.greetings)) patch.greetings = normalizeGreetings(body.greetings);
+  if (body.chat_form && typeof body.chat_form === "object") patch.chat_form = normalizeChatForm(body.chat_form);
+  if (typeof body.memory_enabled === "boolean") patch.memory_enabled = body.memory_enabled;
+  if (typeof body.multilingual === "boolean") patch.multilingual = body.multilingual;
+  if (typeof body.custom_domain === "string") {
+    const d = body.custom_domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    if (d && !/^([a-z0-9-]+\.)+[a-z]{2,}$/.test(d)) return res.status(400).json({ error: "Enter a domain like chat.yoursite.com" });
+    if (d && PLAN_LIMITS[site.plan].brandingRequired) return res.status(402).json({ error: "Custom domains are a Pro feature." });
+    patch.custom_domain = d || null;
+  }
+  if (BOT_MODES.includes(body.bot_mode)) patch.bot_mode = body.bot_mode;
+  if (body.support && typeof body.support === "object") patch.support = normalizeSupport(body.support, site.support);
+  if (body.channels && typeof body.channels === "object") patch.channels = normalizeChannels(body.channels, site.plan);
   if (typeof body.url === "string" && body.url.trim()) {
     try {
       const url = await assertPublicHttpUrl(body.url.trim().startsWith("http") ? body.url.trim() : `https://${body.url.trim()}`);

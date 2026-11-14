@@ -139,3 +139,28 @@ export async function echoToChannels(conv: Conversation, text: string, except?: 
     } catch { /* best effort */ }
   }
 }
+
+/** One-off notice to the owner's connected Telegram chat / Discord channel (new form lead, new ticket). Best effort. */
+export async function notifyOwner(ownerId: string, text: string): Promise<string[]> {
+  const delivered: string[] = [];
+  const channels = (await ownerChannels(ownerId).catch(() => [])).filter((c) => c.status === "connected");
+  for (const ch of channels) {
+    try {
+      if (ch.kind === "telegram") {
+        const chatId = String(ch.config.chat_id || "");
+        const token = telegramTokenFor(ch);
+        if (!chatId || !token) continue;
+        await tg(token, "sendMessage", { chat_id: chatId, text: clip(text, 3900), disable_web_page_preview: true });
+        delivered.push("telegram");
+      } else if (ch.kind === "discord" && discordReady()) {
+        const channelId = String(ch.config.channel_id || "");
+        if (!channelId) continue;
+        await discord("POST", `/channels/${channelId}/messages`, { content: clip(text, 1900), allowed_mentions: { parse: [] } });
+        delivered.push("discord");
+      }
+    } catch (err) {
+      console.error(`notify: ${ch.kind} failed:`, (err as Error).message);
+    }
+  }
+  return delivered;
+}

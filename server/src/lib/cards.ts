@@ -1,3 +1,4 @@
+import { chatForm, formCard, formMatches, supportCard } from "./forms.js";
 import type { ConversionCard, Site } from "../types.js";
 
 const BOOKING_WORDS = /\b(book|booking|schedule|calendly|appointment|demo|call|meeting|availability|slot)\b/i;
@@ -60,6 +61,8 @@ export function selectCards(opts: {
   answer?: string;
   /** True once the visitor should be offered a human follow-up (2 misses, or asked for a person). */
   handoff?: boolean;
+  /** Support mode: offer the ticket form (stuck, asked for a person, or upset). outOfHours carries the owner's message. */
+  support?: { offer: boolean; outOfHours: string | null };
 }): ConversionCard[] {
   const text = `${opts.message}\n${opts.answer || ""}`;
   const cards = opts.site.conversion_cards ?? [];
@@ -93,6 +96,10 @@ export function selectCards(opts: {
       cta: "Open calendar",
     });
   }
+
+  if (opts.support?.offer) add(supportCard(opts.support.outOfHours));
+  const form = chatForm(opts.site);
+  if (!picked.some((c) => c.type === "form") && (formMatches(form, opts.message) || (opts.handoff && form.enabled))) add(formCard(form));
 
   if (opts.handoff && !picked.some((c) => c.type === "form")) {
     add({

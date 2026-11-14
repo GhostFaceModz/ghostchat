@@ -191,6 +191,19 @@ export function resolveChatModel(choice?: { chat_provider?: string | null; chat_
   throw new Error("No chat model provider is configured. Set OPENROUTER_API_KEY to use DeepSeek V4 Flash by default.");
 }
 
+/**
+ * Per-plan model: Pro/Business sites that haven't picked their own model use PRO_CHAT_MODEL for the main
+ * answer (env-configurable; unset = no change). Free sites and helper calls (suggestions, intent) are unchanged.
+ */
+export function planChatChoice(site?: { plan?: string | null; chat_provider?: string | null; chat_model?: string | null } | null, primary = false): { chat_provider?: string | null; chat_model?: string | null } | undefined {
+  if (!site) return undefined;
+  const proModel = process.env.PRO_CHAT_MODEL?.trim();
+  if (primary && proModel && (site.plan === "pro" || site.plan === "business") && !site.chat_model) {
+    return { chat_provider: process.env.PRO_CHAT_PROVIDER?.trim() || site.chat_provider || DEFAULT_CHAT_PROVIDER, chat_model: proModel };
+  }
+  return site;
+}
+
 export type ResolvedEmbedding = ResolvedModel & {
   queryPrefix: string;
   passagePrefix: string;
