@@ -75,6 +75,12 @@ app.use("/demo", express.static(path.join(repoRoot, "widget"), { index: "index.h
 // Marketing site: Krea-generated images are versioned by filename, so cache them longer.
 app.use("/img", express.static(path.join(repoRoot, "public", "img"), { maxAge: "7d" }));
 app.use(express.static(path.join(repoRoot, "public"), { maxAge: "5m" }));
+app.get(["/privacy", "/privacy-policy"], (_req, res) => {
+  res.sendFile(path.join(repoRoot, "public", "privacy.html"));
+});
+app.get(["/terms", "/tos"], (_req, res) => {
+  res.sendFile(path.join(repoRoot, "public", "terms.html"));
+});
 app.get(["/guide", "/getting-started", "/setup"], (_req, res) => {
   res.sendFile(path.join(repoRoot, "public", "guide.html"));
 });

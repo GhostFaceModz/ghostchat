@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Privacy · GhostChat</title>
+  <meta name="description" content="What GhostChat stores, why, and who helps run it." />
+  <meta name="theme-color" content="#8f6cff" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E👻%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap" />
+  <link rel="stylesheet" href="/assets/site.css" />
+  <link rel="stylesheet" href="/assets/site.css" />
+  <style>
+    .legal { max-width: 760px; margin: 0 auto; padding: clamp(36px, 7vw, 72px) 0 90px; }
+    .legal h1 { font-size: clamp(32px, 5vw, 52px); margin: 16px 0 10px; }
+    .legal .lead { color: var(--muted); font-size: 17px; margin: 0 0 28px; }
+    .legal section { padding: clamp(18px, 3vw, 28px); border-radius: 22px; margin-bottom: 16px; }
+    .legal h2 { font-size: 20px; margin: 0 0 10px; }
+    .legal p, .legal li { color: #ddd6f5; line-height: 1.65; }
+    .legal ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+    .legal b { color: #fff; }
+    .legal small { color: var(--soft); }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap">
+      <a class="logo" href="/" aria-label="GhostChat home"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V10a7 7 0 0 1 14 0v11l-3.5-2-3.5 2-3.5-2Z"/><path d="M9.5 10v1.5m5-1.5v1.5"/></svg></span>GhostChat</a>
+      <nav class="nav-links" aria-label="Main"><a href="/#features">Features</a><a href="/#plans">Plans</a><a href="/guide">Setup guide</a><a href="/demo">Demo</a></nav>
+      <div class="nav-cta"><a class="btn small" href="/login">Sign in</a><a class="btn small primary" href="/signup">Start free</a></div>
+      <button class="menu-btn" type="button" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <article class="legal">
+      <span class="eyebrow"><b>PRIVACY</b> Last updated 14 November 2026</span>
+      <h1>Privacy</h1>
+      <p class="lead">The short version: GhostChat keeps what it needs to run your assistant, never sells data, and shows no ads.</p>
+      <section class="glass"><h2>Your account</h2><ul><li>Your <b>email</b> and <b>name</b>. With email sign-up, a <b>securely hashed password</b> (never the password itself).</li><li>If you sign in with <b>Google or Discord</b>: your account ID, name, email and profile picture from that service, so that sign-in links to your GhostChat account. We only link by email when the provider says the email is verified. We never get your Google or Discord password.</li><li>Your <b>plan</b> and, if you upgrade, the Whop membership ID.</li></ul></section>
+      <section class="glass"><h2>Your sites and training content</h2><p>The sites you add, their settings, and the content you train them on: pages we fetch from your site, files you upload, text you paste and Notion pages you import. It is used only to answer questions for that site.</p></section>
+      <section class="glass"><h2>Visitors who chat with a GhostChat widget</h2><ul><li>Their messages and the replies, so site owners can read transcripts and improve answers. Emails, phone numbers and ID numbers are masked before storage.</li><li>A random chat ID and a sound preference in the browser's local storage. The widget sets no cookies and no ad trackers.</li><li>An email address, only if the visitor chooses to leave one for a follow-up.</li><li>The page the chat was opened on.</li></ul></section>
+      <section class="glass"><h2>Who helps run GhostChat</h2><ul><li><b>Render</b> hosts the app.</li><li><b>Supabase</b> stores the database and, for Google and Discord sign-in, handles the sign-in step.</li><li><b>OpenRouter</b> passes each question, with the matching parts of the site's content, to the AI model that writes the reply.</li><li><b>Whop</b> handles payments if you upgrade. GhostChat never sees your card details.</li><li><b>Google</b> and <b>Discord</b>, if you choose them to sign in.</li></ul></section>
+      <section class="glass"><h2>What we don't do</h2><ul><li>No selling or renting of data.</li><li>No ads and no ad or analytics trackers.</li><li>Your training content and transcripts aren't shared with other customers.</li></ul></section>
+      <section class="glass"><h2>Your choices</h2><p>You can delete training content from your dashboard at any time. To delete your account and everything linked to it, or for any privacy question, open a request on <a href="https://github.com/GhostFaceModz/ghostchat/issues" target="_blank" rel="noopener">GitHub issues</a> (don't post personal details there; we'll follow up privately).</p></section>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <a class="logo" href="/"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V10a7 7 0 0 1 14 0v11l-3.5-2-3.5 2-3.5-2Z"/><path d="M9.5 10v1.5m5-1.5v1.5"/></svg></span>GhostChat</a>
+      <nav><a href="/">Home</a><a href="/demo">Demo</a><a href="/login">Sign in</a><a href="/signup">Sign up</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav>
+      <span>© <span data-year></span> GhostApps</span>
+    </div>
+  </footer>
+  <script src="/assets/site.js" defer></script>
+</body>
+</html>
