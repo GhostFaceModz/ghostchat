@@ -1,0 +1,35 @@
+# Render Blueprint for GhostChat — free plan, no paid add-ons.
+# Secret values are NOT stored here (sync: false = Render asks for them on creation).
+# Do not paste real keys into this file.
+services:
+  - type: web
+    name: ghostchat
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+      - key: PUBLIC_URL
+        sync: false
+      - key: SUPABASE_URL
+        value: https://rswtambjckwmlagydsvf.supabase.co
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: AI_BASE_URL
+        value: https://api.openai.com/v1
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: gpt-4o-mini
+      - key: AI_EMBEDDING_MODEL
+        value: text-embedding-3-small
+      - key: SESSION_SECRET
+        sync: false

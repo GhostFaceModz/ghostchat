@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GhostChat widget demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; font-family: "Instrument Sans", system-ui, sans-serif;
+      background:
+        radial-gradient(1000px 500px at 0% 0%, rgba(167,139,250,.25), transparent 55%),
+        #0a0712;
+      color: #f5f3ff; padding: 48px 24px;
+    }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-family: Syne, sans-serif; font-weight: 800; letter-spacing: -.04em; margin: 0 0 8px; }
+    p { color: #c4b5fd; line-height: 1.6; }
+    code { background: rgba(167,139,250,.12); padding: 2px 6px; border-radius: 6px; }
+    a { color: #e9d5ff; }
+    .box { margin-top: 28px; padding: 20px; border: 1px solid rgba(196,181,253,.16); border-radius: 20px; background: rgba(18,10,32,.6); }
+    label { display: block; font-size: 13px; color: #c4b5fd; margin: 0 0 6px; }
+    input { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(196,181,253,.2); background: transparent; color: #fff; font: inherit; }
+    button { margin-top: 12px; border: 0; border-radius: 12px; padding: 10px 16px; background: #a78bfa; color: #160b27; font-weight: 700; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Widget demo</h1>
+    <p>This page loads the GhostChat bubble. Paste a <code>SITE_KEY</code> from your dashboard to talk to a trained bot, or just preview the UI.</p>
+    <div class="box">
+      <label for="key">Site key</label>
+      <input id="key" placeholder="gc_…" />
+      <button type="button" id="go">Load widget</button>
+      <p style="margin:12px 0 0;font-size:13px">Need a key? Open the <a href="/dashboard">dashboard</a>.</p>
+    </div>
+  </main>
+  <script>
+    document.getElementById("go").addEventListener("click", function () {
+      var key = document.getElementById("key").value.trim();
+      if (!key) return;
+      var old = document.getElementById("ghostchat-host");
+      if (old) old.remove();
+      window.__GHOSTCHAT_LOADED = false;
+      var s = document.createElement("script");
+      s.src = "/widget.js";
+      s.setAttribute("data-id", key);
+      s.setAttribute("data-open", "true");
+      s.setAttribute("data-delay", "0");
+      document.body.appendChild(s);
+    });
+    var q = new URLSearchParams(location.search).get("key");
+    if (q) {
+      document.getElementById("key").value = q;
+      document.getElementById("go").click();
+    }
+  </script>
+</body>
+</html>

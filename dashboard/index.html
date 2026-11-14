@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GhostChat dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/dashboard/styles.css" />
+</head>
+<body>
+  <div class="bg"></div>
+
+  <section id="auth" class="auth hidden">
+    <div class="auth-card glass">
+      <div class="mark">👻</div>
+      <h1>GhostChat</h1>
+      <p class="lede">Train an assistant on your site. Drop in one script tag.</p>
+      <div class="tabs compact" id="auth-tabs">
+        <button type="button" data-mode="login" class="on">Sign in</button>
+        <button type="button" data-mode="signup">Create account</button>
+      </div>
+      <form id="auth-form">
+        <label class="signup-only hidden">Name <input name="name" autocomplete="name" /></label>
+        <label>Email <input name="email" type="email" required autocomplete="email" /></label>
+        <label>Password <input name="password" type="password" required minlength="8" autocomplete="current-password" /></label>
+        <button type="submit" class="btn primary">Continue</button>
+        <p class="error" id="auth-error" hidden></p>
+      </form>
+    </div>
+  </section>
+
+  <section id="app" class="app hidden">
+    <aside class="rail glass">
+      <a class="brand" href="/">GhostChat</a>
+      <button type="button" class="btn primary small" id="new-site">+ New site</button>
+      <nav id="site-list" class="site-list"></nav>
+      <div class="rail-foot">
+        <div id="owner-email" class="muted tiny"></div>
+        <button type="button" class="btn ghost tiny" id="sign-out">Sign out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div id="empty-state" class="empty glass hidden">
+        <h2>Add your first site</h2>
+        <p>We’ll give you a site key, an embed snippet, and a place to train the bot.</p>
+        <button type="button" class="btn primary" id="empty-new">Add a site</button>
+      </div>
+
+      <div id="site-view" class="hidden">
+        <header class="top">
+          <div>
+            <h2 id="site-title">Site</h2>
+            <div class="meta">
+              <span class="pill" id="plan-pill">free</span>
+              <span class="muted" id="usage-label"></span>
+            </div>
+          </div>
+          <div class="usage-bar" id="usage-bar"><i></i></div>
+        </header>
+
+        <nav class="tabs" id="tabs">
+          <button type="button" data-tab="setup" class="on">Setup</button>
+          <button type="button" data-tab="train">Train</button>
+          <button type="button" data-tab="persona">Persona</button>
+          <button type="button" data-tab="appearance">Appearance</button>
+          <button type="button" data-tab="transcripts">Transcripts</button>
+          <button type="button" data-tab="analytics">Analytics</button>
+          <button type="button" data-tab="leads">Leads</button>
+          <button type="button" data-tab="share">Share</button>
+        </nav>
+
+        <section class="panel glass" data-panel="setup">
+          <h3>Embed on your site</h3>
+          <p class="muted">One script tag. The bot answers from your own content.</p>
+          <label>Site key <input id="site-key" readonly /></label>
+          <label>Embed snippet <textarea id="embed" readonly rows="3"></textarea></label>
+          <div class="row">
+            <button type="button" class="btn" id="copy-key">Copy key</button>
+            <button type="button" class="btn" id="copy-embed">Copy snippet</button>
+            <a class="btn ghost" id="open-demo" href="/demo" target="_blank">Open demo</a>
+          </div>
+          <form id="site-basics" class="stack">
+            <label>Display name <input name="name" required /></label>
+            <label>Site URL <input name="url" required /></label>
+            <button type="submit" class="btn primary">Save</button>
+          </form>
+        </section>
+
+        <section class="panel glass hidden" data-panel="train">
+          <h3>Train the assistant</h3>
+          <p class="muted">Crawl your site (including sitemap.xml) and upload docs or a FAQ. PDF and Notion connectors are on the roadmap.</p>
+          <div class="row">
+            <button type="button" class="btn primary" id="crawl-btn">Crawl site</button>
+            <span class="muted" id="crawl-status"></span>
+          </div>
+          <form id="upload-form" class="stack">
+            <label>Upload .txt, .md, .html or .csv <input type="file" name="files" multiple accept=".txt,.md,.markdown,.html,.htm,.csv,text/plain,text/markdown,text/html,text/csv" /></label>
+            <label>Or paste a FAQ / notes <textarea name="text" rows="6" placeholder="Paste help content…"></textarea></label>
+            <label>Title for pasted content <input name="title" placeholder="FAQ" /></label>
+            <button type="submit" class="btn">Add to training</button>
+          </form>
+          <div id="doc-list" class="list"></div>
+        </section>
+
+        <section class="panel glass hidden" data-panel="persona">
+          <h3>Persona &amp; guardrails</h3>
+          <p class="muted">Start from a template or write your own voice. Brand-voice cloning from samples is on the roadmap.</p>
+          <div id="template-picks" class="cards"></div>
+          <form id="persona-form" class="stack">
+            <label>Persona <textarea name="persona" rows="4" placeholder="Who is the assistant?"></textarea></label>
+            <label>Tone <input name="tone" placeholder="friendly and professional" /></label>
+            <label>Greeting <input name="greeting" /></label>
+            <label>Starter questions (one per line) <textarea name="starter_questions" rows="4"></textarea></label>
+            <label>Guardrails <textarea name="guardrails" rows="3" placeholder="Extra rules the bot must follow"></textarea></label>
+            <label>Banned topics (comma separated) <input name="banned_topics" /></label>
+            <label>Proactive greeting delay (ms) <input name="proactive_delay_ms" type="number" min="0" max="60000" /></label>
+            <button type="submit" class="btn primary">Save persona</button>
+          </form>
+        </section>
+
+        <section class="panel glass hidden" data-panel="appearance">
+          <h3>Theme</h3>
+          <form id="theme-form" class="stack">
+            <label>Mode
+              <select name="mode">
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+              </select>
+            </label>
+            <label>Primary colour <input name="primary" type="color" value="#a78bfa" /></label>
+            <label class="check"><input name="sound_default" type="checkbox" /> Sound on by default</label>
+            <label class="check"><input name="show_branding" type="checkbox" /> Show “Powered by GhostChat” badge</label>
+            <p class="muted tiny" id="branding-note">Free plan always shows the badge. Pro and Business can remove it.</p>
+            <button type="submit" class="btn primary">Save appearance</button>
+          </form>
+        </section>
+
+        <section class="panel glass hidden" data-panel="transcripts">
+          <h3>Transcripts</h3>
+          <div id="log-list" class="transcripts"></div>
+        </section>
+
+        <section class="panel glass hidden" data-panel="analytics">
+          <h3>Analytics</h3>
+          <div id="analytics" class="analytics"></div>
+        </section>
+
+        <section class="panel glass hidden" data-panel="leads">
+          <h3>Captured leads</h3>
+          <p class="muted">Emails left in-chat, with the conversation transcript attached.</p>
+          <div id="lead-list" class="list"></div>
+        </section>
+
+        <section class="panel glass hidden" data-panel="share">
+          <h3>Shareable chat link</h3>
+          <p class="muted">Send this link or print the QR so people can talk to your bot without embedding it first.</p>
+          <label>Public chat link <input id="share-link" readonly /></label>
+          <div class="row">
+            <button type="button" class="btn" id="copy-share">Copy link</button>
+            <a class="btn ghost" id="open-share" href="#" target="_blank">Open</a>
+          </div>
+          <img id="share-qr" alt="QR code for the shareable chat link" width="220" height="220" />
+        </section>
+      </div>
+    </main>
+  </section>
+
+  <dialog id="new-dialog" class="glass">
+    <form id="new-form" class="stack">
+      <h3>New site</h3>
+      <label>Site URL <input name="url" placeholder="https://yoursite.com" required /></label>
+      <label>Name <input name="name" placeholder="My site" /></label>
+      <label>Template
+        <select name="template">
+          <option value="">Custom</option>
+          <option value="support">Support bot</option>
+          <option value="sales">Sales bot</option>
+          <option value="docs">Docs bot</option>
+        </select>
+      </label>
+      <div class="row">
+        <button type="submit" class="btn primary">Create</button>
+        <button type="button" class="btn ghost" id="new-cancel">Cancel</button>
+      </div>
+      <p class="error" id="new-error" hidden></p>
+    </form>
+  </dialog>
+
+  <div id="toast" hidden></div>
+  <script src="/dashboard/app.js"></script>
+</body>
+</html>
