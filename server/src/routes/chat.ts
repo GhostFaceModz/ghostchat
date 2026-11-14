@@ -3,6 +3,11 @@ import { getDb } from "../lib/supabase.js";
 import { answerQuestion, streamAnswer } from "../lib/chat.js";
 import { clientIp, rateLimit, peekRateLimit } from "../lib/rateLimit.js";
 import { assertCanSend, dailyCapCheck } from "../lib/usage.js";
+import { addLog, countUnsure, getConversation, shouldStartLive, liveOnline, updateConversation } from "../lib/live.js";
+
+const LIVE_WAIT_MS = 10 * 60_000;
+import { agentNameFor, startHandoff, visitorLiveMessage } from "../lib/handoff.js";
+import { HUMAN_REQUEST } from "../lib/guardrails.js";
 import type { Site } from "../types.js";
 
 export const chatRouter = Router();
@@ -56,6 +61,32 @@ chatRouter.post("/", async (req, res) => {
   const site = await loadSiteByKey(siteKey);
   if (!site) return res.status(404).json({ error: "Unknown site key." });
 
+  // Live chat: while a human has (or is joining) the conversation the AI stays silent and nothing is charged.
+  let conv = await getConversation(site.id, sessionId).catch(() => null);
+  if (conv && conv.status === "waiting" && !conv.last_agent_at && Date.now() - Date.parse(conv.updated_at) > LIVE_WAIT_MS) {
+    // Nobody picked it up: let the AI carry on rather than leaving the visitor hanging.
+    await updateConversation(conv.id, { status: "bot" });
+    conv = null;
+  }
+  if (conv && (conv.status === "waiting" || conv.status === "human")) {
+    await visitorLiveMessage(site, conv, message, pageUrl);
+    const live = { type: "live", status: conv.status, agentName: conv.agent_name };
+    if (!wantStream) return res.json({ live, answer: null });
+    res.status(200).setHeader("content-type", "text/event-stream; charset=utf-8");
+    res.write(`data: ${JSON.stringify(live)}\n\n`);
+    return res.end();
+  }
+  if (HUMAN_REQUEST.test(message) && shouldStartLive(site, message, 0) === "asked") {
+    await addLog({ site_id: site.id, session_id: sessionId, role: "user", message, page_url: pageUrl });
+    const started = await startHandoff(site, sessionId, "asked", pageUrl);
+    const name = started.agent_name || (await agentNameFor(site));
+    const live = { type: "live", status: "waiting", agentName: name, note: `I've let ${name} know — they'll join this chat shortly. You can keep typing here.` };
+    if (!wantStream) return res.json({ live, answer: null });
+    res.status(200).setHeader("content-type", "text/event-stream; charset=utf-8");
+    res.write(`data: ${JSON.stringify(live)}\n\n`);
+    return res.end();
+  }
+
   const daily = dailyCapCheck(site);
   if (!daily.ok) {
     return res.status(429).json({ error: "This assistant has had a very busy day and is taking a break. Please try again tomorrow." });
@@ -78,7 +109,15 @@ chatRouter.post("/", async (req, res) => {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
     };
     try {
-      await streamAnswer({ site, message, sessionId, pageUrl, onEvent: send });
+      const outcome = await streamAnswer({ site, message, sessionId, pageUrl, onEvent: send });
+      if (outcome.unsure && liveOnline(site)) {
+        const reason = shouldStartLive(site, message, await countUnsure(site.id, sessionId));
+        if (reason) {
+          const started = await startHandoff(site, sessionId, reason, pageUrl);
+          const name = started.agent_name || (await agentNameFor(site));
+          send({ type: "live", status: "waiting", agentName: name, note: `I couldn't find that, so I've asked ${name} to join — they'll reply here shortly.` });
+        }
+      }
     } catch (err) {
       console.error("chat route failed:", (err as Error).message);
       send({ type: "error", error: "Sorry, I'm having trouble replying right now. Please try again in a minute." });
@@ -89,7 +128,15 @@ chatRouter.post("/", async (req, res) => {
 
   try {
     const outcome = await answerQuestion({ site, message, sessionId, pageUrl });
-    res.json(outcome);
+    let live: Record<string, unknown> | undefined;
+    if (outcome.unsure && liveOnline(site)) {
+      const reason = shouldStartLive(site, message, await countUnsure(site.id, sessionId));
+      if (reason) {
+        const started = await startHandoff(site, sessionId, reason, pageUrl);
+        live = { type: "live", status: "waiting", agentName: started.agent_name };
+      }
+    }
+    res.json(live ? { ...outcome, live } : outcome);
   } catch (err) {
     console.error("chat route failed:", (err as Error).message);
     res.status(500).json({ error: "Sorry, I'm having trouble replying right now. Please try again in a minute." });

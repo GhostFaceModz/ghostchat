@@ -67,6 +67,7 @@ export type Site = {
   answer_mode?: "helpful" | "strict";
   usage_alert_level?: number;
   reveal_model?: boolean;
+  live_chat?: Record<string, unknown> | null;
 };
 
 export type RetrievedChunk = {

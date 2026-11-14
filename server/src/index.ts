@@ -12,6 +12,7 @@ import { leadsRouter } from "./routes/leads.js";
 import { widgetRouter } from "./routes/widget.js";
 import { billingRouter, whopWebhookRouter } from "./routes/billing.js";
 import { modelsRouter } from "./routes/models.js";
+import { liveWidgetRouter, liveOwnerRouter, telegramWebhookRouter, discordWebhookRouter } from "./routes/live.js";
 import { resolveEmbeddingModel } from "./lib/models.js";
 import { warmupLocalEmbeddings } from "./lib/localEmbeddings.js";
 
@@ -44,6 +45,7 @@ app.use((_req, res, next) => {
 });
 app.use(cors({ origin: true }));
 app.use("/api/webhooks/whop", express.raw({ type: "application/json" }), whopWebhookRouter);
+app.use("/api/webhooks/discord", express.raw({ type: "application/json" }), discordWebhookRouter);
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false }));
 
@@ -58,6 +60,9 @@ app.use("/api/leads", leadsRouter);
 app.use("/api/widget", widgetRouter);
 app.use("/api/billing", requireAuth, billingRouter);
 app.use("/api/models", requireAuth, modelsRouter);
+app.use("/api/webhooks/telegram", telegramWebhookRouter);
+app.use("/api/live/owner", requireAuth, liveOwnerRouter);
+app.use("/api/live", liveWidgetRouter);
 // Alias for /api/widget/templates.
 app.get("/api/templates", (req, res, next) => {
   req.url = "/templates";

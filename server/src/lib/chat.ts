@@ -2,6 +2,7 @@ import { getDb } from "./supabase.js";
 import { embedTexts, completeChat, streamChat } from "./ai.js";
 
 export const AI_FALLBACK_REPLY = "Sorry, I'm having trouble replying right now. Please try again in a minute.";
+import { liveOnline, liveSettings } from "./live.js";
 import { detectInjection, hitsBannedTopic, sanitizeContext, UNSURE_REPLY, HUMAN_REQUEST } from "./guardrails.js";
 import { resolveChatModel } from "./models.js";
 import { redactPii } from "./pii.js";
@@ -111,6 +112,8 @@ function citesContext(answer: string, chunks: RetrievedChunk[]): boolean {
 
 /** Offer the "human follow-up" form only after 2 unanswered questions in this session, or when asked for a person. */
 export async function wantsHandoff(site: Site, sessionId: string, message: string, unsure: boolean): Promise<boolean> {
+  // When live chat is on and the owner is online, a live handoff replaces the email follow-up form.
+  if (liveOnline(site) && liveSettings(site).trigger !== "never") return false;
   if (HUMAN_REQUEST.test(message)) return true;
   if (!unsure) return false;
   try {

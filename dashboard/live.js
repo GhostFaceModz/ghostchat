@@ -1,0 +1,267 @@
+// GhostChat dashboard: live human takeover (Inbox + per-bot "Live chat" settings + Telegram/Discord channels).
+(function () {
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const ago = (iso) => {
+    const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+    return s < 60 ? "just now" : s < 3600 ? Math.round(s / 60) + "m ago" : s < 86400 ? Math.round(s / 3600) + "h ago" : Math.round(s / 86400) + "d ago";
+  };
+  const live = { overview: null, open: null, timer: null, inboxTimer: null, lastCount: -1 };
+
+  // ---------------- Inbox ----------------
+  function hideInbox() {
+    $("#inbox-view").classList.add("hidden");
+    clearInterval(live.inboxTimer); live.inboxTimer = null;
+    clearTimeout(live.timer); live.timer = null;
+  }
+  ["#open-billing", "#open-account", "#owner-avatar", "#site-list", "#new-site", "#tabs"].forEach((sel) => $(sel)?.addEventListener("click", hideInbox, true));
+
+  async function showInbox() {
+    state.view = "inbox";
+    ["#site-view", "#empty-state", "#billing-view", "#account-view"].forEach((s) => $(s)?.classList.add("hidden"));
+    $$("#site-list button").forEach((b) => b.classList.remove("on"));
+    $("#inbox-view").classList.remove("hidden");
+    await refreshInbox();
+    clearInterval(live.inboxTimer);
+    live.inboxTimer = setInterval(refreshInbox, 5000);
+  }
+  $("#open-inbox").addEventListener("click", showInbox);
+
+  function item(c) {
+    const status = c.status === "human" ? "<span class='st human'>You're live</span>" : c.status === "waiting" ? "<span class='st waiting'>Waiting for you</span>" : c.status === "bot" ? "<span class='st'>Back with AI</span>" : "<span class='st'>AI</span>";
+    const key = c.site_id + ":" + c.session_id;
+    const on = live.open && live.open.key === key ? " on" : "";
+    return `<button type="button" class="inbox-item${on}" data-site="${esc(c.site_id)}" data-session="${esc(c.session_id)}">
+      <span class="ii-top"><b>${esc(c.site_name)}</b> · visitor ${esc(c.session_id.slice(-6))} ${status}</span>
+      <span class="ii-prev">${c.visitor_typing ? "<i>typing…</i>" : esc(c.preview || "")}</span>
+      <span class="ii-time muted tiny">${esc(ago(c.updated_at))}</span></button>`;
+  }
+
+  async function refreshInbox() {
+    let data;
+    try { data = await req("/api/live/owner/inbox"); } catch (e) { return; }
+    const waiting = data.live.filter((c) => c.status === "waiting").length;
+    setBadge(waiting);
+    if ($("#inbox-view").classList.contains("hidden")) return;
+    $("#inbox-live").innerHTML = data.live.length ? data.live.map(item).join("") : "<p class='muted tiny'>No live chats right now.</p>";
+    $("#inbox-recent").innerHTML = data.recent.length ? data.recent.map(item).join("") : "<p class='muted tiny'>No recent chats.</p>";
+    $("#inbox-updated").textContent = "Updated " + new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    $$("#inbox-view .inbox-item").forEach((b) => b.addEventListener("click", () => openConversation(b.dataset.site, b.dataset.session)));
+  }
+  function setBadge(n) {
+    const b = $("#inbox-badge");
+    b.hidden = !n; b.textContent = String(n);
+    if (n > live.lastCount && live.lastCount >= 0 && document.hidden) { try { document.title = "(" + n + ") Live chat waiting · GhostChat"; } catch {} }
+    if (!n && /Live chat waiting/.test(document.title)) document.title = "GhostChat · Dashboard";
+    live.lastCount = n;
+  }
+  // keep the badge fresh everywhere in the dashboard
+  setInterval(() => { if (state.owner && $("#inbox-view").classList.contains("hidden")) refreshInbox(); }, 20000);
+  setTimeout(() => { if (state.owner) refreshInbox(); }, 1500);
+
+  async function openConversation(siteId, sessionId) {
+    live.open = { key: siteId + ":" + sessionId, siteId, sessionId };
+    $$("#inbox-view .inbox-item").forEach((b) => b.classList.toggle("on", b.dataset.site + ":" + b.dataset.session === live.open.key));
+    await renderConversation(true);
+  }
+
+  async function renderConversation(scroll) {
+    clearTimeout(live.timer);
+    const o = live.open;
+    if (!o) return;
+    let d;
+    try { d = await req("/api/live/owner/inbox/session/" + encodeURIComponent(o.siteId) + "/" + encodeURIComponent(o.sessionId)); } catch (e) { toast(e.message); return; }
+    if (!live.open || live.open.key !== o.key) return;
+    const c = d.conversation;
+    o.conv = c;
+    const status = c ? c.status : "ai";
+    const pane = $("#inbox-pane");
+    const keepDraft = $("#inbox-reply")?.value || "";
+    const msgs = d.messages.map((m) => {
+      const who = m.role === "user" ? "Visitor" : m.role === "agent" ? (m.agent_name || "You") : m.role === "system" ? "" : "AI";
+      return `<div class="im ${esc(m.role)}">${who ? `<span class="im-who">${esc(who)} · ${esc(new Date(m.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }))}</span>` : ""}<div class="im-b">${esc(m.message)}</div></div>`;
+    }).join("") + (d.visitor_typing ? "<div class='im user'><div class='im-b'><i>typing…</i></div></div>" : "");
+    const pill = status === "human" ? "<span class='st human'>You're live</span>" : status === "waiting" ? "<span class='st waiting'>Waiting for you</span>" : "<span class='st'>AI is answering</span>";
+    const actions = status === "human" || status === "waiting"
+      ? `<button type="button" class="btn small" id="inbox-handback">🤖 Hand back to AI</button><button type="button" class="btn ghost small" id="inbox-close">Close</button>`
+      : `<button type="button" class="btn primary small" id="inbox-take">🧑 Take over</button>`;
+    pane.innerHTML = `<div class="ip-head"><div><b>${esc(d.site.name)}</b> · visitor ${esc(o.sessionId.slice(-6))} ${pill}${c && c.page_url ? `<div class="muted tiny ip-url">${esc(c.page_url)}</div>` : ""}</div><div class="row">${actions}</div></div>
+      <div class="ip-msgs" id="inbox-msgs">${msgs || "<p class='muted'>No messages yet.</p>"}</div>
+      <form class="ip-reply" id="inbox-form"><textarea id="inbox-reply" rows="2" placeholder="${status === "human" || status === "waiting" ? "Reply to the visitor…" : "Type to take over and reply…"}"></textarea><button class="btn primary" type="submit">Send</button></form>`;
+    const ta = $("#inbox-reply");
+    ta.value = keepDraft;
+    const box = $("#inbox-msgs");
+    if (scroll || box.scrollHeight - box.scrollTop < box.clientHeight + 120) box.scrollTop = box.scrollHeight;
+    $("#inbox-take")?.addEventListener("click", takeOver);
+    $("#inbox-handback")?.addEventListener("click", async () => { await req(`/api/live/owner/inbox/${c.id}/handback`, { method: "POST" }).catch((e) => toast(e.message)); toast("Handed back to the AI"); renderConversation(true); refreshInbox(); });
+    $("#inbox-close")?.addEventListener("click", async () => { await req(`/api/live/owner/inbox/${c.id}/close`, { method: "POST" }).catch((e) => toast(e.message)); renderConversation(true); refreshInbox(); });
+    let lastTyping = 0;
+    ta.addEventListener("input", () => {
+      if (!o.conv || Date.now() - lastTyping < 3000) return;
+      lastTyping = Date.now();
+      req(`/api/live/owner/inbox/${o.conv.id}/typing`, { method: "POST" }).catch(() => {});
+    });
+    ta.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); $("#inbox-form").requestSubmit(); } });
+    if (document.activeElement === document.body || keepDraft) ta.focus();
+    $("#inbox-form").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const text = ta.value.trim();
+      if (!text) return;
+      try {
+        if (!o.conv || o.conv.status === "bot" || o.conv.status === "closed") await takeOver(true);
+        await req(`/api/live/owner/inbox/${o.conv.id}/reply`, { method: "POST", body: { text } });
+        ta.value = "";
+        renderConversation(true);
+      } catch (e) { toast(e.message); }
+    });
+    live.timer = setTimeout(() => renderConversation(false), 2500);
+  }
+
+  async function takeOver(silent) {
+    const o = live.open;
+    try {
+      const { conversation } = await req("/api/live/owner/inbox/take", { method: "POST", body: { siteId: o.siteId, sessionId: o.sessionId } });
+      o.conv = conversation;
+      if (silent !== true) { toast("You have the chat — the AI will stay quiet"); renderConversation(true); refreshInbox(); }
+    } catch (e) { toast(e.message); throw e; }
+  }
+
+  // ---------------- Per-bot settings ----------------
+  async function loadOverview() {
+    live.overview = await req("/api/live/owner/overview");
+    return live.overview;
+  }
+  function siteLive() {
+    const o = live.overview;
+    return o && state.site ? o.sites.find((s) => s.id === state.site.id) : null;
+  }
+
+  async function renderLivePanel() {
+    try { await loadOverview(); } catch (e) { toast(e.message); return; }
+    const s = siteLive();
+    if (!s) return;
+    const cfg = s.live_chat;
+    const locked = !s.pro;
+    $("#live-locked").classList.toggle("hidden", !locked);
+    $("#live-body").classList.toggle("is-locked", locked);
+    $("#live-enabled").checked = Boolean(cfg.enabled) && !locked;
+    $("#live-enabled").disabled = locked;
+    const f = $("#live-form");
+    f.trigger.value = cfg.trigger;
+    f.misses.value = cfg.misses;
+    f.agent_name.value = cfg.agent_name || "";
+    f.agent_name.placeholder = "e.g. " + ((state.owner && state.owner.name || "").split(" ")[0] || "Sam");
+    $$("input[name=status]", f).forEach((r) => { r.checked = r.value === cfg.status; });
+    [...f.elements].forEach((el) => { el.disabled = locked; });
+    updatePreview();
+    renderChannels();
+  }
+  function updatePreview() {
+    const f = $("#live-form");
+    const name = f.agent_name.value.trim() || ((state.owner && state.owner.name || "").split(" ")[0]) || "the team";
+    $("#lp-site").textContent = state.site ? state.site.name : "Your site";
+    $("#lp-sub").textContent = "You're chatting with " + name;
+    $("#lp-name").textContent = "👤 " + name;
+    $("#lp-note").textContent = `I've let ${name} know — they'll join this chat shortly.`;
+    f.misses.closest("label").classList.toggle("hidden", f.trigger.value === "ask" || f.trigger.value === "never");
+  }
+  window.gcRenderLive = renderLivePanel;
+  $("#live-form").addEventListener("input", updatePreview);
+  async function saveLive(extra) {
+    const f = $("#live-form");
+    const body = {
+      enabled: $("#live-enabled").checked,
+      trigger: f.trigger.value, misses: Number(f.misses.value) || 2, agent_name: f.agent_name.value.trim(),
+      status: ($("input[name=status]:checked", f) || {}).value || "online",
+      ...(extra || {}),
+    };
+    try {
+      await req("/api/live/owner/settings/" + state.site.id, { method: "PATCH", body: { live_chat: body } });
+      await loadOverview();
+      toast(body.enabled ? "Live chat is on" : "Live chat settings saved");
+    } catch (e) { toast(e.message); renderLivePanel(); }
+  }
+  $("#live-form").addEventListener("submit", (ev) => { ev.preventDefault(); saveLive(); });
+  $("#live-enabled").addEventListener("change", () => saveLive());
+  $$("#live-form input[name=status]").forEach((r) => r.addEventListener("change", () => saveLive()));
+  $("#live-upgrade").addEventListener("click", () => $("#open-billing").click());
+  $("#tabs").addEventListener("click", (ev) => { if (ev.target.closest("button")?.dataset.tab === "live") renderLivePanel(); });
+
+  function channelCard(kind) {
+    const o = live.overview;
+    const ch = o.channels.find((c) => c.kind === kind);
+    const connected = ch && ch.status === "connected";
+    const status = connected ? "<span class='st human'>Connected</span>" : ch && ch.status === "pending" ? "<span class='st waiting'>Waiting for link</span>" : "<span class='st'>Not connected</span>";
+    if (kind === "telegram") {
+      const where = connected ? `Chats go to <b>${esc(ch.chat_title || "your Telegram chat")}</b>${ch.own_bot ? ` via your bot @${esc(ch.bot_username)}` : ` via @${esc(o.telegram.bot)}`}${ch.is_forum ? " · one topic per visitor" : ""}.` : "Get chats in Telegram and reply right there.";
+      return `<div class="ch-card" data-kind="telegram"><div class="ch-top"><b>✈️ Telegram</b>${status}</div><p class="muted tiny">${where}</p>
+        <div class="row">${connected ? `<button type="button" class="btn small" data-act="test">Send test</button><button type="button" class="btn ghost small" data-act="remove">Disconnect</button>` : `<button type="button" class="btn primary small" data-act="tg-link" ${o.telegram.ready ? "" : "disabled title='Shared bot not configured yet'"}>Connect @${esc(o.telegram.bot)}</button>`}</div>
+        <div class="ch-extra" id="tg-extra"></div>
+        <details class="ch-own"><summary class="tiny">Use my own Telegram bot instead</summary>
+          <form class="row" id="tg-own"><input name="token" type="password" autocomplete="off" placeholder="Paste your BotFather token" /><button class="btn small" type="submit">Connect my bot</button></form>
+          <p class="muted tiny">Create one with @BotFather → /newbot. The token is stored encrypted and never shown again.</p></details></div>`;
+    }
+    const where = connected ? `New chats open a thread in <b>#${esc(ch.channel_name || "channel")}</b>${ch.guild_name ? ` in ${esc(ch.guild_name)}` : ""}.` : ch && ch.guild_id ? `Linked to ${esc(ch.guild_name || "your server")} — pick a channel.` : "Get each chat as a Discord thread and reply in it.";
+    return `<div class="ch-card" data-kind="discord"><div class="ch-top"><b>🎮 Discord</b>${status}</div><p class="muted tiny">${where}</p>
+      <div class="row"><a class="btn small" href="${esc(o.discord.invite)}" target="_blank" rel="noopener">Add GhostBot to server</a>
+      ${ch && ch.guild_id ? `<button type="button" class="btn small" data-act="dc-channels">Choose channel</button>` : ""}
+      <button type="button" class="btn ${connected ? "ghost" : "primary"} small" data-act="dc-link">${ch && ch.guild_id ? "Re-link" : "Get link code"}</button>
+      ${connected ? `<button type="button" class="btn small" data-act="test">Send test</button><button type="button" class="btn ghost small" data-act="remove">Disconnect</button>` : ""}</div>
+      <div class="ch-extra" id="dc-extra"></div></div>`;
+  }
+  function renderChannels() {
+    const box = $("#live-channels");
+    box.innerHTML = channelCard("telegram") + channelCard("discord");
+    box.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => channelAction(b.closest(".ch-card").dataset.kind, b.dataset.act)));
+    $("#tg-own")?.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const token = ev.target.token.value.trim();
+      if (!token) return;
+      try {
+        const r = await req("/api/live/owner/channels/telegram", { method: "POST", body: { token } });
+        ev.target.token.value = "";
+        showTgLink(r);
+      } catch (e) { toast(e.message); }
+    });
+  }
+  function showTgLink(r) {
+    $("#tg-extra").innerHTML = `<p class="tiny">1. <a class="btn primary small" href="${esc(r.url)}" target="_blank" rel="noopener">Open Telegram and press Start</a></p>
+      <p class="muted tiny">For a group: add the bot to the group (make it an admin with “Manage Topics” for one topic per visitor), then send <code>/link ${esc(r.code)}</code> there. The code works for 30 minutes.</p>`;
+    pollChannel("telegram");
+  }
+  let chPoll = null;
+  function pollChannel(kind) {
+    clearInterval(chPoll);
+    let n = 0;
+    chPoll = setInterval(async () => {
+      if (++n > 120 || $("#site-view").classList.contains("hidden")) return clearInterval(chPoll);
+      const o = await loadOverview().catch(() => null);
+      const ch = o && o.channels.find((c) => c.kind === kind);
+      if (ch && (ch.status === "connected" || (kind === "discord" && ch.guild_id))) {
+        clearInterval(chPoll);
+        toast(kind === "telegram" ? "Telegram connected" : "Discord server linked");
+        renderChannels();
+        if (kind === "discord" && !ch.channel_id) channelAction("discord", "dc-channels");
+      }
+    }, 3000);
+  }
+  async function channelAction(kind, act) {
+    try {
+      if (act === "tg-link") showTgLink(await req("/api/live/owner/channels/telegram", { method: "POST", body: {} }));
+      else if (act === "dc-link") {
+        const r = await req("/api/live/owner/channels/discord", { method: "POST", body: {} });
+        $("#dc-extra").innerHTML = `<p class="tiny">1. Add GhostBot to your server (button above).<br/>2. In the channel you want, run <code>${esc(r.command)}</code></p><p class="muted tiny">The code works for 30 minutes. GhostBot needs to send messages, create threads and read history there.</p>`;
+        pollChannel("discord");
+      } else if (act === "dc-channels") {
+        const { channels } = await req("/api/live/owner/channels/discord/channels");
+        const cur = live.overview.channels.find((c) => c.kind === "discord");
+        $("#dc-extra").innerHTML = `<form class="row" id="dc-pick"><select name="channelId">${channels.map((c) => `<option value="${esc(c.id)}" ${cur && cur.channel_id === c.id ? "selected" : ""}>#${esc(c.name)}</option>`).join("")}</select><button class="btn small primary" type="submit">Use this channel</button></form>`;
+        $("#dc-pick").addEventListener("submit", async (ev) => {
+          ev.preventDefault();
+          await req("/api/live/owner/channels/discord/channel", { method: "POST", body: { channelId: ev.target.channelId.value } }).then(() => toast("Discord channel saved"), (e) => toast(e.message));
+          await loadOverview(); renderChannels();
+        });
+      } else if (act === "test") { await req(`/api/live/owner/channels/${kind}/test`, { method: "POST" }); toast("Test message sent"); }
+      else if (act === "remove") { await req(`/api/live/owner/channels/${kind}`, { method: "DELETE" }); await loadOverview(); renderChannels(); toast("Disconnected"); }
+    } catch (e) { toast(e.message); }
+  }
+})();

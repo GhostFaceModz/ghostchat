@@ -83,6 +83,7 @@
       <nav id="site-list" class="site-list" aria-label="Your sites"></nav>
       <div class="rail-foot">
         <a class="btn ghost tiny" href="/guide" target="_blank" rel="noopener">📘 Setup guide</a>
+        <button type="button" class="btn ghost tiny" id="open-inbox">💬 Live inbox <span class="badge" id="inbox-badge" hidden>0</span></button>
         <button type="button" class="btn ghost tiny" id="open-billing">💎 Plan &amp; billing</button>
         <button type="button" class="btn ghost tiny" id="open-account">👤 My account</button>
         <div class="owner">
@@ -102,6 +103,21 @@
           <button type="button" class="btn primary" id="empty-new">Add a site</button>
           <a class="btn ghost" href="/guide" target="_blank" rel="noopener">Read the guide</a>
         </div>
+      </div>
+
+      <div id="inbox-view" class="hidden">
+        <section class="panel glass inbox">
+          <div class="inbox-list">
+            <div class="inbox-head"><h3>Live inbox</h3><span class="muted tiny" id="inbox-updated"></span></div>
+            <div class="rail-label">Live now</div>
+            <div id="inbox-live" class="inbox-items"><p class="muted tiny">No live chats right now.</p></div>
+            <div class="rail-label">Recent AI chats <span class="muted tiny">(last 48h)</span></div>
+            <div id="inbox-recent" class="inbox-items"></div>
+          </div>
+          <div class="inbox-pane" id="inbox-pane">
+            <div class="inbox-empty muted">Pick a conversation to read the transcript, reply, take over or hand it back to the AI.</div>
+          </div>
+        </section>
       </div>
 
       <div id="billing-view" class="hidden">
@@ -231,6 +247,7 @@
           <button type="button" data-tab="analytics">Analytics</button>
           <button type="button" data-tab="leads">Leads</button>
           <button type="button" data-tab="share">Share</button>
+          <button type="button" data-tab="live">Live chat</button>
         </nav>
 
         <section class="panel glass" data-panel="setup">
@@ -388,6 +405,59 @@
           <div id="lead-list" class="list"></div>
         </section>
 
+        <section class="panel glass hidden" data-panel="live">
+          <div class="live-head">
+            <div>
+              <h3>Live chat / Human handoff <span class="pill">Pro</span></h3>
+              <p class="muted">Jump into a visitor's chat from your Inbox, Telegram or Discord. While you have the chat, the AI stays quiet.</p>
+            </div>
+            <label class="switch-toggle"><input type="checkbox" id="live-enabled" /><span></span><b class="sr">Live chat on</b></label>
+          </div>
+          <div class="live-locked hidden" id="live-locked">
+            <b>🔒 Live chat is part of Pro</b>
+            <p class="muted">Upgrade to talk to visitors yourself when the bot can't help, or whenever they ask for a person.</p>
+            <button type="button" class="btn primary small" id="live-upgrade">See plans</button>
+          </div>
+          <div class="live-grid" id="live-body">
+            <form id="live-form" class="stack live-settings">
+              <label>When should a human join?
+                <select name="trigger">
+                  <option value="ask_or_misses">When the visitor asks for a human, or after unanswered questions</option>
+                  <option value="ask">Only when the visitor asks for a human</option>
+                  <option value="misses">Only after unanswered questions</option>
+                  <option value="never">Never automatically (I'll take over from the Inbox)</option>
+                </select>
+              </label>
+              <label>Unanswered questions before handing off
+                <input name="misses" type="number" min="1" max="5" value="2" />
+              </label>
+              <label>Name shown to visitors
+                <input name="agent_name" maxlength="40" placeholder="e.g. Zane" />
+              </label>
+              <fieldset class="seg" aria-label="Your status">
+                <label><input type="radio" name="status" value="online" checked /> 🟢 Online</label>
+                <label><input type="radio" name="status" value="away" /> 🌙 Away (visitors get the email form instead)</label>
+              </fieldset>
+              <button type="submit" class="btn primary">Save live chat settings</button>
+            </form>
+            <div class="live-preview" aria-label="Preview of the chat bubble">
+              <div class="lp-panel">
+                <div class="lp-head"><span class="lp-av">👤</span><div><b id="lp-site">Your site</b><small id="lp-sub">You're chatting with Zane</small></div></div>
+                <div class="lp-msgs">
+                  <div class="lp-b user">Can I talk to a person?</div>
+                  <div class="lp-b sys" id="lp-note">I've let Zane know — they'll join this chat shortly.</div>
+                  <div class="lp-name" id="lp-name">👤 Zane</div>
+                  <div class="lp-b agent">Hi! I'm here — how can I help?</div>
+                </div>
+              </div>
+              <p class="muted tiny">Live preview</p>
+            </div>
+          </div>
+          <h3 class="live-ch-title">Where you get chats</h3>
+          <p class="muted tiny">Channels are shared by all your bots. Each chat only ever goes to your own channels.</p>
+          <div class="live-channels" id="live-channels"></div>
+        </section>
+
         <section class="panel glass hidden" data-panel="share">
           <h3>Shareable chat link</h3>
           <p class="muted">Send this link or print the QR so people can talk to your bot without embedding it first.</p>
@@ -425,5 +495,6 @@
 
   <div id="toast" role="status" hidden></div>
   <script src="/dashboard/app.js"></script>
+  <script src="/dashboard/live.js"></script>
 </body>
 </html>

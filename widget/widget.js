@@ -154,6 +154,14 @@
     ".gc-row.user { align-self: flex-end; align-items: flex-end; }",
     ".gc-bubble { padding: 10px 12px; border-radius: 16px; background: var(--gc-bubble); border: 1px solid var(--gc-line); line-height: 1.5; font-size: 14px; color: var(--gc-text); word-wrap: break-word; }",
     ".gc-row.user .gc-bubble { background: var(--gc-user); }",
+    ".gc-row.agent .gc-bubble { border-color: color-mix(in srgb, #34d399 45%, var(--gc-line)); box-shadow: inset 3px 0 0 #34d399; }",
+    ".gc-agent-name { font-size: 11px; font-weight: 700; color: #34d399; display: inline-flex; align-items: center; gap: 5px; padding-left: 2px; }",
+    ".gc-agent-name svg { width: 12px; height: 12px; }",
+    ".gc-row.system { align-self: center; align-items: center; max-width: 100%; }",
+    ".gc-row.system .gc-bubble { background: transparent; border: 1px dashed var(--gc-line); color: var(--gc-muted); font-size: 12px; padding: 6px 12px; border-radius: 999px; text-align: center; }",
+    ".gc-root[data-live='true'] .gc-avatar { background: radial-gradient(120% 120% at 30% 15%, #6ee7b7, #10b981 45%, #047857); }",
+    ".gc-root[data-live='true'] .gc-sub { color: #34d399; opacity: 1; }",
+    ".gc-root[data-live='waiting'] .gc-avatar::after { background: #fbbf24; animation: gc-breathe 1.6s ease-in-out infinite; }",
     ".gc-bubble a { color: var(--gc-primary); }",
     ".gc-bubble code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: rgba(0,0,0,.25); padding: 1px 5px; border-radius: 6px; }",
     ".gc-code { margin: 8px 0 0; padding: 10px; overflow: auto; border-radius: 12px; background: #0b0612; color: #f5f3ff; font-size: 12px; }",
@@ -219,6 +227,8 @@
   ].join("\n");
 
   var host = el("div", { class: "gc-host", id: "ghostchat-host" });
+  // Own top-level stacking context at the maximum z-index so site overlays can't cover the chat.
+  host.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;z-index:var(--gc-z, 2147483646);";
   var shadow = host.attachShadow({ mode: "open" });
   // Load the widget font only when the panel first opens, so the host page's load isn't slowed.
   var fontLoaded = false;
@@ -264,9 +274,11 @@
   var voiceBtn = el("button", { class: "gc-iconbtn", type: "button", title: "Read replies aloud", "aria-label": "Read replies aloud", "aria-pressed": "false", html: ICONS.speaker, hidden: "hidden" });
   var micBtn = el("button", { class: "gc-iconbtn", type: "button", title: "Speak", "aria-label": "Ask by voice", html: ICONS.mic, hidden: "hidden" });
   var closeBtn = el("button", { class: "gc-iconbtn", type: "button", title: "Minimise", "aria-label": "Minimise chat", html: ICONS.minimize });
+  var avatar = el("div", { class: "gc-avatar", html: ICONS.ghost });
+  var sub = el("span", { class: "gc-sub", text: "AI assistant · Online" });
   var head = el("div", { class: "gc-head" }, [
-    el("div", { class: "gc-avatar", html: ICONS.ghost }),
-    el("div", { class: "gc-title" }, [title, el("span", { class: "gc-sub", text: "AI assistant · Online" })]),
+    avatar,
+    el("div", { class: "gc-title" }, [title, sub]),
     voiceBtn, soundBtn, closeBtn
   ]);
   var msgs = el("div", { class: "gc-msgs", role: "log", "aria-live": "polite" });
@@ -311,8 +323,17 @@
     root.setAttribute("data-unread", on ? "true" : "false");
     launcher.setAttribute("aria-label", state.open ? "Close chat" : on ? "Open chat (new message)" : "Open chat");
   }
+  var announced = null;
+  function announce(open) {
+    // Let the host page react (e.g. hide its own floating buttons) while the chat is open.
+    if (announced === open) return;
+    announced = open;
+    try { document.documentElement.classList.toggle("ghostchat-open", open); } catch (e) {}
+    try { window.dispatchEvent(new CustomEvent(open ? "ghostchat:open" : "ghostchat:close", { detail: { siteKey: SITE_KEY } })); } catch (e) {}
+  }
   function setOpen(open) {
     state.open = open;
+    announce(!!open);
     root.setAttribute("data-open", open ? "true" : "false");
     launcher.setAttribute("aria-expanded", open ? "true" : "false");
     setUnread(open ? false : state.unread);
@@ -520,6 +541,77 @@
     row.appendChild(wrap);
   }
 
+  // ---- live human takeover ----
+  var live = { status: "bot", agent: "", after: "", timer: null, typingRow: null, lastTyping: 0, seen: {} };
+  function setLiveUi() {
+    var on = live.status === "human" || live.status === "waiting";
+    root.setAttribute("data-live", live.status === "human" ? "true" : live.status === "waiting" ? "waiting" : "false");
+    avatar.innerHTML = on ? ICONS.person : ICONS.ghost;
+    sub.textContent = live.status === "human" ? "You're chatting with " + (live.agent || "the team")
+      : live.status === "waiting" ? "Connecting you to " + (live.agent || "the team") + "…"
+      : "AI assistant · Online";
+    input.placeholder = on ? "Message " + (live.agent || "the team") + "…" : "Ask a question…";
+  }
+  function addSystem(text) { return addBubble("system", escapeHtml(text)); }
+  function addAgent(text, name) {
+    var row = addBubble("agent", renderMarkdown(text));
+    row.insertBefore(el("span", { class: "gc-agent-name", html: ICONS.person + escapeHtml(name || live.agent || "Team") }), row.firstChild);
+    return row;
+  }
+  function showAgentTyping(on) {
+    if (on && !live.typingRow) {
+      live.typingRow = el("div", { class: "gc-row agent" }, [el("div", { class: "gc-bubble" }, [el("div", { class: "gc-typing" }, [el("i"), el("i"), el("i")])])]);
+      msgs.appendChild(live.typingRow);
+      scrollDown();
+    } else if (!on && live.typingRow) { live.typingRow.remove(); live.typingRow = null; }
+  }
+  function schedulePoll() {
+    clearTimeout(live.timer);
+    if (live.status !== "human" && live.status !== "waiting") return;
+    live.timer = setTimeout(pollLive, state.open && !document.hidden ? 2500 : 9000);
+  }
+  function pollLive() {
+    var q = live.after ? "?after=" + encodeURIComponent(live.after) : "";
+    fetch(API_BASE + "/api/live/" + encodeURIComponent(SITE_KEY) + "/" + encodeURIComponent(state.sessionId) + q, { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j) return;
+        if (j.agentName) live.agent = j.agentName;
+        var fresh = false;
+        (j.messages || []).forEach(function (m) {
+          if (live.seen[m.id]) return;
+          live.seen[m.id] = 1;
+          live.after = m.created_at;
+          showAgentTyping(false);
+          if (m.role === "agent") { addAgent(m.message, m.agent_name); fresh = true; }
+          else addSystem(m.message);
+        });
+        var prev = live.status;
+        live.status = j.status === "human" || j.status === "waiting" ? j.status : "bot";
+        showAgentTyping(live.status === "human" || live.status === "waiting" ? !!j.typing : false);
+        if (prev !== live.status) setLiveUi();
+        if (fresh) { playPop(); if (!state.open) setUnread(true); }
+      })
+      .catch(function () {})
+      .then(schedulePoll);
+  }
+  function enterLive(ev) {
+    var was = live.status;
+    live.status = ev.status === "human" ? "human" : "waiting";
+    if (ev.agentName) live.agent = ev.agentName;
+    if (ev.note) addSystem(ev.note);
+    setLiveUi();
+    if (was !== "human" && was !== "waiting") schedulePoll();
+  }
+  function visitorTyping() {
+    if (live.status !== "human" && live.status !== "waiting") return;
+    var now = Date.now();
+    if (now - live.lastTyping < 3000) return;
+    live.lastTyping = now;
+    fetch(API_BASE + "/api/live/" + encodeURIComponent(SITE_KEY) + "/" + encodeURIComponent(state.sessionId) + "/typing", { method: "POST" }).catch(function () {});
+  }
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && live.timer) { clearTimeout(live.timer); pollLive(); } });
+
   function maybeGreet() {
     if (state.greeted) return;
     state.greeted = true;
@@ -549,6 +641,8 @@
     var row = null;
     var bubble = null;
     var acc = "";
+    var gotLive = false;
+    var finished = false;
 
     function ensureRow() {
       if (row) return;
@@ -597,6 +691,9 @@
                 acc += ev.text;
                 bubble.innerHTML = renderMarkdown(acc);
                 scrollDown();
+              } else if (ev.type === "live") {
+                gotLive = true;
+                enterLive(ev);
               } else if (ev.type === "done") {
                 finish(ev);
               } else if (ev.type === "error") {
@@ -617,6 +714,17 @@
     });
 
     function finish(ev) {
+      if (finished) return;
+      if (!ev && gotLive && !acc) {
+        // A human has the chat: no AI bubble.
+        finished = true;
+        typing.remove();
+        setThinking(false);
+        state.sending = false;
+        sendBtn.disabled = false;
+        return;
+      }
+      finished = true;
       ensureRow();
       setThinking(false);
       state.sending = false;
@@ -654,6 +762,7 @@
   });
   micBtn.addEventListener("click", function () { startListening(); });
   sendBtn.addEventListener("click", function () { sendMessage(); });
+  input.addEventListener("input", visitorTyping);
   input.addEventListener("keydown", function (ev) {
     if (ev.key === "Enter" && !ev.shiftKey) {
       ev.preventDefault();
@@ -699,6 +808,13 @@
         if (!state.open) setOpen(true);
       }, delay);
     }
+  }
+
+  if (SITE_KEY && state.sessionId) {
+    fetch(API_BASE + "/api/live/" + encodeURIComponent(SITE_KEY) + "/" + encodeURIComponent(state.sessionId), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j && (j.status === "human" || j.status === "waiting")) { live.agent = j.agentName || ""; enterLive({ status: j.status }); pollLive(); } })
+      .catch(function () {});
   }
 
   if (SITE_KEY) {
