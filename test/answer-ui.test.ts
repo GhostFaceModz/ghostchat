@@ -51,7 +51,7 @@ test("suggestions respect the owner's limit (0 means none, no AI call)", async (
 test("widget keeps follow-up chips only under the latest reply and a compact action row", () => {
   const w = readFileSync("widget/widget.js", "utf8");
   assert.match(w, /function clearSuggestions\(\)/);
-  assert.match(w, /clearSuggestions\(\);\n\s+addBubble\("user"/, "chips go away once the visitor sends the next message");
+  assert.match(w, /clearSuggestions\(\);[\s\S]{0,400}addBubble\("user"/, "chips go away once the visitor sends the next message");
   assert.match(w, /\.gc-fb button \{ width: 24px; height: 24px;/);
   const d = readFileSync("dashboard/index.html", "utf8");
   assert.match(d, /name="max_sources"/);

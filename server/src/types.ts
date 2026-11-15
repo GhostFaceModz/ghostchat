@@ -33,6 +33,7 @@ export type Owner = {
   avatar_url?: string | null;
   discord_id?: string | null;
   google_id?: string | null;
+  agent_display_name?: string | null;
 };
 
 export type Site = {

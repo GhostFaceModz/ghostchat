@@ -87,14 +87,14 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   // Deleted accounts and "sign out of all devices" invalidate existing tokens.
   getDb()
     .from("ghostchat_owners")
-    .select("id, email, name, sessions_valid_after")
+    .select("id, email, name, sessions_valid_after, discord_id, agent_display_name")
     .eq("id", payload.sub)
     .maybeSingle()
     .then(({ data, error }) => {
       if (error) return res.status(503).json({ error: "Please try again in a moment." });
       const cutoff = data?.sessions_valid_after ? Math.floor(new Date(data.sessions_valid_after).getTime() / 1000) : 0;
       if (!data || (payload.iat ?? 0) < cutoff) return res.status(401).json({ error: "Please sign in" });
-      (req as AuthedRequest).owner = { id: data.id, email: data.email, name: data.name };
+      (req as AuthedRequest).owner = { id: data.id, email: data.email, name: data.name, discord_id: data.discord_id, agent_display_name: data.agent_display_name };
       next();
     }, () => res.status(503).json({ error: "Please try again in a moment." }));
 }

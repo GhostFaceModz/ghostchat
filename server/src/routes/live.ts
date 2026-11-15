@@ -5,10 +5,11 @@ import type { AuthedRequest } from "../lib/auth.js";
 import { clientIp, rateLimit } from "../lib/rateLimit.js";
 import {
   LIVE_PLANS, channelWebhookSecret, encryptSecret, findRelay, getConversation, getConversationById, isTyping,
-  liveSettings, newLinkCode, normalizeLiveSettings, handoffTimedOut, ownerChannels, setTyping, transcript, updateConversation,
+  liveSettings, newLinkCode, normalizeLiveSettings, handoffTimedOut, ownerChannels, resolveAgentName, sanitizeAgentName,
+  setTyping, telegramAgentName, transcript, withTelegramAgentName,
   type Conversation,
 } from "../lib/live.js";
-import { agentNameFor, agentReply, agentTyping, handBack, loadSite, startHandoff, takeOver } from "../lib/handoff.js";
+import { agentNameFor, agentReply, agentTyping, endChatSystemMessage, endLiveChat, handBack, loadSite, rememberOwnerAgentName, startHandoff, takeOver } from "../lib/handoff.js";
 import {
   DISCORD_INVITE_URL, TELEGRAM_BOT_USERNAME, discord, discordReady, discordTextChannels, telegramReady, telegramTokenFor, tg, verifyDiscordRelay,
 } from "../lib/relay.js";
@@ -17,6 +18,7 @@ import type { Site } from "../types.js";
 
 const ownerOf = (req: Request) => (req as unknown as AuthedRequest).owner;
 const LINK_TTL_MS = 30 * 60_000;
+const tgNameWait = new Map<string, { convId: string; action: string }>();
 
 async function siteByKey(key: string): Promise<Site | null> {
   if (!String(key).startsWith("gc_")) return null;
@@ -31,19 +33,51 @@ liveWidgetRouter.get("/:siteKey/:sessionId", async (req, res) => {
   if (!rateLimit(`live:poll:${clientIp(req)}`, 180, 60_000).ok) return res.status(429).json({ error: "Too many requests." });
   const site = await siteByKey(req.params.siteKey);
   if (!site) return res.status(404).json({ error: "Unknown site key." });
-  let conv = await getConversation(site.id, String(req.params.sessionId).slice(0, 80));
-  if (!conv) return res.json({ status: "bot", messages: [] });
+  const sessionId = String(req.params.sessionId).slice(0, 80);
+  let conv = await getConversation(site.id, sessionId);
   let fallback: "ai" | "form" | null = null;
-  if (handoffTimedOut(conv, liveSettings(site))) {
+  if (conv && handoffTimedOut(conv, liveSettings(site))) {
     fallback = await applyTimeout(site, conv);
     conv = { ...conv, status: "bot" };
   }
-  const after = typeof req.query.after === "string" && !Number.isNaN(Date.parse(req.query.after)) ? req.query.after : conv.created_at;
-  const { data } = await getDb().from("ghostchat_logs").select("id, role, message, agent_name, created_at")
-    .eq("site_id", site.id).eq("session_id", conv.session_id).in("role", ["agent", "system"]).gt("created_at", after)
-    .order("created_at", { ascending: true }).limit(50);
+  const after = typeof req.query.after === "string" && !Number.isNaN(Date.parse(req.query.after)) ? req.query.after : null;
+  let q = getDb().from("ghostchat_logs").select("id, role, message, agent_name, created_at")
+    .eq("site_id", site.id).eq("session_id", sessionId).eq("thread", "support");
+  if (after) q = q.gt("created_at", after);
+  const { data } = await q.order("created_at", { ascending: true }).limit(100);
+  const { data: tickets } = await getDb().from("ghostchat_tickets").select("id").eq("site_id", site.id).eq("session_id", sessionId).limit(1);
+  const ticket = (tickets || [])[0];
+  let reviewPending = Boolean(conv?.review_pending);
+  if (reviewPending) {
+    const { data: csatRows } = await getDb().from("ghostchat_csat").select("id").eq("site_id", site.id).eq("session_id", sessionId).limit(1);
+    if ((csatRows || []).length) reviewPending = false;
+  }
   res.setHeader("cache-control", "no-store");
-  res.json({ status: conv.status, agentName: conv.agent_name, typing: isTyping(conv.id, "agent"), messages: data || [], fallback });
+  res.json({
+    status: conv?.status || "bot",
+    agentName: conv?.agent_name || null,
+    typing: conv ? isTyping(conv.id, "agent") : false,
+    messages: data || [],
+    fallback,
+    reviewPending,
+    hasTicket: Boolean(ticket),
+    hasSupport: Boolean(conv || ticket),
+  });
+});
+
+liveWidgetRouter.post("/:siteKey/:sessionId/end", async (req, res) => {
+  if (!rateLimit(`live:end:${clientIp(req)}`, 20, 60_000).ok) return res.status(429).json({ error: "Too many requests." });
+  const site = await siteByKey(req.params.siteKey);
+  if (!site) return res.status(404).json({ error: "Unknown site key." });
+  const conv = await getConversation(site.id, String(req.params.sessionId).slice(0, 80));
+  if (!conv) return res.json({ ok: true, status: "bot", reviewPending: false });
+  if (conv.status !== "waiting" && conv.status !== "human") {
+    return res.json({ ok: true, status: conv.status, reviewPending: Boolean(conv.review_pending), agentName: conv.agent_name });
+  }
+  let kind: "end" | "cancel" = req.body?.reason === "cancel" ? "cancel" : "end";
+  if (kind === "cancel" && conv.status !== "waiting") kind = "end";
+  const ended = await endLiveChat(conv, "visitor", kind);
+  res.json({ ok: true, status: ended.status, reviewPending: Boolean(ended.review_pending), agentName: ended.agent_name, message: endChatSystemMessage(kind) });
 });
 
 liveWidgetRouter.post("/:siteKey/:sessionId/typing", async (req, res) => {
@@ -72,10 +106,13 @@ liveOwnerRouter.get("/overview", async (req, res) => {
   const owner = ownerOf(req);
   const channels = (await ownerChannels(owner.id)).map(publicChannel);
   const { data: sites } = await getDb().from("ghostchat_sites").select("id, name, plan, live_chat").eq("owner_id", owner.id);
+  const agent = resolveAgentName({ remembered: owner.agent_display_name, discordId: owner.discord_id, discordName: owner.name });
   res.json({
     channels,
     telegram: { ready: telegramReady(), bot: TELEGRAM_BOT_USERNAME },
     discord: { ready: discordReady(), invite: DISCORD_INVITE_URL },
+    agent_name: agent.name,
+    need_name: agent.needsName,
     sites: (sites || []).map((s) => ({ id: s.id, name: s.name, plan: s.plan, pro: LIVE_PLANS.has(s.plan), live_chat: liveSettings(s as Site) })),
   });
 });
@@ -215,13 +252,31 @@ liveOwnerRouter.get("/inbox/session/:siteId/:sessionId", async (req, res) => {
   res.json({ conversation: conv, site: { id: site.id, name: site.name }, messages: await transcript(site.id, req.params.sessionId), visitor_typing: conv ? isTyping(conv.id, "visitor") : false });
 });
 
+
+async function resolveOwnerAgent(req: Request, provided?: string | null, remember = true) {
+  const owner = ownerOf(req);
+  const resolved = resolveAgentName({
+    provided,
+    remembered: owner.agent_display_name,
+    discordId: owner.discord_id,
+    discordName: owner.name,
+  });
+  if (!resolved.needsName && remember && resolved.source === "provided" && resolved.name) {
+    await rememberOwnerAgentName(owner.id, resolved.name);
+    owner.agent_display_name = resolved.name;
+  }
+  return resolved;
+}
+
 liveOwnerRouter.post("/inbox/take", async (req, res) => {
   const site = await loadSite(String(req.body?.siteId || ""));
   if (!site || site.owner_id !== ownerOf(req).id) return res.status(404).json({ error: "Not found." });
   if (!LIVE_PLANS.has(site.plan)) return res.status(402).json({ error: "Live chat is a Pro feature.", upgrade: true });
+  const agent = await resolveOwnerAgent(req, typeof req.body?.agentName === "string" ? req.body.agentName : null);
+  if (agent.needsName) return res.status(400).json({ error: "Enter the name visitors will see in the chat.", needName: true });
   const conv = await startHandoff(site, String(req.body?.sessionId || "").slice(0, 80), "manual");
-  await takeOver(conv);
-  res.json({ conversation: { ...conv, status: "human" } });
+  await takeOver(conv, agent.name);
+  res.json({ conversation: { ...conv, status: "human", agent_name: agent.name }, agentName: agent.name });
 });
 
 liveOwnerRouter.post("/inbox/:id/reply", async (req, res) => {
@@ -229,8 +284,10 @@ liveOwnerRouter.post("/inbox/:id/reply", async (req, res) => {
   if (!conv) return res.status(404).json({ error: "Not found." });
   const text = String(req.body?.text || "").trim();
   if (!text) return res.status(400).json({ error: "Write a reply first." });
-  const id = await agentReply(conv, text, "dashboard");
-  res.json({ ok: true, id });
+  const agent = await resolveOwnerAgent(req, typeof req.body?.agentName === "string" ? req.body.agentName : null);
+  if (agent.needsName) return res.status(400).json({ error: "Enter the name visitors will see in the chat.", needName: true });
+  const id = await agentReply(conv, text, "dashboard", agent.name);
+  res.json({ ok: true, id, agentName: agent.name });
 });
 liveOwnerRouter.post("/inbox/:id/typing", async (req, res) => {
   const conv = await ownedConversation(req);
@@ -252,7 +309,7 @@ liveOwnerRouter.post("/inbox/:id/handback", async (req, res) => {
 liveOwnerRouter.post("/inbox/:id/close", async (req, res) => {
   const conv = await ownedConversation(req);
   if (!conv) return res.status(404).json({ error: "Not found." });
-  await updateConversation(conv.id, { status: "closed" });
+  await endLiveChat(conv, "dashboard", "end");
   res.json({ ok: true });
 });
 
@@ -317,10 +374,35 @@ export async function handleTelegramUpdate(update: { message?: TgMessage }, fixe
     if (m.chat.type === "private") await tgReply(token, m, "Reply to a visitor's message to answer them.");
     return;
   }
-  if (/^\/back\b/i.test(text)) { await handBack(conv, "telegram"); return tgReply(token, m, "🤖 Handed back to the AI assistant."); }
-  if (/^\/take\b/i.test(text)) { await takeOver(conv); return tgReply(token, m, "🧑 You have the chat. The AI will stay quiet."); }
+  const fromId = String(m.from?.id || "");
+  const remembered = telegramAgentName(ch.config, fromId);
+  const tgNameKey = `${ch.id}:${fromId}`;
+  if (tgNameWait.has(tgNameKey)) {
+    const pending = tgNameWait.get(tgNameKey)!;
+    if (/^\//.test(text)) return tgReply(token, m, "Please send the name visitors will see in the chat first (for example: Sam).");
+    const name = sanitizeAgentName(text);
+    if (!name) return tgReply(token, m, "That name is too short. Send a name of up to 32 characters, with no HTML.");
+    await getDb().from("ghostchat_live_channels").update({ config: withTelegramAgentName(ch.config, fromId, name), updated_at: new Date().toISOString() }).eq("id", ch.id);
+    ch.config = withTelegramAgentName(ch.config, fromId, name);
+    tgNameWait.delete(tgNameKey);
+    const waiting = pending.convId === conv.id ? conv : await getConversationById(pending.convId);
+    if (pending.action === "take" && waiting) {
+      await takeOver(waiting, name);
+      return tgReply(token, m, `Thanks, ${name}. You have the chat — the AI will stay quiet. Send your reply to the visitor now.`);
+    }
+    return tgReply(token, m, `Thanks, ${name}. Visitors will see that name. Send your reply to the visitor now.`);
+  }
+  if (!remembered && !/^\/(?:start|link|back|close)\b/i.test(text)) {
+    const action = /^\/take\b/i.test(text) ? "take" : "reply";
+    tgNameWait.set(tgNameKey, { convId: conv.id, action });
+    return tgReply(token, m, "Before you join, type the name visitors will see in the chat (for example: Sam). I'll remember it for next time.");
+  }
+  const agent = remembered || "Team";
+  if (/^\/back\b/i.test(text)) { await handBack(conv, "telegram"); return tgReply(token, m, "🤖 Handed back to the AI assistant. The visitor can leave a review."); }
+  if (/^\/close\b/i.test(text)) { await endLiveChat(conv, "telegram", "end"); return tgReply(token, m, "✅ Chat closed. The visitor can leave a review."); }
+  if (/^\/take\b/i.test(text)) { await takeOver(conv, agent); return tgReply(token, m, `🧑 You have the chat as ${agent}. The AI will stay quiet.`); }
   if (conv.status === "bot" || conv.status === "closed") return tgReply(token, m, "This chat was handed back to the AI. Send /take (as a reply) to jump back in.");
-  await agentReply(conv, text, "telegram");
+  await agentReply(conv, text, "telegram", agent);
 }
 
 export const telegramWebhookRouter = Router();
@@ -368,10 +450,11 @@ export async function handleDiscordRelay(body: Record<string, unknown>): Promise
     const { data } = await getDb().from("ghostchat_live_conversations").select("*").eq("discord_thread_id", threadId).maybeSingle();
     const conv = data as Conversation | null;
     if (!conv) return { status: 200 };
-    if (/^!back\b/i.test(content)) { await handBack(conv, "discord"); return { status: 200, reply: "🤖 Handed back to the AI assistant." }; }
-    if (/^!take\b/i.test(content)) { await takeOver(conv); return { status: 200, reply: "🧑 You have the chat. The AI will stay quiet." }; }
-    if (conv.status === "bot" || conv.status === "closed") return { status: 200, reply: "This chat was handed back to the AI. Type `!take` to jump back in." };
+    if (/^!back\b/i.test(content)) { await handBack(conv, "discord"); return { status: 200, reply: "🤖 Handed back to the AI assistant. The visitor can leave a review." }; }
+    if (/^!close\b/i.test(content)) { await endLiveChat(conv, "discord", "end"); return { status: 200, reply: "✅ Chat closed. The visitor can leave a review." }; }
     const name = typeof body.author_name === "string" ? supportName(body.author_name) : null;
+    if (/^!take\b/i.test(content)) { await takeOver(conv, name || conv.claimed_by_name); return { status: 200, reply: "🧑 You have the chat. The AI will stay quiet." }; }
+    if (conv.status === "bot" || conv.status === "closed") return { status: 200, reply: "This chat was handed back to the AI. Type `!take` to jump back in." };
     await agentReply(conv, content, "discord", conv.claimed_by_id && conv.claimed_by_id === String(body.author_id || "") ? conv.claimed_by_name : name);
     return { status: 200 };
   }

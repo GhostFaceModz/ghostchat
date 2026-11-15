@@ -4,7 +4,8 @@
  * The first claimer wins atomically (conditional UPDATE), a thread is opened from the embed and the claimer added.
  */
 import { getDb } from "./supabase.js";
-import { addLog, getConversationById, liveSettings, transcript, updateConversation, type Conversation } from "./live.js";
+import { addLog, getConversationById, liveSettings, sanitizeAgentName, transcript, updateConversation, type Conversation } from "./live.js";
+import { endLiveChat } from "./handoff.js";
 import { discord } from "./relay.js";
 import type { Site } from "../types.js";
 
@@ -17,7 +18,7 @@ export type ClaimState = "open" | "claimed" | "back" | "closed" | "timeout";
 type Line = { role: string; message: string; agent_name?: string | null };
 
 export function supportName(displayName: string): string {
-  return `${clip(displayName.trim() || "Team", 28)} (Support)`;
+  return sanitizeAgentName(displayName, "Team");
 }
 
 export function claimEmbed(site: Pick<Site, "name">, conv: Pick<Conversation, "session_id" | "reason" | "page_url" | "claimed_by_id">, lines: Line[], state: ClaimState, by?: string | null) {
@@ -176,17 +177,14 @@ export async function handleClaimComponent(ev: ComponentEvent): Promise<Record<s
     }
     case "back": {
       if (!canManage(ev.permissions, ev.user_id, conv)) return eph("Only the claimer or a moderator can hand this back.");
-      const patch = { status: "bot" as const, claimed_by_id: null, claimed_by_name: null };
-      await updateConversation(conv.id, patch);
-      await addLog({ site_id: site.id, session_id: conv.session_id, role: "system", message: `${conv.claimed_by_name || "The team"} handed the chat back to the AI assistant.` });
-      return update({ ...conv, ...patch }, "back", ev.user_id);
+      const ended = await endLiveChat(conv, "discord", "handback");
+      return update(ended, "back", ev.user_id);
     }
     case "close": {
       if (!canManage(ev.permissions, ev.user_id, conv)) return eph("Only the claimer or a moderator can close this chat.");
-      await updateConversation(conv.id, { status: "closed" });
-      await addLog({ site_id: site.id, session_id: conv.session_id, role: "system", message: "This live chat has ended. The AI assistant is here if you need anything else." });
-      bg(postTranscriptAndArchive(conv, ev.user_id));
-      return update({ ...conv, status: "closed" }, "closed", ev.user_id);
+      const ended = await endLiveChat(conv, "discord", "end");
+      bg(postTranscriptAndArchive(ended, ev.user_id));
+      return update(ended, "closed", ev.user_id);
     }
   }
   return eph("Unknown action.");

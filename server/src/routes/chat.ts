@@ -5,7 +5,7 @@ import { clientIp, rateLimit, peekRateLimit } from "../lib/rateLimit.js";
 import { assertCanSend, dailyCapCheck } from "../lib/usage.js";
 import { addLog, countUnsure, getConversation, shouldStartLive, liveOnline, liveSettings, handoffTimedOut } from "../lib/live.js";
 import { applyTimeout } from "../lib/discordClaim.js";
-import { agentNameFor, startHandoff, visitorLiveMessage } from "../lib/handoff.js";
+import { agentNameFor, clearReviewPending, startHandoff, visitorLiveMessage } from "../lib/handoff.js";
 import { HUMAN_REQUEST } from "../lib/guardrails.js";
 import { detectLanguage } from "../lib/lang.js";
 import { loadVisitor, memoryOn, memoryPrompt, rememberVisitor, forgetVisitor, VISITOR_ID_RE, type Visitor } from "../lib/memory.js";
@@ -74,16 +74,24 @@ chatRouter.post("/", async (req, res) => {
   const ctx: PromptContext = { lang, memory: memoryPrompt(visitor) };
   const remember = () => { if (visitorId) rememberVisitor(site.id, visitorId, sessionId, message, lang, visitor).catch(() => {}); };
 
-  // Live chat: while a human has (or is joining) the conversation the AI stays silent and nothing is charged.
+  // Live chat: Support-tab messages go to the human; Assistant-tab messages still reach the AI in parallel.
+  const thread = req.body?.thread === "support" ? "support" : "assistant";
   let conv = await getConversation(site.id, sessionId).catch(() => null);
   if (conv && handoffTimedOut(conv, liveSettings(site))) {
     // Nobody picked it up in time: let the AI carry on rather than leaving the visitor hanging.
     await applyTimeout(site, conv);
-    conv = null;
+    conv = { ...conv, status: "bot" };
   }
-  if (conv && (conv.status === "waiting" || conv.status === "human")) {
-    await visitorLiveMessage(site, conv, message, pageUrl);
-    const live = { type: "live", status: conv.status, agentName: conv.agent_name };
+  if (thread === "support") {
+    if (conv && (conv.status === "waiting" || conv.status === "human")) {
+      await visitorLiveMessage(site, conv, message, pageUrl);
+      const live = { type: "live", status: conv.status, agentName: conv.agent_name, thread: "support" };
+      if (!wantStream) return res.json({ live, answer: null });
+      res.status(200).setHeader("content-type", "text/event-stream; charset=utf-8");
+      res.write(`data: ${JSON.stringify(live)}\n\n`);
+      return res.end();
+    }
+    const live = { type: "live", status: conv?.status || "closed", ended: true, reviewPending: Boolean(conv?.review_pending), thread: "support", note: "This support chat has ended. You're back with the AI assistant." };
     if (!wantStream) return res.json({ live, answer: null });
     res.status(200).setHeader("content-type", "text/event-stream; charset=utf-8");
     res.write(`data: ${JSON.stringify(live)}\n\n`);
@@ -99,7 +107,7 @@ chatRouter.post("/", async (req, res) => {
     if (support) openTicket(site, sessionId, { subject: message, priority: ticketPriority(message), details: { reason: angry ? "upset" : "asked for a human" }, source: "handoff" }).catch((e) => console.error("ticket:", (e as Error).message));
     const started = await startHandoff(site, sessionId, "asked", pageUrl);
     const name = started.agent_name || (await agentNameFor(site));
-    const live = { type: "live", status: "waiting", agentName: name, note: `I've asked the team to join. Waiting for a team member… you can keep typing here.` };
+    const live = { type: "live", status: "waiting", agentName: name, thread: "support", note: `I've asked the team to join.` };
     if (!wantStream) return res.json({ live, answer: null });
     res.status(200).setHeader("content-type", "text/event-stream; charset=utf-8");
     res.write(`data: ${JSON.stringify(live)}\n\n`);
@@ -135,7 +143,7 @@ chatRouter.post("/", async (req, res) => {
         if (reason) {
           const started = await startHandoff(site, sessionId, reason, pageUrl);
           const name = started.agent_name || (await agentNameFor(site));
-          send({ type: "live", status: "waiting", agentName: name, note: `I couldn't find that, so I've asked the team to join. Waiting for a team member…` });
+          send({ type: "live", status: "waiting", agentName: name, thread: "support", note: `I couldn't find that, so I've asked the team to join.` });
         }
       }
     } catch (err) {
@@ -154,7 +162,7 @@ chatRouter.post("/", async (req, res) => {
       const reason = shouldStartLive(site, message, await countUnsure(site.id, sessionId));
       if (reason) {
         const started = await startHandoff(site, sessionId, reason, pageUrl);
-        live = { type: "live", status: "waiting", agentName: started.agent_name };
+        live = { type: "live", status: "waiting", agentName: started.agent_name, thread: "support" };
       }
     }
     res.json(live ? { ...outcome, live } : outcome);
@@ -198,7 +206,8 @@ chatRouter.post("/csat", async (req, res) => {
   const { data: ticket } = await db.from("ghostchat_tickets").select("id").eq("site_id", site.id).eq("session_id", sessionId).order("created_at", { ascending: false }).limit(1).maybeSingle();
   const { error } = await db.from("ghostchat_csat").upsert({ site_id: site.id, session_id: sessionId, rating, comment, ticket_id: ticket?.id ?? null }, { onConflict: "site_id,session_id" });
   if (error) return res.status(500).json({ error: "Could not save your rating." });
-  if (ticket?.id) await db.from("ghostchat_tickets").update({ rating }).eq("id", ticket.id);
+  if (ticket?.id) await db.from("ghostchat_tickets").update({ rating, updated_at: new Date().toISOString() }).eq("id", ticket.id);
+  await clearReviewPending(site.id, sessionId).catch(() => {});
   res.json({ ok: true });
 });
 

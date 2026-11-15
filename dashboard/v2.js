@@ -92,6 +92,7 @@
       ${t.transcript ? `<details class="tk-trans"><summary>Chat transcript</summary><pre>${esc(t.transcript)}</pre></details>` : ""}
       <form class="stack tk-reply">
         ${canned.length ? `<label>Insert canned response <select data-canned><option value="">Choose…</option>${canned.map((c, i) => `<option value="${i}">${esc(c.title)}</option>`).join("")}</select></label>` : ""}
+        <label>Your name in the chat <input name="agentName" maxlength="32" placeholder="e.g. Sam" value="${esc((state.owner && (state.owner.agent_display_name || (state.owner.discord_linked && state.owner.name))) || "")}" ${(state.owner && (state.owner.discord_linked || state.owner.agent_display_name)) ? "" : "required"}/></label>
         <label>Reply <textarea name="text" rows="4" placeholder="Your reply is added to the visitor's chat. Use the email link to reply by email too."></textarea></label>
         <div class="row tight">
           <button type="submit" class="btn primary small">Send reply</button>
@@ -113,7 +114,10 @@
       const solve = ev.submitter && ev.submitter.hasAttribute("data-solve");
       if (!form.text.value.trim()) { form.text.focus(); return; }
       try {
-        await req(`/api/sites/${site().id}/tickets/${id}/reply`, { method: "POST", body: { text: form.text.value, status: solve ? "solved" : "pending" } });
+        const agentName = (form.agentName && form.agentName.value.trim()) || "";
+        if (!agentName && !(state.owner && (state.owner.discord_linked || state.owner.agent_display_name))) { form.agentName.focus(); toast("Enter the name visitors will see"); return; }
+        const sent = await req(`/api/sites/${site().id}/tickets/${id}/reply`, { method: "POST", body: { text: form.text.value, status: solve ? "solved" : "pending", agentName } });
+        if (sent.agentName && state.owner) state.owner.agent_display_name = sent.agentName;
         toast(solve ? "Replied and solved" : "Reply sent"); await loadTickets(); openTicket(id);
       } catch (e) { toast(e.message); }
     });

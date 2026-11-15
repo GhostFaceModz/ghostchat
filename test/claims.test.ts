@@ -43,9 +43,11 @@ test("only the claimer or moderators can unclaim/transfer/close", () => {
   assert.equal(c.canManage("garbage", "7", { claimed_by_id: null }), false);
 });
 
-test("staff names show as '<name> (Support)'", () => {
-  assert.equal(c.supportName("Zane"), "Zane (Support)");
-  assert.equal(c.supportName("  "), "Team (Support)");
+test("staff names are the Discord display name, trimmed and capped at 32 characters", () => {
+  assert.equal(c.supportName("Zane"), "Zane");
+  assert.equal(c.supportName("  "), "Team");
+  assert.equal(c.supportName("<b>Sam</b>"), "Sam");
+  assert.equal(c.supportName("A".repeat(40)).length, 32);
 });
 
 test("waiting handoffs time out after the configured minutes", () => {

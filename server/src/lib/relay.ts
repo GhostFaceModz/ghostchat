@@ -86,7 +86,7 @@ export async function announceHandoff(site: Site, conv: Conversation, recent: Ar
             threadId = topic.message_thread_id;
           } catch { /* not an admin with Manage Topics: fall back to reply threading */ }
         }
-        const text = `🔔 Live chat on ${site.name} (${why})\n\n${lines.join("\n")}\n\n↩️ Reply to this message to answer the visitor. /back hands the chat back to the AI.`;
+        const text = `🔔 Live chat on ${site.name} (${why})\n\n${lines.join("\n")}\n\n↩️ Reply to this message to answer the visitor. The first time, you will be asked for the name visitors will see. /back or /close ends the chat and asks the visitor for a review.`;
         const msg = await tg<{ message_id: number }>(token, "sendMessage", { chat_id: chatId, text: clip(text, 3900), ...(threadId ? { message_thread_id: threadId } : {}), disable_web_page_preview: true });
         await rememberRelay(conv.id, "telegram", chatId, String(msg.message_id));
         await updateConversation(conv.id, { telegram_chat_id: chatId, telegram_thread_id: threadId ?? null });

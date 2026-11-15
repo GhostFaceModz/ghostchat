@@ -41,3 +41,23 @@ test("widget API_BASE comes from the script src, so either host works", () => {
   assert.match(src, /var u = new URL\(script\.src, window\.location\.href\)/);
   assert.match(src, /return u\.origin/);
 });
+
+test("widget has Assistant and Support tabs, end-chat, connecting popup and a review prompt", () => {
+  assert.match(src, /class: "gc-tabs"/);
+  assert.match(src, /tabAi: "Assistant"/);
+  assert.match(src, /tabSupport: "Support"/);
+  assert.match(src, /endChat: "End chat with agent"/);
+  assert.match(src, /connecting: "Connecting you to a support agent…"/);
+  assert.match(src, /joined: "\{name\} joined"/);
+  assert.match(src, /openSupport: "Open Support"/);
+  assert.match(src, /stayAi: "Stay with Assistant"/);
+  assert.match(src, /cancelWait: "Cancel"/);
+  assert.match(src, /function showConnect\(mode\)/);
+  assert.match(src, /function endLiveChat\(reason\)/);
+  assert.match(src, /\/api\/live\/" \+ encodeURIComponent\(SITE_KEY\) \+ "\/" \+ encodeURIComponent\(state\.sessionId\) \+ "\/end"/);
+  assert.match(src, /thread: thread/);
+  assert.match(src, /function showReviewPrompt\(/);
+  assert.match(src, /csatComment/);
+  assert.match(src, /gc-connect/);
+  assert.doesNotMatch(src, /position:\s*fixed;[^"]*gc-connect/);
+});

@@ -69,6 +69,6 @@ export async function replyToTicket(site: Site, ticket: Ticket, text: string, ag
   const next = status || (ticket.status === "open" ? "pending" : ticket.status);
   const { data, error } = await getDb().from("ghostchat_tickets").update({ messages, status: next, updated_at: now, solved_at: next === "solved" ? now : null }).eq("id", ticket.id).select("*").single();
   if (error) throw error;
-  if (ticket.session_id) await addLog({ site_id: site.id, session_id: ticket.session_id, role: "agent", message: text.slice(0, 4000), agent_name: agentName }).catch(() => null);
+  if (ticket.session_id) await addLog({ site_id: site.id, session_id: ticket.session_id, role: "agent", message: text.slice(0, 4000), agent_name: agentName, thread: "support" }).catch(() => null);
   return data as Ticket;
 }

@@ -84,16 +84,17 @@
     const actions = status === "human" || status === "waiting"
       ? `<button type="button" class="btn small" id="inbox-handback">🤖 Hand back to AI</button><button type="button" class="btn ghost small" id="inbox-close">Close</button>`
       : `<button type="button" class="btn primary small" id="inbox-take">🧑 Take over</button>`;
+    const nameField = agentNameFieldHtml();
     pane.innerHTML = `<div class="ip-head"><div><b>${esc(d.site.name)}</b> · visitor ${esc(o.sessionId.slice(-6))} ${pill}${c && c.page_url ? `<div class="muted tiny ip-url">${esc(c.page_url)}</div>` : ""}</div><div class="row">${actions}</div></div>
       <div class="ip-msgs" id="inbox-msgs">${msgs || "<p class='muted'>No messages yet.</p>"}</div>
-      <form class="ip-reply" id="inbox-form"><textarea id="inbox-reply" rows="2" placeholder="${status === "human" || status === "waiting" ? "Reply to the visitor…" : "Type to take over and reply…"}"></textarea><button class="btn primary" type="submit">Send</button></form>`;
+      <form class="ip-reply" id="inbox-form">${nameField}<textarea id="inbox-reply" rows="2" placeholder="${status === "human" || status === "waiting" ? "Reply to the visitor…" : "Type to take over and reply…"}"></textarea><button class="btn primary" type="submit">Send</button></form>`;
     const ta = $("#inbox-reply");
     ta.value = keepDraft;
     const box = $("#inbox-msgs");
     if (scroll || box.scrollHeight - box.scrollTop < box.clientHeight + 120) box.scrollTop = box.scrollHeight;
     $("#inbox-take")?.addEventListener("click", takeOver);
-    $("#inbox-handback")?.addEventListener("click", async () => { await req(`/api/live/owner/inbox/${c.id}/handback`, { method: "POST" }).catch((e) => toast(e.message)); toast("Handed back to the AI"); renderConversation(true); refreshInbox(); });
-    $("#inbox-close")?.addEventListener("click", async () => { await req(`/api/live/owner/inbox/${c.id}/close`, { method: "POST" }).catch((e) => toast(e.message)); renderConversation(true); refreshInbox(); });
+    $("#inbox-handback")?.addEventListener("click", async () => { await req(`/api/live/owner/inbox/${c.id}/handback`, { method: "POST" }).catch((e) => toast(e.message)); toast("Handed back to the AI. The visitor can leave a review."); renderConversation(true); refreshInbox(); });
+    $("#inbox-close")?.addEventListener("click", async () => { await req(`/api/live/owner/inbox/${c.id}/close`, { method: "POST" }).catch((e) => toast(e.message)); toast("Chat closed. The visitor can leave a review."); renderConversation(true); refreshInbox(); });
     let lastTyping = 0;
     ta.addEventListener("input", () => {
       if (!o.conv || Date.now() - lastTyping < 3000) return;
@@ -108,7 +109,8 @@
       if (!text) return;
       try {
         if (!o.conv || o.conv.status === "bot" || o.conv.status === "closed") await takeOver(true);
-        await req(`/api/live/owner/inbox/${o.conv.id}/reply`, { method: "POST", body: { text } });
+        await req(`/api/live/owner/inbox/${o.conv.id}/reply`, { method: "POST", body: { text, agentName: readAgentName() } });
+        rememberAgentName(readAgentName());
         ta.value = "";
         renderConversation(true);
       } catch (e) { toast(e.message); }
@@ -116,11 +118,36 @@
     live.timer = setTimeout(() => renderConversation(false), 2500);
   }
 
+  function needsAgentName() {
+    if (live.overview && live.overview.need_name === false) return false;
+    const owner = state.owner || {};
+    if (owner.discord_linked || owner.agent_display_name) return false;
+    return !readAgentName();
+  }
+  function readAgentName() {
+    const typed = $("#inbox-agent-name")?.value.trim();
+    if (typed) return typed.slice(0, 32);
+    return (live.overview && live.overview.agent_name) || (state.owner && (state.owner.agent_display_name || (state.owner.discord_linked && state.owner.name))) || "";
+  }
+  function rememberAgentName(name) {
+    if (!name) return;
+    if (state.owner) state.owner.agent_display_name = name;
+    if (live.overview) { live.overview.agent_name = name; live.overview.need_name = false; }
+  }
+  function agentNameFieldHtml() {
+    const owner = state.owner || {};
+    const known = (live.overview && live.overview.agent_name) || owner.agent_display_name || (owner.discord_linked ? owner.name : "") || "";
+    if (owner.discord_linked && known) return "";
+    return `<label class="tiny inbox-agent-name">Name visitors will see <input id="inbox-agent-name" maxlength="32" placeholder="e.g. Sam" value="${esc(known)}" ${known ? "" : "required"}/></label>`;
+  }
   async function takeOver(silent) {
     const o = live.open;
+    const agentName = readAgentName();
+    if (needsAgentName() && !agentName) { toast("Enter the name visitors will see in the chat"); $("#inbox-agent-name")?.focus(); throw new Error("Enter the name visitors will see in the chat"); }
     try {
-      const { conversation } = await req("/api/live/owner/inbox/take", { method: "POST", body: { siteId: o.siteId, sessionId: o.sessionId } });
+      const { conversation, agentName: saved } = await req("/api/live/owner/inbox/take", { method: "POST", body: { siteId: o.siteId, sessionId: o.sessionId, agentName } });
       o.conv = conversation;
+      rememberAgentName(saved || agentName);
       if (silent !== true) { toast("You have the chat — the AI will stay quiet"); renderConversation(true); refreshInbox(); }
     } catch (e) { toast(e.message); throw e; }
   }

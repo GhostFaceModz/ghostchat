@@ -27,6 +27,7 @@ export type Conversation = {
   last_visitor_at: string | null; last_agent_at: string | null; created_at: string; updated_at: string;
   discord_channel_id?: string | null; discord_message_id?: string | null;
   claimed_by_id?: string | null; claimed_by_name?: string | null; claimed_at?: string | null; waiting_since?: string | null;
+  review_pending?: boolean;
 };
 
 export const LIVE_PLANS = new Set(["pro", "business"]);
@@ -90,6 +91,47 @@ export function agentDisplayName(site: Pick<Site, "live_chat" | "name">, ownerNa
   return liveSettings(site).agent_name || (ownerName || "").split(" ")[0] || `the ${site.name} team`;
 }
 
+/** Visitor-facing agent name: trim, strip tags, cap at 32 characters. */
+export function sanitizeAgentName(raw: unknown, fallback = ""): string {
+  const text = String(raw ?? "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 32);
+  return text || fallback;
+}
+
+export type AgentNameSource = "provided" | "remembered" | "discord" | null;
+/** Pick a display name: typed name, then a remembered one, then the Discord name when signed in with Discord. */
+export function resolveAgentName(input: {
+  provided?: string | null;
+  remembered?: string | null;
+  discordId?: string | null;
+  discordName?: string | null;
+}): { name: string | null; needsName: boolean; source: AgentNameSource } {
+  const provided = sanitizeAgentName(input.provided);
+  if (provided) return { name: provided, needsName: false, source: "provided" };
+  const remembered = sanitizeAgentName(input.remembered);
+  if (remembered) return { name: remembered, needsName: false, source: "remembered" };
+  if (input.discordId) {
+    const n = sanitizeAgentName(input.discordName);
+    if (n) return { name: n, needsName: false, source: "discord" };
+  }
+  return { name: null, needsName: true, source: null };
+}
+
+export function telegramAgentName(config: Record<string, unknown> | null | undefined, userId: string): string | null {
+  const names = config?.agent_names;
+  if (!names || typeof names !== "object") return null;
+  return sanitizeAgentName((names as Record<string, unknown>)[userId]) || null;
+}
+
+export function withTelegramAgentName(config: Record<string, unknown>, userId: string, name: string): Record<string, unknown> {
+  const prev = (config.agent_names && typeof config.agent_names === "object") ? config.agent_names as Record<string, string> : {};
+  return { ...config, agent_names: { ...prev, [userId]: name } };
+}
+
 // ---- secrets at rest (owner's own Telegram bot token) ----
 function key(): Buffer {
   const base = process.env.LIVE_ENCRYPTION_KEY || process.env.SESSION_SECRET || "";
@@ -147,14 +189,18 @@ export async function countUnsure(siteId: string, sessionId: string): Promise<nu
     .eq("site_id", siteId).eq("session_id", sessionId).eq("role", "assistant").eq("was_unsure", true);
   return count ?? 0;
 }
-export async function addLog(row: { site_id: string; session_id: string; role: "user" | "assistant" | "agent" | "system"; message: string; agent_name?: string | null; page_url?: string | null }): Promise<string | null> {
-  const { data } = await getDb().from("ghostchat_logs").insert({ ...row, was_unsure: false }).select("id").single();
+export async function addLog(row: { site_id: string; session_id: string; role: "user" | "assistant" | "agent" | "system"; message: string; agent_name?: string | null; page_url?: string | null; thread?: "assistant" | "support" }): Promise<string | null> {
+  const thread = row.thread || (row.role === "agent" || row.role === "system" ? "support" : "assistant");
+  const { thread: _ignored, ...rest } = row;
+  const { data } = await getDb().from("ghostchat_logs").insert({ ...rest, thread, was_unsure: false }).select("id").single();
   return (data as { id: string } | null)?.id ?? null;
 }
-export async function transcript(siteId: string, sessionId: string, limit = 200) {
-  const { data } = await getDb().from("ghostchat_logs").select("id, role, message, agent_name, created_at")
-    .eq("site_id", siteId).eq("session_id", sessionId).order("created_at", { ascending: true }).limit(limit);
-  return (data || []) as Array<{ id: string; role: string; message: string; agent_name: string | null; created_at: string }>;
+export async function transcript(siteId: string, sessionId: string, limit = 200, thread?: "assistant" | "support") {
+  let q = getDb().from("ghostchat_logs").select("id, role, message, agent_name, thread, created_at")
+    .eq("site_id", siteId).eq("session_id", sessionId);
+  if (thread) q = q.eq("thread", thread);
+  const { data } = await q.order("created_at", { ascending: true }).limit(limit);
+  return (data || []) as Array<{ id: string; role: string; message: string; agent_name: string | null; thread?: string; created_at: string }>;
 }
 export async function ownerChannels(ownerId: string) {
   const { data } = await getDb().from("ghostchat_live_channels").select("*").eq("owner_id", ownerId);

@@ -2,7 +2,8 @@ import { Router, type Request } from "express";
 import { getDb } from "../lib/supabase.js";
 import type { AuthedRequest } from "../lib/auth.js";
 import { replyToTicket, TICKET_PRIORITIES, TICKET_STATUSES, type Ticket } from "../lib/tickets.js";
-import { agentNameFor } from "../lib/handoff.js";
+import { agentNameFor, rememberOwnerAgentName } from "../lib/handoff.js";
+import { resolveAgentName } from "../lib/live.js";
 import type { Site } from "../types.js";
 
 /** Owner Tickets view: list, read, reply, change status/priority. Mounted under /api/sites (auth required). */
@@ -41,8 +42,17 @@ ticketsRouter.post("/:id/tickets/:tid/reply", async (req, res) => {
   const { data } = await getDb().from("ghostchat_tickets").select("*").eq("id", req.params.tid).eq("site_id", site.id).maybeSingle();
   if (!data) return res.status(404).json({ error: "Ticket not found." });
   const status = TICKET_STATUSES.includes(req.body?.status) ? req.body.status : undefined;
-  const ticket = await replyToTicket(site, data as Ticket, text, await agentNameFor(site), status);
-  res.json({ ticket });
+  const owner = (req as unknown as AuthedRequest).owner;
+  const agent = resolveAgentName({
+    provided: typeof req.body?.agentName === "string" ? req.body.agentName : null,
+    remembered: owner.agent_display_name,
+    discordId: owner.discord_id,
+    discordName: owner.name,
+  });
+  if (agent.needsName) return res.status(400).json({ error: "Enter the name visitors will see in the chat.", needName: true });
+  if (agent.source === "provided" && agent.name) await rememberOwnerAgentName(owner.id, agent.name);
+  const ticket = await replyToTicket(site, data as Ticket, text, agent.name || await agentNameFor(site), status);
+  res.json({ ticket, agentName: agent.name });
 });
 
 ticketsRouter.patch("/:id/tickets/:tid", async (req, res) => {
