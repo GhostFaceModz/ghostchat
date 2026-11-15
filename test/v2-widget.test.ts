@@ -71,3 +71,14 @@ test("widget has Assistant and Support tabs, end-chat, connecting popup and a re
   assert.match(src, /data-tab='support'\]\[data-live='true'\] \.gc-tab-end/);
   assert.match(src, /flex-shrink: 0/);
 });
+
+test("widget traps host-page swipes and announces open/close to the host page", () => {
+  assert.match(src, /overscroll-behavior: contain; touch-action: pan-y/);
+  assert.match(src, /\.gc-msgs \{ flex: 1; overflow: auto; overscroll-behavior: contain;/);
+  assert.match(src, /document\.documentElement\.classList\.toggle\("ghostchat-open", open\)/);
+  assert.match(src, /CustomEvent\(open \? "ghostchat:open" : "ghostchat:close"/);
+  assert.match(src, /function trapHostGestures\(e\) \{ e\.stopPropagation\(\); \}/);
+  assert.match(src, /"touchstart", "touchmove", "touchend", "touchcancel"/);
+  assert.match(src, /"pointerdown", "pointermove", "pointerup", "pointercancel"/);
+  assert.match(src, /panel\.addEventListener\(type, trapHostGestures, \{ passive: true \}\)/);
+});
