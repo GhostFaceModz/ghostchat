@@ -62,7 +62,7 @@ export async function startHandoff(site: Site, sessionId: string, reason: "asked
 /** Visitor message while a human has the chat: log it and relay it; no AI reply, no message charge. */
 export async function visitorLiveMessage(site: Site, conv: Conversation, message: string, pageUrl: string | null): Promise<void> {
   await addLog({ site_id: site.id, session_id: conv.session_id, role: "user", message, page_url: pageUrl, thread: "support" });
-  await updateConversation(conv.id, { last_visitor_at: new Date().toISOString() });
+  await updateConversation(conv.id, { last_visitor_at: new Date().toISOString(), close_warned_at: null } as Partial<Conversation>);
   relayVisitor(site, conv, message).catch(() => {});
   if (conv.discord_message_id || conv.discord_panel_id || conv.discord_thread_id) {
     import("./discordClaim.js").then((m) => m.refreshLiveControls(conv, undefined, conv.claimed_by_id)).catch(() => {});
@@ -81,7 +81,7 @@ export async function agentReply(conv: Conversation, text: string, via: "dashboa
     }
   }
   const id = await addLog({ site_id: site.id, session_id: conv.session_id, role: "agent", message: text.slice(0, 4000), agent_name: agent, thread: "support" });
-  await updateConversation(conv.id, { status: "human", agent_name: agent, last_agent_at: new Date().toISOString() });
+  await updateConversation(conv.id, { status: "human", agent_name: agent, last_agent_at: new Date().toISOString(), close_warned_at: null } as Partial<Conversation>);
   if (via === "dashboard") echoToChannels(conv, `🧑 ${agent} (dashboard): ${text}`).catch(() => {});
   if (conv.discord_message_id || conv.discord_panel_id || conv.discord_thread_id) {
     const next = { ...conv, status: "human" as const, agent_name: agent };
@@ -100,7 +100,7 @@ export async function takeOver(conv: Conversation, name?: string | null): Promis
 }
 
 export type EndKind = "end" | "cancel" | "handback";
-export type EndVia = "visitor" | "dashboard" | "telegram" | "discord";
+export type EndVia = "visitor" | "dashboard" | "telegram" | "discord" | "idle";
 
 export function endChatSystemMessage(kind: EndKind): string {
   if (kind === "cancel") return "The request for a team member was cancelled. You're back with the AI assistant.";
@@ -112,6 +112,7 @@ export function endChatAgentNotice(kind: EndKind, via: EndVia): string {
   if (kind === "cancel") return "🚫 The visitor cancelled the request for a team member.";
   if (kind === "handback") return "🤖 The chat was handed back to the AI assistant. The visitor can leave a review.";
   if (via === "visitor") return "👋 The visitor ended the chat with the team and was asked to leave a review.";
+  if (via === "idle") return "⏱️ This chat was closed after a period of inactivity. The visitor was asked to leave a review.";
   return "✅ This live chat was closed. The visitor can leave a review.";
 }
 

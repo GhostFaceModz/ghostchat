@@ -186,6 +186,7 @@
     f.agent_name.value = cfg.agent_name || "";
     f.claim_timeout_min.value = cfg.claim_timeout_min || 5;
     f.timeout_fallback.value = cfg.timeout_fallback || "ai";
+    if (f.idle_timeout_min) f.idle_timeout_min.value = cfg.idle_timeout_min || 15;
     f.agent_name.placeholder = "e.g. " + ((state.owner && state.owner.name || "").split(" ")[0] || "Sam");
     $$("input[name=status]", f).forEach((r) => { r.checked = r.value === cfg.status; });
     [...f.elements].forEach((el) => { el.disabled = locked; });
@@ -209,6 +210,7 @@
       enabled: $("#live-enabled").checked,
       trigger: f.trigger.value, misses: Number(f.misses.value) || 2, agent_name: f.agent_name.value.trim(),
       claim_timeout_min: Number(f.claim_timeout_min.value) || 5, timeout_fallback: f.timeout_fallback.value,
+      idle_timeout_min: Number(f.idle_timeout_min && f.idle_timeout_min.value) || 15,
       status: ($("input[name=status]:checked", f) || {}).value || "online",
       ...(extra || {}),
     };
@@ -238,7 +240,7 @@
           <form class="row" id="tg-own"><input name="token" type="password" autocomplete="off" placeholder="Paste your BotFather token" /><button class="btn small" type="submit">Connect my bot</button></form>
           <p class="muted tiny">Create one with @BotFather → /newbot. The token is stored encrypted and never shown again.</p></details></div>`;
     }
-    const where = connected ? `New chats open a thread in <b>#${esc(ch.channel_name || "channel")}</b>${ch.guild_name ? ` in ${esc(ch.guild_name)}` : ""}.` : ch && ch.guild_id ? `Linked to ${esc(ch.guild_name || "your server")} — pick a channel.` : "Get each chat as a Discord thread and reply in it.";
+    const where = connected ? `New chats post a ticket card in <b>#${esc(ch.channel_name || "channel")}</b>${ch.guild_name ? ` in ${esc(ch.guild_name)}` : ""}. Claim one and I'll continue the conversation in your DMs.` : ch && ch.guild_id ? `Linked to ${esc(ch.guild_name || "your server")} — pick a channel.` : "Get each chat as a ticket card in Discord, then reply in your DMs.";
     return `<div class="ch-card" data-kind="discord"><div class="ch-top"><b>🎮 Discord</b>${status}</div><p class="muted tiny">${where}</p>
       <div class="row"><a class="btn small" href="${esc(o.discord.invite)}" target="_blank" rel="noopener">Add GhostBot to server</a>
       ${ch && ch.guild_id ? `<button type="button" class="btn small" data-act="dc-channels">Choose channel</button>` : ""}

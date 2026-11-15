@@ -5,8 +5,8 @@ import type { Site } from "../types.js";
 
 export const TELEGRAM_BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || "GhostFaceZenBot";
 export const DISCORD_APP_ID = process.env.DISCORD_APP_ID || "1558950916823195718";
-// View Channel, Send Messages, Send Messages in Threads, Create Public Threads, Manage Threads, Read Message History, Embed Links
-export const DISCORD_PERMISSIONS = String(1024 + 2048 + 274877906944 + 34359738368 + 17179869184 + 65536 + 16384);
+// View Channel, Send Messages, Send Messages in Threads, Create Public Threads, Create Private Threads, Manage Threads, Read Message History, Embed Links
+export const DISCORD_PERMISSIONS = String(1024 + 2048 + 274877906944 + 34359738368 + 68719476736 + 17179869184 + 65536 + 16384);
 export const DISCORD_INVITE_URL = `https://discord.com/oauth2/authorize?client_id=${DISCORD_APP_ID}&scope=bot%20applications.commands&permissions=${DISCORD_PERMISSIONS}`;
 
 const sharedTelegramToken = () => process.env.TELEGRAM_BOT_TOKEN || "";
@@ -117,8 +117,13 @@ export async function relayVisitor(site: Site, conv: Conversation, text: string)
           ...(conv.telegram_thread_id ? { message_thread_id: conv.telegram_thread_id } : {}),
         });
         await rememberRelay(conv.id, "telegram", conv.telegram_chat_id, String(msg.message_id));
-      } else if (ch.kind === "discord" && conv.discord_thread_id && discordReady()) {
-        await discord("POST", `/channels/${conv.discord_thread_id}/messages`, { content: clip(`👤 **Visitor:** ${text}`, 1900), allowed_mentions: { parse: [] } });
+      } else if (ch.kind === "discord" && discordReady() && (conv.discord_dm_channel_id || conv.discord_thread_id)) {
+        if (conv.discord_dm_channel_id) {
+          const { postVisitorToAgent } = await import("./discordInbox.js");
+          await postVisitorToAgent(site, conv, text);
+        } else {
+          await discord("POST", `/channels/${conv.discord_thread_id}/messages`, { content: clip(`👤 **Visitor:** ${text}`, 1900), allowed_mentions: { parse: [] } });
+        }
       }
     } catch (err) {
       console.error(`live: ${ch.kind} relay failed:`, (err as Error).message);
@@ -133,8 +138,9 @@ export async function echoToChannels(conv: Conversation, text: string, except?: 
     try {
       if (ch.kind === "telegram" && conv.telegram_chat_id) {
         await tg(telegramTokenFor(ch), "sendMessage", { chat_id: conv.telegram_chat_id, text: clip(text, 3900), ...(conv.telegram_thread_id ? { message_thread_id: conv.telegram_thread_id } : {}) });
-      } else if (ch.kind === "discord" && conv.discord_thread_id && discordReady()) {
-        await discord("POST", `/channels/${conv.discord_thread_id}/messages`, { content: clip(text, 1900), allowed_mentions: { parse: [] } });
+      } else if (ch.kind === "discord" && discordReady()) {
+        const channelId = conv.discord_dm_channel_id || conv.discord_thread_id;
+        if (channelId) await discord("POST", `/channels/${channelId}/messages`, { content: clip(text, 1900), allowed_mentions: { parse: [] } });
       }
     } catch { /* best effort */ }
   }

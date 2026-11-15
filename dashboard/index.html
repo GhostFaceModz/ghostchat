@@ -490,6 +490,10 @@
                   </select>
                 </label>
               </div>
+              <label>Auto-close a claimed chat after (minutes of no messages)
+                <input name="idle_timeout_min" type="number" min="3" max="120" value="15" />
+              </label>
+              <p class="muted tiny">We'll warn both sides 2 minutes before closing. Claimed chats continue in Discord DMs, not in a public thread.</p>
               <label>Name shown to visitors
                 <input name="agent_name" maxlength="40" placeholder="e.g. Zane" />
               </label>

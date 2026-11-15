@@ -16,7 +16,7 @@ import type { Site } from "../types.js";
 export const GCL = "gcl:";
 const VIOLET = 0x8b5cf6, GREEN = 0x10b981, GREY = 0x6b7280, AMBER = 0xf59e0b;
 const MANAGE = (1n << 3n) | (1n << 5n) | (1n << 13n) | (1n << 34n); // Administrator, Manage Server, Manage Messages, Manage Threads
-const ACTIONS = "claim|unclaim|transfer|transferto|back|close|end|transcript|ticket|resolve|qreply|closethread|closeticket";
+const ACTIONS = "claim|unclaim|transfer|transferto|back|close|end|transcript|ticket|resolve|qreply|closethread|closeticket|replymodal|switch";
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 const ACTION_ALIAS: Record<string, string> = { end: "close", closeticket: "closethread" };
 const KNOWN_ACTIONS = new Set(ACTIONS.split("|"));
@@ -274,39 +274,25 @@ async function viewFor(site: Site, conv: Conversation, state: ClaimState, by?: s
   };
 }
 
-/** Post the claimable embed for a new handoff, reusing this session's existing Discord thread when there is one. */
+/** Post a compact inbox card in the support channel. Does not open a public thread. */
 export async function postClaimMessage(site: Site, conv: Conversation, channelId: string): Promise<void> {
-  if (shouldReuseDiscordThread(conv) && conv.discord_thread_id) {
-    const reopened = await discord("PATCH", `/channels/${conv.discord_thread_id}`, { archived: false, locked: false }).then(() => true).catch((e) => {
-      console.error("discord reuse thread:", (e as Error).message);
-      return false;
-    });
-    if (reopened) {
-      const view = await viewFor(site, conv, claimStateFor(conv));
-      const body = { embeds: view.embeds, components: view.components, allowed_mentions: { parse: [] } };
-      let edited = false;
-      if (conv.discord_message_id) {
-        edited = await patchMessage(conv.discord_channel_id || channelId, conv.discord_message_id, body);
-        if (!edited && conv.discord_thread_id !== conv.discord_message_id) {
-          edited = await patchMessage(conv.discord_thread_id, conv.discord_message_id, body);
-        }
-      }
-      if (!edited) {
-        await discord("POST", `/channels/${conv.discord_thread_id}/messages`, body).catch((e) => console.error("claim reuse post:", (e as Error).message));
-      }
-      await upsertThreadPanel(conv, view, true);
-      await discord("POST", `/channels/${conv.discord_thread_id}/messages`, {
-        content: "🔔 This chat is waiting for a team member again. Use **Accept / Claim** on the controls below.",
-        allowed_mentions: { parse: [] },
-      }).catch(() => {});
-      if (!conv.discord_channel_id) await updateConversation(conv.id, { discord_channel_id: channelId });
+  const { inboxEmbed, inboxComponents } = await import("./discordInbox.js");
+  const { transcript } = await import("./live.js");
+  const lines = await transcript(site.id, conv.session_id, 40);
+  const state = claimStateFor(conv);
+  const body = {
+    embeds: [inboxEmbed(site, conv, lines, state === "claimed" ? "claimed" : "open", conv.claimed_by_id)],
+    components: inboxComponents(conv.id, state === "claimed" ? "claimed" : "open", { claimedByName: conv.claimed_by_name }),
+    allowed_mentions: { parse: [] as string[] },
+  };
+  if (conv.discord_channel_id && conv.discord_message_id) {
+    const ok = await patchMessage(conv.discord_channel_id, conv.discord_message_id, body);
+    if (ok) {
+      if (conv.discord_channel_id !== channelId) await updateConversation(conv.id, { discord_channel_id: channelId });
       return;
     }
   }
-  const view = await viewFor(site, conv, "open");
-  const msg = await discord<{ id: string }>("POST", `/channels/${channelId}/messages`, {
-    embeds: view.embeds, components: view.components, allowed_mentions: { parse: [] },
-  });
+  const msg = await discord<{ id: string }>("POST", `/channels/${channelId}/messages`, body);
   await updateConversation(conv.id, { discord_channel_id: channelId, discord_message_id: msg.id, claimed_by_id: null, claimed_by_name: null });
   conv.discord_channel_id = channelId;
   conv.discord_message_id = msg.id;
@@ -384,7 +370,8 @@ export async function refreshControlsForSession(siteId: string, sessionId: strin
 }
 
 /** After a claim: open (or reuse) the thread on the embed, add the claimer, post the transcript so far. */
-async function openThreadFor(conv: Conversation, userId: string): Promise<void> {
+/** Kept for leftover public threads (chats claimed before inbox+DMs). */
+export async function openThreadFor(conv: Conversation, userId: string): Promise<void> {
   const site = await siteOf(conv);
   if (!site || !conv.discord_channel_id || !conv.discord_message_id) return;
   let threadId = conv.discord_thread_id;
@@ -465,6 +452,9 @@ export async function archiveLiveThread(conv: Conversation, opts: { by?: string 
 }
 
 export async function finalizeLiveClose(conv: Conversation, opts: { by?: string | null; rating?: number | null } = {}): Promise<{ ok: boolean; error?: string; archived: number }> {
+  const inbox = await import("./discordInbox.js");
+  await inbox.finalizeInboxClose(conv, opts).catch((e) => console.error("inbox close:", (e as Error).message));
+  // Legacy public threads (and any leftover duplicates) are still archived/locked.
   return archiveLiveThread(conv, { ...opts, alreadyEnded: true });
 }
 
@@ -476,6 +466,8 @@ async function siteOwnerDiscordId(site: Site): Promise<string | null> {
 export type ComponentEvent = {
   custom_id: string; user_id: string; user_name: string; permissions?: string;
   values?: string[]; resolved_names?: Record<string, string>;
+  fields?: Record<string, string>;
+  guild_id?: string; channel_id?: string;
 };
 
 const bg = (p: Promise<unknown>) => { p.catch((e) => console.error("claim bg:", (e as Error).message)); };
@@ -520,8 +512,10 @@ export async function handleClaimComponent(ev: ComponentEvent): Promise<Record<s
         return eph(now?.claimed_by_id ? `Already claimed by ${now.claimed_by_id === ev.user_id ? "you" : `<@${now.claimed_by_id}>`}.` : "This chat can't be claimed right now.");
       }
       await addLog({ site_id: site.id, session_id: conv.session_id, role: "system", message: `${name} joined the chat`, thread: "support" });
-      bg(openThreadFor(won, ev.user_id));
-      return respond(won, "claimed", ev.user_id);
+      const inbox = await import("./discordInbox.js");
+      const session = await inbox.openAgentSession(won, ev.user_id);
+      bg(inbox.editInboxCard({ ...won, claimed_by_name: name }, "claimed", ev.user_id));
+      return eph(inbox.claimOpenedMessage(session.mode, session.error));
     }
     case "unclaim": {
       if (!allowed) return deny();
@@ -532,6 +526,7 @@ export async function handleClaimComponent(ev: ComponentEvent): Promise<Record<s
     }
     case "transfer": {
       if (!allowed) return deny();
+      if (!ev.guild_id) return eph("To transfer this chat, press **Transfer** on the ticket card in your support channel (user pickers only work in the server).");
       return { type: 4, data: { flags: 64, content: "Transfer this chat to:", components: [{ type: 1, components: [{ type: 5, custom_id: `${GCL}transferto:${conv.id}`, placeholder: "Pick a team member", min_values: 1, max_values: 1 }] }] } };
     }
     case "transferto": {
@@ -541,11 +536,13 @@ export async function handleClaimComponent(ev: ComponentEvent): Promise<Record<s
       const toName = supportName(ev.resolved_names?.[to] || "Team");
       await updateConversation(conv.id, { claimed_by_id: to, claimed_by_name: toName, claimed_at: new Date().toISOString(), status: "human", agent_name: toName });
       await addLog({ site_id: site.id, session_id: conv.session_id, role: "system", message: `${toName} joined the chat`, thread: "support" });
-      const next = { ...conv, claimed_by_id: to, claimed_by_name: toName, status: "human" as const };
-      bg(openThreadFor(next, to));
-      bg(editClaimMessage(next, "claimed", to, { movePanel: true }));
+      const next = { ...conv, claimed_by_id: to, claimed_by_name: toName, status: "human" as const, agent_name: toName };
+      const inbox = await import("./discordInbox.js");
+      if (conv.discord_dm_channel_id) bg(inbox.postAgentNote(conv, `🔁 Transferred to <@${to}> by <@${ev.user_id}>.`));
+      const session = await inbox.openAgentSession(next, to);
+      bg(inbox.editInboxCard(next, "claimed", to));
       if (conv.discord_thread_id) bg(discord("POST", `/channels/${conv.discord_thread_id}/messages`, { content: `🔁 Transferred to <@${to}> by <@${ev.user_id}>.`, allowed_mentions: { users: [to] } }));
-      return { type: 7, data: { content: `🔁 Transferred to <@${to}>.`, components: [], allowed_mentions: { parse: [] } } };
+      return eph(`🔁 Transferred to <@${to}>. ${inbox.claimOpenedMessage(session.mode, session.error)}`);
     }
     case "back": {
       if (!allowed) return deny();
@@ -605,6 +602,24 @@ export async function handleClaimComponent(ev: ComponentEvent): Promise<Record<s
       if (conv.discord_thread_id) bg(discord("POST", `/channels/${conv.discord_thread_id}/messages`, { content: clip(`🧑 **${name}:** ${text}`, 1900), allowed_mentions: { parse: [] } }));
       bg(refreshLiveControls({ ...conv, status: "human", agent_name: name }, "claimed", ev.user_id));
       return eph(`Sent to the visitor: ${clip(text, 200)}`);
+    }
+    case "replymodal": {
+      if (conv.status === "closed") return eph("This chat is already closed.");
+      const inbox = await import("./discordInbox.js");
+      const siteName = site.name;
+      // Opening the modal (button click has no values yet).
+      if (!ev.fields && !ev.values?.length) return inbox.replyModal(conv.id, siteName, conv.session_id);
+      const text = String(ev.fields?.reply || ev.values?.[0] || "").trim();
+      if (!text) return eph("Type a reply first.");
+      const confirm = await inbox.deliverAgentReply(conv, text, name, ev.user_id);
+      if (conv.discord_dm_channel_id) bg(inbox.postAgentNote(conv, clip(`🧑 **${name}:** ${text}`, 1900)));
+      return eph(confirm || `Sent to visitor ${conv.session_id.slice(-6)}.`);
+    }
+    case "switch": {
+      if (conv.status === "closed") return eph("This chat is already closed.");
+      const inbox = await import("./discordInbox.js");
+      await inbox.setActiveChat(ev.user_id, conv);
+      return eph(`Now chatting with **${site.name} · ${conv.session_id.slice(-6)}**. Typed replies in this DM will go to this visitor.`);
     }
   }
   return eph("Unknown action.");

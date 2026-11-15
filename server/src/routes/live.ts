@@ -14,6 +14,7 @@ import {
   DISCORD_INVITE_URL, TELEGRAM_BOT_USERNAME, discord, discordReady, discordTextChannels, telegramReady, telegramTokenFor, tg, verifyDiscordRelay,
 } from "../lib/relay.js";
 import { applyTimeout, handleClaimComponent, supportName, GCL } from "../lib/discordClaim.js";
+import { conversationForAgentChannel, deliverAgentReply } from "../lib/discordInbox.js";
 import type { Site } from "../types.js";
 
 const ownerOf = (req: Request) => (req as unknown as AuthedRequest).owner;
@@ -422,14 +423,17 @@ telegramWebhookRouter.post("/:channelId", async (req, res) => {
 });
 
 /** Relayed from the GhostBot gateway / interactions (HMAC-signed). */
-export async function handleDiscordRelay(body: Record<string, unknown>): Promise<{ status: number; reply?: string; response?: Record<string, unknown> }> {
-  if (body.type === "component") {
+export async function handleDiscordRelay(body: Record<string, unknown>): Promise<{ status: number; reply?: string; response?: Record<string, unknown>; ignored?: boolean }> {
+  if (body.type === "component" || body.type === "modal") {
     const customId = String(body.custom_id || "");
     const ev = {
       custom_id: customId, user_id: String(body.user_id || ""), user_name: String(body.user_name || "Team"),
       permissions: typeof body.permissions === "string" ? body.permissions : undefined,
       values: Array.isArray(body.values) ? body.values.map(String) : undefined,
       resolved_names: (body.resolved_names && typeof body.resolved_names === "object") ? body.resolved_names as Record<string, string> : undefined,
+      fields: (body.fields && typeof body.fields === "object") ? body.fields as Record<string, string> : undefined,
+      guild_id: typeof body.guild_id === "string" ? body.guild_id : undefined,
+      channel_id: typeof body.channel_id === "string" ? body.channel_id : undefined,
     };
     try {
       const response = customId.startsWith(GCL)
@@ -450,30 +454,30 @@ export async function handleDiscordRelay(body: Record<string, unknown>): Promise
       status: "connected", link_code: null, link_expires_at: null, updated_at: new Date().toISOString(),
       config: { guild_id: String(body.guild_id || ""), guild_name: String(body.guild_name || ""), channel_id: String(body.channel_id || ""), channel_name: String(body.channel_name || "") },
     }).eq("id", ch.id);
-    return { status: 200, reply: "✅ Linked to GhostChat. New live chats will open a thread in this channel. You can pick a different channel in GhostChat › Live chat." };
+    return { status: 200, reply: "✅ Linked to GhostChat. New live chats will post a ticket card in this channel, and claimed chats will continue in your DMs." };
   }
   if (body.type === "message") {
-    const threadId = String(body.thread_id || "");
+    const channelId = String(body.thread_id || body.channel_id || "");
     const content = String(body.content || "").trim();
-    if (!threadId || !content) return { status: 200 };
-    const { data } = await getDb().from("ghostchat_live_conversations").select("*").eq("discord_thread_id", threadId).maybeSingle();
-    const conv = data as Conversation | null;
-    if (!conv) return { status: 200 };
-    if (/^!back\b/i.test(content)) {
+    const authorId = String(body.author_id || "");
+    if (!channelId || !content) return { status: 200, ignored: true };
+    const conv = await conversationForAgentChannel(channelId, authorId);
+    if (!conv) return { status: 200, ignored: true };
+    if (/^!(?:back)\b/i.test(content)) {
       const ended = await endLiveChat(conv, "discord", "handback");
-      if (ended.discordArchive && !ended.discordArchive.ok) return { status: 200, reply: `🤖 Handed back to the AI, but I couldn't archive this thread. Please give the GhostChat bot **Manage Threads** in this channel, then press **Close thread**.` };
+      if (ended.discordArchive && !ended.discordArchive.ok) return { status: 200, reply: `🤖 Handed back to the AI, but I couldn't finish closing the Discord side. ${ended.discordArchive.error || ""}`.trim() };
       return { status: 200, reply: "🤖 Handed back to the AI assistant. The visitor can leave a review." };
     }
-    if (/^!close\b/i.test(content)) {
+    if (/^!(?:close|end)\b/i.test(content)) {
       const ended = await endLiveChat(conv, "discord", "end");
-      if (ended.discordArchive && !ended.discordArchive.ok) return { status: 200, reply: `✅ Chat closed in GhostChat, but I couldn't archive this thread. Please give the GhostChat bot **Manage Threads** in this channel, then press **Close thread**.` };
+      if (ended.discordArchive && !ended.discordArchive.ok) return { status: 200, reply: `✅ Chat closed in GhostChat, but I couldn't finish closing the Discord side. ${ended.discordArchive.error || ""}`.trim() };
       return { status: 200, reply: "✅ Chat closed. The visitor can leave a review." };
     }
     const name = typeof body.author_name === "string" ? supportName(body.author_name) : null;
     if (/^!take\b/i.test(content)) { await takeOver(conv, name || conv.claimed_by_name); return { status: 200, reply: "🧑 You have the chat. The AI will stay quiet." }; }
-    if (conv.status === "bot" || conv.status === "closed") return { status: 200, reply: "This chat was handed back to the AI. Type `!take` to jump back in." };
-    await agentReply(conv, content, "discord", conv.claimed_by_id && conv.claimed_by_id === String(body.author_id || "") ? conv.claimed_by_name : name);
-    return { status: 200 };
+    if (conv.status === "bot" || conv.status === "closed") return { status: 200, reply: "This chat was handed back to the AI. Type `!take` to jump back in, or claim the ticket card again." };
+    const confirm = await deliverAgentReply(conv, content, (conv.claimed_by_id && conv.claimed_by_id === authorId ? conv.claimed_by_name : name) || "Team", authorId);
+    return { status: 200, reply: confirm || undefined };
   }
   return { status: 400 };
 }
@@ -486,7 +490,7 @@ discordWebhookRouter.post("/", async (req, res) => {
   try { body = JSON.parse(raw); } catch { return res.status(400).end(); }
   try {
     const out = await handleDiscordRelay(body);
-    res.status(out.status).json({ ok: out.status === 200, reply: out.reply ?? null, response: out.response ?? null });
+    res.status(out.status).json({ ok: out.status === 200, reply: out.reply ?? null, response: out.response ?? null, ignored: out.ignored ?? false });
   } catch (err) {
     console.error("discord relay:", (err as Error).message);
     res.status(200).json({ ok: false, response: { type: 4, data: { content: `Something went wrong: ${(err as Error).message}. Please try again.`, flags: 64, allowed_mentions: { parse: [] } } } });

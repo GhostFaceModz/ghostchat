@@ -1,7 +1,7 @@
 /**
  * Live human takeover. A conversation (site + visitor session) is "bot" by default; it becomes "waiting"
  * when a handoff triggers and "human" once someone replies. While waiting/human the AI stays silent.
- * Owners reply from the dashboard Inbox, their linked Telegram chat, or a Discord thread.
+ * Owners reply from the dashboard Inbox, their linked Telegram chat, or Discord (inbox card + DMs).
  */
 import crypto from "node:crypto";
 import { getDb } from "./supabase.js";
@@ -18,6 +18,8 @@ export type LiveSettings = {
   claim_timeout_min: number;
   /** What happens when nobody joins in time: the AI carries on, or the visitor gets the email form. */
   timeout_fallback: "ai" | "form";
+  /** Minutes of silence (either side) after a claim before the chat auto-closes. */
+  idle_timeout_min: number;
 };
 export type LiveStatus = "waiting" | "human" | "bot" | "closed";
 export type Conversation = {
@@ -28,6 +30,8 @@ export type Conversation = {
   discord_channel_id?: string | null; discord_message_id?: string | null; discord_panel_id?: string | null;
   claimed_by_id?: string | null; claimed_by_name?: string | null; claimed_at?: string | null; waiting_since?: string | null;
   review_pending?: boolean;
+  discord_dm_channel_id?: string | null; discord_dm_header_id?: string | null; discord_dm_kind?: string | null;
+  close_warned_at?: string | null;
 };
 
 export const LIVE_PLANS = new Set(["pro", "business"]);
@@ -43,6 +47,7 @@ export function liveSettings(site: Pick<Site, "live_chat">): LiveSettings {
     agent_name: typeof raw.agent_name === "string" && raw.agent_name.trim() ? raw.agent_name.trim().slice(0, 40) : null,
     claim_timeout_min: Math.min(30, Math.max(1, Math.round(Number(raw.claim_timeout_min) || 5))),
     timeout_fallback: raw.timeout_fallback === "form" ? "form" : "ai",
+    idle_timeout_min: Math.min(120, Math.max(3, Math.round(Number(raw.idle_timeout_min) || 15))),
   };
 }
 
@@ -51,6 +56,39 @@ export function handoffTimedOut(conv: Pick<Conversation, "status" | "waiting_sin
   if (conv.status !== "waiting") return false;
   const since = Date.parse(conv.waiting_since || conv.updated_at);
   return Number.isFinite(since) && now - since > settings.claim_timeout_min * 60_000;
+}
+
+/** Latest activity from either side (or the claim/update time if nobody has spoken yet). */
+export function lastActivityMs(conv: Pick<Conversation, "last_visitor_at" | "last_agent_at" | "claimed_at" | "updated_at" | "created_at">): number {
+  const times = [conv.last_visitor_at, conv.last_agent_at, conv.claimed_at, conv.updated_at, conv.created_at]
+    .map((v) => (v ? Date.parse(v) : NaN))
+    .filter((n) => Number.isFinite(n));
+  return times.length ? Math.max(...times) : 0;
+}
+
+export function idleWarningMin(timeoutMin: number, warningMin = 2): number {
+  return Math.min(Math.max(1, warningMin), Math.max(1, timeoutMin - 1));
+}
+
+/** For a claimed chat: warn, then close, after idle_timeout_min with no messages from either side. */
+export function idleAction(
+  conv: Pick<Conversation, "status" | "last_visitor_at" | "last_agent_at" | "claimed_at" | "updated_at" | "created_at" | "close_warned_at">,
+  settings: Pick<LiveSettings, "idle_timeout_min">,
+  now = Date.now(),
+): "warn" | "close" | null {
+  if (conv.status !== "human") return null;
+  const last = lastActivityMs(conv);
+  if (!last) return null;
+  const idleMin = (now - last) / 60_000;
+  const timeout = settings.idle_timeout_min;
+  const warning = idleWarningMin(timeout, 2);
+  if (idleMin >= timeout) return "close";
+  if (idleMin >= timeout - warning && !conv.close_warned_at) return "warn";
+  return null;
+}
+
+export function isLegacyThreadChat(conv: Pick<Conversation, "discord_thread_id" | "discord_dm_channel_id">): boolean {
+  return Boolean(conv.discord_thread_id && !conv.discord_dm_channel_id);
 }
 
 export function normalizeLiveSettings(input: unknown, current: LiveSettings): LiveSettings {
@@ -64,6 +102,7 @@ export function normalizeLiveSettings(input: unknown, current: LiveSettings): Li
       agent_name: typeof b.agent_name === "string" ? b.agent_name : current.agent_name,
       claim_timeout_min: b.claim_timeout_min ?? current.claim_timeout_min,
       timeout_fallback: b.timeout_fallback ?? current.timeout_fallback,
+      idle_timeout_min: b.idle_timeout_min ?? current.idle_timeout_min,
     },
   } as never);
 }

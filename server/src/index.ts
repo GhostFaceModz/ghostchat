@@ -19,6 +19,7 @@ import { warmupLocalEmbeddings } from "./lib/localEmbeddings.js";
 import { cronRouter } from "./routes/cron.js";
 import { metaWebhookRouter } from "./routes/meta.js";
 import { ticketsRouter } from "./routes/tickets.js";
+import { startIdleSweep } from "./lib/discordInbox.js";
 import { startRecrawlScheduler } from "./lib/recrawl.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -128,6 +129,7 @@ if (!config.supabaseServiceKey && config.nodeEnv === "production") {
 app.listen(config.port, () => {
   console.log(`GhostChat listening on ${config.publicUrl} (port ${config.port})`);
   startRecrawlScheduler();
+  startIdleSweep();
   if (resolveEmbeddingModel().provider === "local") {
     warmupLocalEmbeddings().then(
       () => console.log("Local embeddings model ready (hash/feature-384, 384-d)"),
