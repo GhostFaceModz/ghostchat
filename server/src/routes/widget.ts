@@ -20,7 +20,7 @@ widgetRouter.get("/config/:siteKey", async (req, res) => {
   const { data, error } = await getDb()
     .from("ghostchat_sites")
     .select(
-      "name, url, theme, greeting, starter_questions, proactive_delay_ms, sound_default, show_branding, plan, site_key, booking_url, booking_provider, voice_enabled, greetings, memory_enabled, multilingual, bot_mode, support, live_lookup, max_suggestions, open_site_links, custom_domain",
+      "name, url, theme, greeting, starter_questions, proactive_delay_ms, sound_default, show_branding, plan, site_key, booking_url, booking_provider, voice_enabled, read_aloud_enabled, greetings, memory_enabled, multilingual, bot_mode, support, live_lookup, max_suggestions, open_site_links, custom_domain",
     )
     .eq("site_key", siteKey)
     .maybeSingle();
@@ -40,6 +40,8 @@ widgetRouter.get("/config/:siteKey", async (req, res) => {
       bookingProvider: site.booking_provider || null,
       // Voice mode is a Pro feature (browser speech APIs; the widget falls back gracefully).
       voiceEnabled: Boolean(config.voiceEnabled && site.voice_enabled && site.plan !== "free"),
+      // Per-reply listen button; separate from Pro voice mode (mic + auto-speak). Default on.
+      readAloudEnabled: site.read_aloud_enabled !== false,
       greetings: Array.isArray(site.greetings) ? site.greetings : [],
       memory: site.memory_enabled !== false,
       multilingual: site.multilingual !== false,

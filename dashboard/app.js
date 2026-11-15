@@ -277,6 +277,7 @@ function renderSite() {
   $("#branding-note").textContent = s.plan === "free"
     ? "Free plan always shows the badge. Pro and Business can remove it."
     : "Pro and Business can hide the badge.";
+  if (theme.read_aloud_enabled) theme.read_aloud_enabled.checked = s.read_aloud_enabled !== false;
   if (theme.voice_enabled) theme.voice_enabled.checked = !!s.voice_enabled;
   const booking = $("#booking-form");
   if (booking) booking.booking_url.value = s.booking_url || "";
@@ -479,7 +480,8 @@ $("#theme-form").addEventListener("submit", async (ev) => {
       theme: { mode: fd.get("mode"), primary: fd.get("primary") },
       sound_default: $("#theme-form").sound_default.checked,
       show_branding: $("#theme-form").show_branding.checked,
-      voice_enabled: $("#theme-form").voice_enabled ? $("#theme-form").voice_enabled.checked : false
+      voice_enabled: $("#theme-form").voice_enabled ? $("#theme-form").voice_enabled.checked : false,
+      read_aloud_enabled: $("#theme-form").read_aloud_enabled ? $("#theme-form").read_aloud_enabled.checked : true
     }
   });
   state.site = site;

@@ -62,20 +62,21 @@
     csat: null,
     replies: 0,
     usedVoice: false,
+    readAloud: true,
     tab: "assistant",
     supportUnread: 0
   };
 
   // UI strings for the main languages (the bot itself replies in whatever language the visitor writes).
   var I18N = {
-    en: { ph: "Ask a question…", send: "Send message", checking: "Checking the site…", online: "AI assistant · Online", pb: "Powered by", add: "Add to your website →", err: "I couldn't reply just now. Please try again in a moment.", reach: "I couldn't reach the assistant just now. Please try again.", followTitle: "Want a human to follow up?", followSub: "Leave your email and the team will get back to you.", thanks: "Thanks! The team will follow up by email.", ticket: "Ticket created. The team will reply by email.", sendErr: "Could not send just now.", email: "you@email.com", mem: "This chat remembers your preferences on this device.", forget: "Forget me", memOff: "Memory is off for this chat.", memOn: "Turn on", csatQ: "How did we do?", csatThanks: "Thanks for the feedback!", speak: "Ask by voice", listening: "Listening…", micBlocked: "Voice input isn't available here. You can type instead.", readAloud: "Read replies aloud", min: "Minimise chat", greetClose: "Dismiss", tabAi: "Assistant", tabSupport: "Support", endChat: "End chat with agent", connecting: "Connecting you to a support agent…", joined: "{name} joined", openSupport: "Open Support", stayAi: "Stay with Assistant", cancelWait: "Cancel", dismiss: "Dismiss", backAi: "You're back with the AI assistant.", csatComment: "A comment (optional)", csatSend: "Send review", supportPh: "Message the team…", skipReview: "Skip review", closeSupport: "Close support chat", ended: "This support chat has ended." },
-    es: { ph: "Haz una pregunta…", send: "Enviar mensaje", checking: "Consultando el sitio…", online: "Asistente IA · En línea", pb: "Con la tecnología de", add: "Añádelo a tu web →", err: "No he podido responder ahora. Inténtalo de nuevo en un momento.", reach: "No he podido conectar con el asistente. Inténtalo de nuevo.", followTitle: "¿Quieres que una persona te responda?", followSub: "Deja tu correo y el equipo se pondrá en contacto.", thanks: "¡Gracias! El equipo te escribirá por correo.", ticket: "Ticket creado. El equipo te responderá por correo.", sendErr: "No se pudo enviar ahora.", email: "tu@correo.com", mem: "Este chat recuerda tus preferencias en este dispositivo.", forget: "Olvidarme", memOff: "La memoria está desactivada.", memOn: "Activar", csatQ: "¿Qué tal te hemos ayudado?", csatThanks: "¡Gracias por tu opinión!", speak: "Preguntar por voz", listening: "Escuchando…", micBlocked: "La voz no está disponible aquí. Puedes escribir.", readAloud: "Leer respuestas en voz alta", min: "Minimizar chat", greetClose: "Cerrar", tabAi: "Asistente", tabSupport: "Soporte", endChat: "Terminar chat con el agente", connecting: "Conectándote con un agente de soporte…", joined: "{name} se unió", openSupport: "Abrir Soporte", stayAi: "Seguir con el Asistente", cancelWait: "Cancelar", dismiss: "Cerrar", backAi: "Has vuelto con el asistente de IA.", csatComment: "Un comentario (opcional)", csatSend: "Enviar reseña", supportPh: "Escribe al equipo…", skipReview: "Omitir reseña", closeSupport: "Cerrar chat de soporte", ended: "Este chat de soporte ha terminado." },
-    fr: { ph: "Posez une question…", send: "Envoyer", checking: "Je consulte le site…", online: "Assistant IA · En ligne", pb: "Propulsé par", add: "Ajoutez-le à votre site →", err: "Je n'ai pas pu répondre. Réessayez dans un instant.", reach: "Impossible de joindre l'assistant. Réessayez.", followTitle: "Besoin qu'une personne vous recontacte ?", followSub: "Laissez votre e-mail et l'équipe vous répondra.", thanks: "Merci ! L'équipe vous répondra par e-mail.", ticket: "Ticket créé. L'équipe vous répondra par e-mail.", sendErr: "Envoi impossible pour le moment.", email: "vous@email.com", mem: "Ce chat mémorise vos préférences sur cet appareil.", forget: "M'oublier", memOff: "La mémoire est désactivée.", memOn: "Activer", csatQ: "Comment avons-nous fait ?", csatThanks: "Merci pour votre avis !", speak: "Poser par la voix", listening: "J'écoute…", micBlocked: "La saisie vocale n'est pas disponible ici.", readAloud: "Lire les réponses", min: "Réduire le chat", greetClose: "Fermer", tabAi: "Assistant", tabSupport: "Support", endChat: "Terminer le chat avec l'agent", connecting: "Connexion à un agent du support…", joined: "{name} a rejoint", openSupport: "Ouvrir le Support", stayAi: "Rester avec l'Assistant", cancelWait: "Annuler", dismiss: "Fermer", backAi: "Vous êtes de retour avec l'assistant IA.", csatComment: "Un commentaire (facultatif)", csatSend: "Envoyer l'avis", supportPh: "Écrire à l'équipe…", skipReview: "Passer l'avis", closeSupport: "Fermer le chat support", ended: "Ce chat de support est terminé." },
-    de: { ph: "Stell eine Frage…", send: "Senden", checking: "Ich sehe auf der Website nach…", online: "KI-Assistent · Online", pb: "Bereitgestellt von", add: "Auf deiner Website einbauen →", err: "Ich konnte gerade nicht antworten. Bitte versuch es gleich noch einmal.", reach: "Der Assistent ist gerade nicht erreichbar.", followTitle: "Soll sich jemand bei dir melden?", followSub: "Hinterlass deine E-Mail, das Team meldet sich.", thanks: "Danke! Das Team meldet sich per E-Mail.", ticket: "Ticket erstellt. Das Team antwortet per E-Mail.", sendErr: "Senden gerade nicht möglich.", email: "du@email.de", mem: "Dieser Chat merkt sich deine Vorlieben auf diesem Gerät.", forget: "Vergessen", memOff: "Gedächtnis ist aus.", memOn: "Einschalten", csatQ: "Wie war die Hilfe?", csatThanks: "Danke für dein Feedback!", speak: "Per Sprache fragen", listening: "Ich höre zu…", micBlocked: "Spracheingabe ist hier nicht verfügbar.", readAloud: "Antworten vorlesen", min: "Chat minimieren", greetClose: "Schließen", tabAi: "Assistent", tabSupport: "Support", endChat: "Chat mit dem Agenten beenden", connecting: "Du wirst mit einem Support-Agenten verbunden…", joined: "{name} ist beigetreten", openSupport: "Support öffnen", stayAi: "Beim Assistenten bleiben", cancelWait: "Abbrechen", dismiss: "Schließen", backAi: "Du bist wieder beim KI-Assistenten.", csatComment: "Kommentar (optional)", csatSend: "Bewertung senden", supportPh: "Nachricht an das Team…", skipReview: "Bewertung überspringen", closeSupport: "Support-Chat schließen", ended: "Dieser Support-Chat ist beendet." },
-    pt: { ph: "Faça uma pergunta…", send: "Enviar", checking: "A consultar o site…", online: "Assistente IA · Online", pb: "Com tecnologia", add: "Adicione ao seu site →", err: "Não consegui responder agora. Tente novamente.", reach: "Não consegui contactar o assistente.", followTitle: "Quer que alguém da equipa responda?", followSub: "Deixe o seu e-mail e a equipa entra em contacto.", thanks: "Obrigado! A equipa responde por e-mail.", ticket: "Pedido criado. A equipa responde por e-mail.", sendErr: "Não foi possível enviar agora.", email: "voce@email.com", mem: "Este chat lembra as suas preferências neste dispositivo.", forget: "Esquecer-me", memOff: "A memória está desligada.", memOn: "Ligar", csatQ: "Como foi a ajuda?", csatThanks: "Obrigado pelo feedback!", speak: "Perguntar por voz", listening: "A ouvir…", micBlocked: "A voz não está disponível aqui.", readAloud: "Ler respostas em voz alta", min: "Minimizar chat", greetClose: "Fechar", tabAi: "Assistente", tabSupport: "Suporte", endChat: "Terminar conversa com o agente", connecting: "A ligá-lo a um agente de suporte…", joined: "{name} entrou", openSupport: "Abrir Suporte", stayAi: "Ficar com o Assistente", cancelWait: "Cancelar", dismiss: "Fechar", backAi: "Está de volta com o assistente de IA.", csatComment: "Um comentário (opcional)", csatSend: "Enviar avaliação", supportPh: "Escrever à equipa…", skipReview: "Saltar avaliação", closeSupport: "Fechar chat de suporte", ended: "Este chat de suporte terminou." },
-    it: { ph: "Fai una domanda…", send: "Invia", checking: "Controllo il sito…", online: "Assistente IA · Online", pb: "Realizzato con", add: "Aggiungilo al tuo sito →", err: "Non riesco a rispondere ora. Riprova tra poco.", reach: "Non riesco a contattare l'assistente.", followTitle: "Vuoi che qualcuno ti ricontatti?", followSub: "Lascia la tua email e il team ti risponderà.", thanks: "Grazie! Il team ti scriverà via email.", ticket: "Ticket creato. Il team risponderà via email.", sendErr: "Invio non riuscito.", email: "tu@email.it", mem: "Questa chat ricorda le tue preferenze su questo dispositivo.", forget: "Dimenticami", memOff: "La memoria è disattivata.", memOn: "Attiva", csatQ: "Com'è andata?", csatThanks: "Grazie per il feedback!", speak: "Chiedi a voce", listening: "Ti ascolto…", micBlocked: "L'input vocale non è disponibile qui.", readAloud: "Leggi le risposte", min: "Riduci chat", greetClose: "Chiudi", tabAi: "Assistente", tabSupport: "Supporto", endChat: "Termina chat con l'agente", connecting: "Ti stiamo collegando a un agente di supporto…", joined: "{name} è entrato", openSupport: "Apri Supporto", stayAi: "Resta con l'Assistente", cancelWait: "Annulla", dismiss: "Chiudi", backAi: "Sei di nuovo con l'assistente IA.", csatComment: "Un commento (facoltativo)", csatSend: "Invia recensione", supportPh: "Scrivi al team…", skipReview: "Salta recensione", closeSupport: "Chiudi chat di supporto", ended: "Questa chat di supporto è terminata." },
-    nl: { ph: "Stel een vraag…", send: "Versturen", checking: "Ik kijk op de site…", online: "AI-assistent · Online", pb: "Mogelijk gemaakt door", add: "Zet het op je site →", err: "Ik kon nu niet antwoorden. Probeer het zo opnieuw.", reach: "De assistent is nu niet bereikbaar.", followTitle: "Wil je dat iemand contact opneemt?", followSub: "Laat je e-mail achter, het team neemt contact op.", thanks: "Bedankt! Het team mailt je.", ticket: "Ticket aangemaakt. Het team mailt je.", sendErr: "Versturen lukt nu niet.", email: "jij@email.nl", mem: "Deze chat onthoudt je voorkeuren op dit apparaat.", forget: "Vergeet mij", memOff: "Geheugen staat uit.", memOn: "Aanzetten", csatQ: "Hoe hebben we geholpen?", csatThanks: "Bedankt voor je feedback!", speak: "Vraag met je stem", listening: "Ik luister…", micBlocked: "Spraakinvoer is hier niet beschikbaar.", readAloud: "Antwoorden voorlezen", min: "Chat minimaliseren", greetClose: "Sluiten", tabAi: "Assistent", tabSupport: "Support", endChat: "Chat met medewerker beëindigen", connecting: "Je wordt verbonden met een supportmedewerker…", joined: "{name} is toegetreden", openSupport: "Support openen", stayAi: "Bij de Assistent blijven", cancelWait: "Annuleren", dismiss: "Sluiten", backAi: "Je bent terug bij de AI-assistent.", csatComment: "Een opmerking (optioneel)", csatSend: "Beoordeling versturen", supportPh: "Bericht aan het team…", skipReview: "Beoordeling overslaan", closeSupport: "Supportchat sluiten", ended: "Deze supportchat is beëindigd." },
-    pl: { ph: "Zadaj pytanie…", send: "Wyślij", checking: "Sprawdzam stronę…", online: "Asystent AI · Online", pb: "Napędzane przez", add: "Dodaj na swoją stronę →", err: "Nie mogę teraz odpowiedzieć. Spróbuj za chwilę.", reach: "Nie mogę połączyć się z asystentem.", followTitle: "Chcesz, żeby ktoś się odezwał?", followSub: "Zostaw e-mail, a zespół się odezwie.", thanks: "Dzięki! Zespół odpisze e-mailem.", ticket: "Zgłoszenie utworzone. Zespół odpisze e-mailem.", sendErr: "Nie udało się wysłać.", email: "ty@email.pl", mem: "Ten czat pamięta twoje preferencje na tym urządzeniu.", forget: "Zapomnij mnie", memOff: "Pamięć jest wyłączona.", memOn: "Włącz", csatQ: "Jak nam poszło?", csatThanks: "Dzięki za opinię!", speak: "Zapytaj głosem", listening: "Słucham…", micBlocked: "Głos nie jest tu dostępny.", readAloud: "Czytaj odpowiedzi", min: "Zminimalizuj czat", greetClose: "Zamknij", tabAi: "Asystent", tabSupport: "Wsparcie", endChat: "Zakończ czat z agentem", connecting: "Łączymy cię z agentem wsparcia…", joined: "{name} dołączył", openSupport: "Otwórz Wsparcie", stayAi: "Zostań z Asystentem", cancelWait: "Anuluj", dismiss: "Zamknij", backAi: "Jesteś z powrotem z asystentem AI.", csatComment: "Komentarz (opcjonalnie)", csatSend: "Wyślij opinię", supportPh: "Napisz do zespołu…", skipReview: "Pomiń opinię", closeSupport: "Zamknij czat wsparcia", ended: "Ten czat wsparcia został zakończony." }
+    en: { ph: "Ask a question…", send: "Send message", checking: "Checking the site…", online: "AI assistant · Online", pb: "Powered by", add: "Add to your website →", err: "I couldn't reply just now. Please try again in a moment.", reach: "I couldn't reach the assistant just now. Please try again.", followTitle: "Want a human to follow up?", followSub: "Leave your email and the team will get back to you.", thanks: "Thanks! The team will follow up by email.", ticket: "Ticket created. The team will reply by email.", sendErr: "Could not send just now.", email: "you@email.com", mem: "This chat remembers your preferences on this device.", forget: "Forget me", memOff: "Memory is off for this chat.", memOn: "Turn on", csatQ: "How did we do?", csatThanks: "Thanks for the feedback!", speak: "Ask by voice", listening: "Listening…", micBlocked: "Voice input isn't available here. You can type instead.", readAloud: "Read replies aloud", listen: "Listen", stopReading: "Stop reading", min: "Minimise chat", greetClose: "Dismiss", tabAi: "Assistant", tabSupport: "Support", endChat: "End chat with agent", connecting: "Connecting you to a support agent…", joined: "{name} joined", openSupport: "Open Support", stayAi: "Stay with Assistant", cancelWait: "Cancel", dismiss: "Dismiss", backAi: "You're back with the AI assistant.", csatComment: "A comment (optional)", csatSend: "Send review", supportPh: "Message the team…", skipReview: "Skip review", closeSupport: "Close support chat", ended: "This support chat has ended." },
+    es: { ph: "Haz una pregunta…", send: "Enviar mensaje", checking: "Consultando el sitio…", online: "Asistente IA · En línea", pb: "Con la tecnología de", add: "Añádelo a tu web →", err: "No he podido responder ahora. Inténtalo de nuevo en un momento.", reach: "No he podido conectar con el asistente. Inténtalo de nuevo.", followTitle: "¿Quieres que una persona te responda?", followSub: "Deja tu correo y el equipo se pondrá en contacto.", thanks: "¡Gracias! El equipo te escribirá por correo.", ticket: "Ticket creado. El equipo te responderá por correo.", sendErr: "No se pudo enviar ahora.", email: "tu@correo.com", mem: "Este chat recuerda tus preferencias en este dispositivo.", forget: "Olvidarme", memOff: "La memoria está desactivada.", memOn: "Activar", csatQ: "¿Qué tal te hemos ayudado?", csatThanks: "¡Gracias por tu opinión!", speak: "Preguntar por voz", listening: "Escuchando…", micBlocked: "La voz no está disponible aquí. Puedes escribir.", readAloud: "Leer respuestas en voz alta", listen: "Escuchar", stopReading: "Dejar de leer", min: "Minimizar chat", greetClose: "Cerrar", tabAi: "Asistente", tabSupport: "Soporte", endChat: "Terminar chat con el agente", connecting: "Conectándote con un agente de soporte…", joined: "{name} se unió", openSupport: "Abrir Soporte", stayAi: "Seguir con el Asistente", cancelWait: "Cancelar", dismiss: "Cerrar", backAi: "Has vuelto con el asistente de IA.", csatComment: "Un comentario (opcional)", csatSend: "Enviar reseña", supportPh: "Escribe al equipo…", skipReview: "Omitir reseña", closeSupport: "Cerrar chat de soporte", ended: "Este chat de soporte ha terminado." },
+    fr: { ph: "Posez une question…", send: "Envoyer", checking: "Je consulte le site…", online: "Assistant IA · En ligne", pb: "Propulsé par", add: "Ajoutez-le à votre site →", err: "Je n'ai pas pu répondre. Réessayez dans un instant.", reach: "Impossible de joindre l'assistant. Réessayez.", followTitle: "Besoin qu'une personne vous recontacte ?", followSub: "Laissez votre e-mail et l'équipe vous répondra.", thanks: "Merci ! L'équipe vous répondra par e-mail.", ticket: "Ticket créé. L'équipe vous répondra par e-mail.", sendErr: "Envoi impossible pour le moment.", email: "vous@email.com", mem: "Ce chat mémorise vos préférences sur cet appareil.", forget: "M'oublier", memOff: "La mémoire est désactivée.", memOn: "Activer", csatQ: "Comment avons-nous fait ?", csatThanks: "Merci pour votre avis !", speak: "Poser par la voix", listening: "J'écoute…", micBlocked: "La saisie vocale n'est pas disponible ici.", readAloud: "Lire les réponses", listen: "Écouter", stopReading: "Arrêter la lecture", min: "Réduire le chat", greetClose: "Fermer", tabAi: "Assistant", tabSupport: "Support", endChat: "Terminer le chat avec l'agent", connecting: "Connexion à un agent du support…", joined: "{name} a rejoint", openSupport: "Ouvrir le Support", stayAi: "Rester avec l'Assistant", cancelWait: "Annuler", dismiss: "Fermer", backAi: "Vous êtes de retour avec l'assistant IA.", csatComment: "Un commentaire (facultatif)", csatSend: "Envoyer l'avis", supportPh: "Écrire à l'équipe…", skipReview: "Passer l'avis", closeSupport: "Fermer le chat support", ended: "Ce chat de support est terminé." },
+    de: { ph: "Stell eine Frage…", send: "Senden", checking: "Ich sehe auf der Website nach…", online: "KI-Assistent · Online", pb: "Bereitgestellt von", add: "Auf deiner Website einbauen →", err: "Ich konnte gerade nicht antworten. Bitte versuch es gleich noch einmal.", reach: "Der Assistent ist gerade nicht erreichbar.", followTitle: "Soll sich jemand bei dir melden?", followSub: "Hinterlass deine E-Mail, das Team meldet sich.", thanks: "Danke! Das Team meldet sich per E-Mail.", ticket: "Ticket erstellt. Das Team antwortet per E-Mail.", sendErr: "Senden gerade nicht möglich.", email: "du@email.de", mem: "Dieser Chat merkt sich deine Vorlieben auf diesem Gerät.", forget: "Vergessen", memOff: "Gedächtnis ist aus.", memOn: "Einschalten", csatQ: "Wie war die Hilfe?", csatThanks: "Danke für dein Feedback!", speak: "Per Sprache fragen", listening: "Ich höre zu…", micBlocked: "Spracheingabe ist hier nicht verfügbar.", readAloud: "Antworten vorlesen", listen: "Anhören", stopReading: "Vorlesen beenden", min: "Chat minimieren", greetClose: "Schließen", tabAi: "Assistent", tabSupport: "Support", endChat: "Chat mit dem Agenten beenden", connecting: "Du wirst mit einem Support-Agenten verbunden…", joined: "{name} ist beigetreten", openSupport: "Support öffnen", stayAi: "Beim Assistenten bleiben", cancelWait: "Abbrechen", dismiss: "Schließen", backAi: "Du bist wieder beim KI-Assistenten.", csatComment: "Kommentar (optional)", csatSend: "Bewertung senden", supportPh: "Nachricht an das Team…", skipReview: "Bewertung überspringen", closeSupport: "Support-Chat schließen", ended: "Dieser Support-Chat ist beendet." },
+    pt: { ph: "Faça uma pergunta…", send: "Enviar", checking: "A consultar o site…", online: "Assistente IA · Online", pb: "Com tecnologia", add: "Adicione ao seu site →", err: "Não consegui responder agora. Tente novamente.", reach: "Não consegui contactar o assistente.", followTitle: "Quer que alguém da equipa responda?", followSub: "Deixe o seu e-mail e a equipa entra em contacto.", thanks: "Obrigado! A equipa responde por e-mail.", ticket: "Pedido criado. A equipa responde por e-mail.", sendErr: "Não foi possível enviar agora.", email: "voce@email.com", mem: "Este chat lembra as suas preferências neste dispositivo.", forget: "Esquecer-me", memOff: "A memória está desligada.", memOn: "Ligar", csatQ: "Como foi a ajuda?", csatThanks: "Obrigado pelo feedback!", speak: "Perguntar por voz", listening: "A ouvir…", micBlocked: "A voz não está disponível aqui.", readAloud: "Ler respostas em voz alta", listen: "Ouvir", stopReading: "Parar de ler", min: "Minimizar chat", greetClose: "Fechar", tabAi: "Assistente", tabSupport: "Suporte", endChat: "Terminar conversa com o agente", connecting: "A ligá-lo a um agente de suporte…", joined: "{name} entrou", openSupport: "Abrir Suporte", stayAi: "Ficar com o Assistente", cancelWait: "Cancelar", dismiss: "Fechar", backAi: "Está de volta com o assistente de IA.", csatComment: "Um comentário (opcional)", csatSend: "Enviar avaliação", supportPh: "Escrever à equipa…", skipReview: "Saltar avaliação", closeSupport: "Fechar chat de suporte", ended: "Este chat de suporte terminou." },
+    it: { ph: "Fai una domanda…", send: "Invia", checking: "Controllo il sito…", online: "Assistente IA · Online", pb: "Realizzato con", add: "Aggiungilo al tuo sito →", err: "Non riesco a rispondere ora. Riprova tra poco.", reach: "Non riesco a contattare l'assistente.", followTitle: "Vuoi che qualcuno ti ricontatti?", followSub: "Lascia la tua email e il team ti risponderà.", thanks: "Grazie! Il team ti scriverà via email.", ticket: "Ticket creato. Il team risponderà via email.", sendErr: "Invio non riuscito.", email: "tu@email.it", mem: "Questa chat ricorda le tue preferenze su questo dispositivo.", forget: "Dimenticami", memOff: "La memoria è disattivata.", memOn: "Attiva", csatQ: "Com'è andata?", csatThanks: "Grazie per il feedback!", speak: "Chiedi a voce", listening: "Ti ascolto…", micBlocked: "L'input vocale non è disponibile qui.", readAloud: "Leggi le risposte", listen: "Ascolta", stopReading: "Interrompi lettura", min: "Riduci chat", greetClose: "Chiudi", tabAi: "Assistente", tabSupport: "Supporto", endChat: "Termina chat con l'agente", connecting: "Ti stiamo collegando a un agente di supporto…", joined: "{name} è entrato", openSupport: "Apri Supporto", stayAi: "Resta con l'Assistente", cancelWait: "Annulla", dismiss: "Chiudi", backAi: "Sei di nuovo con l'assistente IA.", csatComment: "Un commento (facoltativo)", csatSend: "Invia recensione", supportPh: "Scrivi al team…", skipReview: "Salta recensione", closeSupport: "Chiudi chat di supporto", ended: "Questa chat di supporto è terminata." },
+    nl: { ph: "Stel een vraag…", send: "Versturen", checking: "Ik kijk op de site…", online: "AI-assistent · Online", pb: "Mogelijk gemaakt door", add: "Zet het op je site →", err: "Ik kon nu niet antwoorden. Probeer het zo opnieuw.", reach: "De assistent is nu niet bereikbaar.", followTitle: "Wil je dat iemand contact opneemt?", followSub: "Laat je e-mail achter, het team neemt contact op.", thanks: "Bedankt! Het team mailt je.", ticket: "Ticket aangemaakt. Het team mailt je.", sendErr: "Versturen lukt nu niet.", email: "jij@email.nl", mem: "Deze chat onthoudt je voorkeuren op dit apparaat.", forget: "Vergeet mij", memOff: "Geheugen staat uit.", memOn: "Aanzetten", csatQ: "Hoe hebben we geholpen?", csatThanks: "Bedankt voor je feedback!", speak: "Vraag met je stem", listening: "Ik luister…", micBlocked: "Spraakinvoer is hier niet beschikbaar.", readAloud: "Antwoorden voorlezen", listen: "Beluisteren", stopReading: "Stoppen met voorlezen", min: "Chat minimaliseren", greetClose: "Sluiten", tabAi: "Assistent", tabSupport: "Support", endChat: "Chat met medewerker beëindigen", connecting: "Je wordt verbonden met een supportmedewerker…", joined: "{name} is toegetreden", openSupport: "Support openen", stayAi: "Bij de Assistent blijven", cancelWait: "Annuleren", dismiss: "Sluiten", backAi: "Je bent terug bij de AI-assistent.", csatComment: "Een opmerking (optioneel)", csatSend: "Beoordeling versturen", supportPh: "Bericht aan het team…", skipReview: "Beoordeling overslaan", closeSupport: "Supportchat sluiten", ended: "Deze supportchat is beëindigd." },
+    pl: { ph: "Zadaj pytanie…", send: "Wyślij", checking: "Sprawdzam stronę…", online: "Asystent AI · Online", pb: "Napędzane przez", add: "Dodaj na swoją stronę →", err: "Nie mogę teraz odpowiedzieć. Spróbuj za chwilę.", reach: "Nie mogę połączyć się z asystentem.", followTitle: "Chcesz, żeby ktoś się odezwał?", followSub: "Zostaw e-mail, a zespół się odezwie.", thanks: "Dzięki! Zespół odpisze e-mailem.", ticket: "Zgłoszenie utworzone. Zespół odpisze e-mailem.", sendErr: "Nie udało się wysłać.", email: "ty@email.pl", mem: "Ten czat pamięta twoje preferencje na tym urządzeniu.", forget: "Zapomnij mnie", memOff: "Pamięć jest wyłączona.", memOn: "Włącz", csatQ: "Jak nam poszło?", csatThanks: "Dzięki za opinię!", speak: "Zapytaj głosem", listening: "Słucham…", micBlocked: "Głos nie jest tu dostępny.", readAloud: "Czytaj odpowiedzi", listen: "Posłuchaj", stopReading: "Zatrzymaj czytanie", min: "Zminimalizuj czat", greetClose: "Zamknij", tabAi: "Asystent", tabSupport: "Wsparcie", endChat: "Zakończ czat z agentem", connecting: "Łączymy cię z agentem wsparcia…", joined: "{name} dołączył", openSupport: "Otwórz Wsparcie", stayAi: "Zostań z Asystentem", cancelWait: "Anuluj", dismiss: "Zamknij", backAi: "Jesteś z powrotem z asystentem AI.", csatComment: "Komentarz (opcjonalnie)", csatSend: "Wyślij opinię", supportPh: "Napisz do zespołu…", skipReview: "Pomiń opinię", closeSupport: "Zamknij czat wsparcia", ended: "Ten czat wsparcia został zakończony." }
   };
   function pickLang() {
     var langs = [];
@@ -299,6 +300,10 @@
     ".gc-fb button:hover { opacity: 1; background: var(--gc-line); }",
     ".gc-fb button:active { transform: scale(.88); }",
     ".gc-fb button.on { color: var(--gc-primary); opacity: 1; }",
+    ".gc-fb button.gc-speaking { color: var(--gc-primary); opacity: 1; }",
+    ".gc-fb button.gc-speaking svg .gc-wave { animation: gc-speak-wave 1s ease-in-out infinite; }",
+    ".gc-fb button.gc-speaking svg .gc-wave-2 { animation-delay: .2s; }",
+    "@keyframes gc-speak-wave { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }",
     ".gc-cards { display: flex; flex-direction: column; gap: 8px; width: 100%; }",
     ".gc-card { width: 100%; border: 1px solid var(--gc-line); border-radius: 16px; padding: 10px; background: var(--gc-bubble); display: flex; gap: 10px; align-items: flex-start; }",
     ".gc-card img { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; }",
@@ -412,7 +417,7 @@
     down: icon('<path d="M16.5 13.5v-9H19a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-2.5Zm0 0-3.6 6.3a1.6 1.6 0 0 1-2.9-1.2l.8-3.6H5.9a2 2 0 0 1-2-2.4l1.3-6a2 2 0 0 1 2-1.6h9.3"/>'),
     copy: icon('<rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/>'),
     check: icon('<path d="m5 12.5 4.5 4.5L19 7.5"/>'),
-    speaker: icon('<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>'),
+    speaker: icon('<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z"/><path class="gc-wave gc-wave-1" d="M15.5 9a4 4 0 0 1 0 6"/><path class="gc-wave gc-wave-2" d="M18 6.5a7.5 7.5 0 0 1 0 11"/>'),
     sound: icon('<path d="M6 16.5V8l11-2.5v8.5"/><circle cx="4.5" cy="16.5" r="2"/><circle cx="15.5" cy="14" r="2"/>'),
     person: icon('<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>')
   };
@@ -825,17 +830,191 @@
     if (wrap.childNodes.length) row.appendChild(wrap);
   }
 
+  // Read-aloud uses the browser Web Speech API with a smart natural-voice pick
+  // (Google UK English, Microsoft Online Natural, Siri / quality Apple voices).
+  // Piper or Kokoro-82M were considered but not shipped: Piper would strain the
+  // free Render memory limit, and Kokoro is an 80MB+ first-click download that
+  // would break the dependency-free widget and be slow on mobile. Web Speech is
+  // instant, free, works offline on device voices, and is already a user gesture
+  // from the button, which mobile browsers require.
+  function cleanSpeechText(text) {
+    var s = String(text || "");
+    s = s.replace(/```[\s\S]*?```/g, " ");
+    s = s.replace(/`([^`]+)`/g, "$1");
+    s = s.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
+    s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+    s = s.replace(/https?:\/\/[^\s)<]+/g, " ");
+    s = s.replace(/\bwww\.[^\s)<]+/g, " ");
+    s = s.replace(/^#{1,6}\s+/gm, "");
+    s = s.replace(/(\*\*|__)(.*?)\1/g, "$2");
+    s = s.replace(/(\*|_)(.*?)\1/g, "$2");
+    s = s.replace(/^>\s?/gm, "");
+    s = s.replace(/^\s*[-*+]\s+/gm, "");
+    s = s.replace(/^\s*\d+\.\s+/gm, "");
+    s = s.replace(/<[^>]+>/g, " ");
+    try { s = s.replace(/\p{Extended_Pictographic}/gu, ""); } catch (e) {
+      s = s.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "");
+    }
+    s = s.replace(/[\uFE00-\uFE0F\u200D\u20E3]/g, "");
+    s = s.replace(/[#*_~`]+/g, " ");
+    return s.replace(/\s+/g, " ").trim();
+  }
+  function normalizeSpeechLang(code) {
+    var c = String(code || "en-GB").trim();
+    var map = { en: "en-GB", es: "es-ES", fr: "fr-FR", de: "de-DE", pt: "pt-BR", it: "it-IT", nl: "nl-NL", pl: "pl-PL", ja: "ja-JP", ko: "ko-KR", zh: "zh-CN", ar: "ar-SA", ru: "ru-RU" };
+    if (/^[a-z]{2}-[a-z]{2}$/i.test(c)) return c.slice(0, 2).toLowerCase() + "-" + c.slice(3).toUpperCase();
+    var base = c.toLowerCase().split(/[-_]/)[0];
+    return map[base] || (base ? base : "en-GB");
+  }
+  function detectSpeechLang(text, fallback) {
+    var s = String(text || "");
+    if (/[\u0400-\u04FF]/.test(s)) return "ru-RU";
+    if (/[\u0600-\u06FF]/.test(s)) return "ar-SA";
+    if (/[\u3040-\u30FF]/.test(s)) return "ja-JP";
+    if (/[\uAC00-\uD7AF]/.test(s)) return "ko-KR";
+    if (/[\u4E00-\u9FFF]/.test(s)) return "zh-CN";
+    var hints = [
+      ["pl-PL", /\b(się|jestem|proszę|dziękuję|możesz|właśnie|także|który|również)\b/gi],
+      ["nl-NL", /\b(niet|dankjewel|alsjeblieft|graag|tussen|worden|natuurlijk|misschien)\b/gi],
+      ["de-DE", /\b(nicht|danke|können|zwischen|vielleicht|würden|eine|auch)\b/gi],
+      ["it-IT", /\b(grazie|perché|ciao|allora|questo|abbiamo|vuoi|però)\b/gi],
+      ["pt-BR", /\b(você|obrigado|estão|também|isso|não|filme)\b/gi],
+      ["es-ES", /\b(está|también|película|gracias|qué|cómo|aquí|años)\b/gi],
+      ["fr-FR", /\b(vous|merci|avec|dans|est-ce|très|bonjour|une)\b/gi]
+    ];
+    var best = "", score = 0;
+    for (var i = 0; i < hints.length; i++) {
+      var m = s.match(hints[i][1]);
+      var n = m ? m.length : 0;
+      if (n > score) { score = n; best = hints[i][0]; }
+    }
+    if (score >= 1) return best;
+    return normalizeSpeechLang(fallback || "en-GB");
+  }
+  function scoreSpeechVoice(voice, lang) {
+    if (!voice) return -100;
+    var name = String(voice.name || "");
+    var vlang = String(voice.lang || "");
+    var want = normalizeSpeechLang(lang || "en-GB");
+    var wantBase = want.slice(0, 2).toLowerCase();
+    var haveBase = vlang.slice(0, 2).toLowerCase();
+    var score = 0;
+    if (vlang.toLowerCase() === want.toLowerCase()) score += 50;
+    else if (haveBase === wantBase) score += 28;
+    else score -= 20;
+    if (/Google UK English/i.test(name)) score += 50;
+    else if (/Google/i.test(name)) score += 28;
+    if (/Microsoft .*\bOnline \(Natural\)/i.test(name)) score += 40;
+    else if (/\bNatural\b/i.test(name)) score += 20;
+    if (/Siri/i.test(name)) score += 36;
+    if (/^(Samantha|Daniel|Moira|Karen|Tessa|Serena|Martha|Kate|Arthur|Allison|Ava|Nicky|Gordon|Rishi|Fiona|Veena|Zoe|Kyoko|Mei-Jia|Ting-Ting|Sin-Ji)\b/i.test(name)) score += 30;
+    if (/\b(Premium|Enhanced|Neural|Wavenet)\b/i.test(name)) score += 12;
+    if (voice.localService === false) score += 6;
+    if (wantBase === "en" && /en-GB/i.test(vlang)) score += 8;
+    if (/\b(compact|eloquence|eSpeak|Fred|Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Good News|Jester|Organ|Pipe|Trinoids|Whisper|Zarvox|Kathy|Junior|Princess|Ralph|Dummy)\b/i.test(name)) score -= 50;
+    return score;
+  }
+  function pickSpeechVoice(voices, lang) {
+    var list = voices || [];
+    var best = null, bestScore = -1;
+    for (var i = 0; i < list.length; i++) {
+      var s = scoreSpeechVoice(list[i], lang);
+      if (s > bestScore) { bestScore = s; best = list[i]; }
+    }
+    return best;
+  }
+  function splitSpeechChunks(text, max) {
+    var remaining = String(text || "").trim();
+    var size = max || 220;
+    var parts = [];
+    while (remaining.length > size) {
+      var slice = remaining.slice(0, size);
+      var cut = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("? "), slice.lastIndexOf("! "), slice.lastIndexOf("; "), slice.lastIndexOf(", "));
+      if (cut < 40) cut = slice.lastIndexOf(" ");
+      if (cut < 20) cut = size;
+      else cut += 1;
+      parts.push(remaining.slice(0, cut).trim());
+      remaining = remaining.slice(cut).trim();
+    }
+    if (remaining) parts.push(remaining);
+    return parts;
+  }
+  function fallbackSpeechLang() {
+    return normalizeSpeechLang(state.speechLang || (state.multilingual ? (navigator.language || "en-GB") : (document.documentElement.lang || "en-GB")));
+  }
+  function canSpeak() {
+    return !!(state.readAloud && typeof window !== "undefined" && window.speechSynthesis);
+  }
+  var speakQueue = [];
+  var speakTimer = null;
+  var speakingBtn = null;
+  function clearSpeakUi(btn) {
+    if (!btn) return;
+    btn.classList.remove("gc-speaking");
+    btn.setAttribute("aria-pressed", "false");
+    btn.setAttribute("title", t("listen"));
+    btn.setAttribute("aria-label", t("listen"));
+  }
+  function stopSpeak() {
+    speakQueue = [];
+    if (speakTimer) { clearInterval(speakTimer); speakTimer = null; }
+    try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
+    clearSpeakUi(speakingBtn);
+    speakingBtn = null;
+  }
+  function watchSpeak() {
+    if (speakTimer) clearInterval(speakTimer);
+    // Chrome cuts off utterances around 15s; Safari can stall. Nudge both.
+    speakTimer = setInterval(function () {
+      if (!window.speechSynthesis || !(speechSynthesis.speaking || speechSynthesis.pending)) {
+        clearInterval(speakTimer); speakTimer = null; return;
+      }
+      try { speechSynthesis.pause(); speechSynthesis.resume(); } catch (e) {}
+    }, 8000);
+  }
+  function speakNextChunk() {
+    if (!speakQueue.length) {
+      if (speakTimer) { clearInterval(speakTimer); speakTimer = null; }
+      clearSpeakUi(speakingBtn);
+      speakingBtn = null;
+      return;
+    }
+    var chunk = speakQueue.shift();
+    var u = new SpeechSynthesisUtterance(chunk.text);
+    u.rate = 1.02;
+    u.lang = chunk.lang;
+    if (chunk.voice) u.voice = chunk.voice;
+    u.onend = function () { speakNextChunk(); };
+    u.onerror = function () { stopSpeak(); };
+    try { window.speechSynthesis.speak(u); watchSpeak(); } catch (e) { stopSpeak(); }
+  }
+  function startSpeak(text, btn) {
+    if (!window.speechSynthesis) return;
+    var clean = cleanSpeechText(text);
+    if (!clean) return;
+    if (speakingBtn === btn && (speechSynthesis.speaking || speechSynthesis.pending)) {
+      stopSpeak();
+      return;
+    }
+    stopSpeak();
+    var lang = detectSpeechLang(clean, fallbackSpeechLang());
+    var voices = [];
+    try { voices = window.speechSynthesis.getVoices() || []; } catch (e) {}
+    var voice = pickSpeechVoice(voices, lang);
+    var chunks = splitSpeechChunks(clean, 220);
+    speakQueue = chunks.map(function (part) { return { text: part, lang: lang, voice: voice }; });
+    speakingBtn = btn || null;
+    if (btn) {
+      btn.classList.add("gc-speaking");
+      btn.setAttribute("aria-pressed", "true");
+      btn.setAttribute("title", t("stopReading"));
+      btn.setAttribute("aria-label", t("stopReading"));
+    }
+    speakNextChunk();
+  }
   function speak(text, force) {
     if (!(state.voiceOutput || force) || !window.speechSynthesis) return;
-    try {
-      window.speechSynthesis.cancel();
-      var clean = String(text || "").replace(/```[\s\S]*?```/g, " ").replace(/[`*_#]/g, " ").trim();
-      if (!clean) return;
-      var u = new SpeechSynthesisUtterance(clean.slice(0, 800));
-      u.rate = 1.02;
-      u.lang = state.speechLang || document.documentElement.lang || "en-GB";
-      window.speechSynthesis.speak(u);
-    } catch (e) {}
+    startSpeak(text, null);
   }
 
   function canListen() {
@@ -893,9 +1072,9 @@
     });
     wrap.appendChild(copyBtn);
     ["up", "down"].forEach(function (rating) {
-      var b = el("button", { type: "button", html: rating === "up" ? ICONS.up : ICONS.down, title: rating === "up" ? "Helpful" : "Not helpful", "aria-label": rating === "up" ? "Helpful" : "Not helpful", "aria-pressed": "false" });
+      var b = el("button", { type: "button", class: "gc-rate", html: rating === "up" ? ICONS.up : ICONS.down, title: rating === "up" ? "Helpful" : "Not helpful", "aria-label": rating === "up" ? "Helpful" : "Not helpful", "aria-pressed": "false" });
       b.addEventListener("click", function () {
-        wrap.querySelectorAll("button[aria-pressed]").forEach(function (x) { x.classList.remove("on"); x.setAttribute("aria-pressed", "false"); });
+        wrap.querySelectorAll("button.gc-rate").forEach(function (x) { x.classList.remove("on"); x.setAttribute("aria-pressed", "false"); });
         b.classList.add("on"); b.setAttribute("aria-pressed", "true");
         fetch(API_BASE + "/api/chat/feedback", {
           method: "POST",
@@ -905,6 +1084,11 @@
       });
       wrap.appendChild(b);
     });
+    if (canSpeak()) {
+      var speakBtn = el("button", { type: "button", class: "gc-speak", title: t("listen"), "aria-label": t("listen"), "aria-pressed": "false", html: ICONS.speaker });
+      speakBtn.addEventListener("click", function () { startSpeak(text, speakBtn); });
+      wrap.appendChild(speakBtn);
+    }
     row.appendChild(wrap);
   }
 
@@ -1303,14 +1487,15 @@
       if (ev && ev.sources) addSources(row, ev.sources);
       if (ev && ev.suggestions) addSuggestions(ev.suggestions);
       if (ev && ev.cards) addCards(row, ev.cards);
-      speak(acc || (ev && ev.answer) || "", state.usedVoice);
-      state.usedVoice = false;
       if (ev && ev.answer) state.replies++;
       if (/\b(thanks|thank you|cheers|that'?s all|solved|fixed|sorted|gracias|merci|danke|obrigad|grazie|bedankt|dzięki)\b/i.test(message)) maybeCsat(false);
       if (ev && ev.assistantLogId) {
         state.lastLogId = ev.assistantLogId;
         addFeedback(row, ev.assistantLogId, acc || ev.answer);
       }
+      var spoken = acc || (ev && ev.answer) || "";
+      if (state.usedVoice || state.voiceOutput) startSpeak(spoken, row.querySelector(".gc-speak"));
+      state.usedVoice = false;
       playPop();
       if (!state.open) setUnread(true);
       scrollDown();
@@ -1350,7 +1535,7 @@
   voiceBtn.addEventListener("click", function () {
     state.voiceOutput = !state.voiceOutput;
     voiceBtn.setAttribute("aria-pressed", state.voiceOutput ? "true" : "false");
-    if (!state.voiceOutput && window.speechSynthesis) window.speechSynthesis.cancel();
+    if (!state.voiceOutput) stopSpeak();
   });
   micBtn.addEventListener("click", function () { startListening(); });
   tabAi.addEventListener("click", function () { setTab("assistant"); });
@@ -1389,6 +1574,7 @@
     }
     if (typeof cfg.showBranding === "boolean") state.showBranding = cfg.showBranding;
     if (typeof cfg.voiceEnabled === "boolean") state.voice = cfg.voiceEnabled;
+    if (typeof cfg.readAloudEnabled === "boolean") state.readAloud = cfg.readAloudEnabled;
     if (cfg.bookingUrl) state.bookingUrl = cfg.bookingUrl;
     if (cfg.bookingProvider) state.bookingProvider = cfg.bookingProvider;
     state.openSiteLinks = cfg.openSiteLinks === "new_tab" ? "new_tab" : "same_tab";

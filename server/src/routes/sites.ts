@@ -149,6 +149,7 @@ sitesRouter.patch("/:id", async (req, res) => {
     patch.show_branding = limits.brandingRequired ? true : body.show_branding;
   }
   if (typeof body.voice_enabled === "boolean") patch.voice_enabled = body.voice_enabled;
+  if (typeof body.read_aloud_enabled === "boolean") patch.read_aloud_enabled = body.read_aloud_enabled;
   if (typeof body.booking_url === "string") {
     const booking = body.booking_url.trim();
     patch.booking_url = booking || null;

@@ -65,6 +65,7 @@ export type Site = {
   booking_url?: string | null;
   booking_provider?: "cal.com" | "calendly" | "other" | null;
   voice_enabled?: boolean;
+  read_aloud_enabled?: boolean;
   conversion_cards?: ConversionCard[];
   chat_provider?: string | null;
   chat_model?: string | null;
