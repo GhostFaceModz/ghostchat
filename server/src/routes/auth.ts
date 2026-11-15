@@ -1,9 +1,18 @@
 import { Router } from "express";
 import { getDb } from "../lib/supabase.js";
-import { hashPassword, verifyPassword, signToken, sessionTtl, isValidEmail, requireAuth, signOAuthState, verifyOAuthState } from "../lib/auth.js";
+import { hashPassword, verifyPassword, signToken, sessionTtl, isValidEmail, requireAuth, signOAuthState, verifyOAuthState, readOAuthState } from "../lib/auth.js";
 import { clientIp, rateLimit } from "../lib/rateLimit.js";
 import { config, oauthConfigured, oauthMode, supabaseAuthorizeUrl, PLAN_LIMITS, type Plan } from "../config.js";
 import { exchangeDiscordCode, exchangeGoogleCode, profileFromSupabaseUser, upsertOwnerFromOAuth } from "../lib/oauth.js";
+import {
+  buildGoogleAuthorizeUrl,
+  createGoogleHandoff,
+  googleCallbackUrl,
+  googleFinishUrl,
+  needsGoogleHandoff,
+  redeemGoogleHandoff,
+  safeReturnPath,
+} from "../lib/googleHandoff.js";
 import type { AuthedRequest } from "../lib/auth.js";
 
 export const authRouter = Router();
@@ -21,7 +30,7 @@ authRouter.get("/providers", (_req, res) => {
     urls: { discord: startUrl("discord", discord), google: startUrl("google", google) },
     redirectUris: {
       discord: discord === "supabase" ? `${config.publicUrl}/auth/callback` : `${config.publicUrl}/api/auth/discord/callback`,
-      google: google === "supabase" ? `${config.publicUrl}/auth/callback` : `${config.publicUrl}/api/auth/google/callback`,
+      google: google === "supabase" ? `${config.publicUrl}/auth/callback` : googleCallbackUrl(),
     },
   });
 });
@@ -103,8 +112,10 @@ authRouter.post("/login", async (req, res) => {
 function oauthRedirect(provider: "discord" | "google", error: string) {
   return `${config.publicUrl}/dashboard?auth_error=${encodeURIComponent(error)}&provider=${provider}`;
 }
-function oauthSuccess(token: string) {
-  return `${config.publicUrl}/dashboard?token=${encodeURIComponent(token)}`;
+function oauthSuccess(token: string, returnPath = "/dashboard") {
+  const url = new URL(safeReturnPath(returnPath), config.publicUrl.endsWith("/") ? config.publicUrl : `${config.publicUrl}/`);
+  url.searchParams.set("token", token);
+  return url.toString();
 }
 
 authRouter.get("/discord", (_req, res) => {
@@ -139,20 +150,15 @@ authRouter.get("/discord/callback", async (req, res) => {
   }
 });
 
-authRouter.get("/google", (_req, res) => {
+authRouter.get("/google", (req, res) => {
   if (oauthMode("google") === "supabase") return res.redirect(supabaseAuthorizeUrl("google"));
   if (!oauthConfigured("google")) {
     return res.status(501).json({ error: "Google sign-in is not configured." });
   }
-  const redirectUri = `${config.publicUrl}/api/auth/google/callback`;
-  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  url.searchParams.set("client_id", config.googleClientId);
-  url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", "openid email profile");
-  url.searchParams.set("state", signOAuthState("google"));
-  url.searchParams.set("prompt", "select_account");
-  res.redirect(url.toString());
+  const returnPath = safeReturnPath(req.query.next ?? req.query.return);
+  const redirectUri = googleCallbackUrl();
+  const state = signOAuthState("google", { returnPath });
+  res.redirect(buildGoogleAuthorizeUrl(config.googleClientId, redirectUri, state));
 });
 
 authRouter.get("/google/callback", async (req, res) => {
@@ -160,16 +166,35 @@ authRouter.get("/google/callback", async (req, res) => {
   if (err) return res.redirect(oauthRedirect("google", "Google sign-in was cancelled."));
   const code = String(req.query.code || "");
   const state = String(req.query.state || "");
-  if (!code || !verifyOAuthState(state, "google")) {
+  const statePayload = readOAuthState(state, "google");
+  if (!code || !statePayload) {
     return res.redirect(oauthRedirect("google", "Google sign-in expired. Please try again."));
   }
   try {
-    const profile = await exchangeGoogleCode(code, `${config.publicUrl}/api/auth/google/callback`);
+    const redirectUri = googleCallbackUrl();
+    const profile = await exchangeGoogleCode(code, redirectUri);
     const { token } = await upsertOwnerFromOAuth(profile);
-    res.redirect(oauthSuccess(token));
+    const returnPath = safeReturnPath(statePayload.returnPath);
+    if (needsGoogleHandoff()) {
+      const ticket = createGoogleHandoff(token, returnPath);
+      return res.redirect(googleFinishUrl(ticket));
+    }
+    res.redirect(oauthSuccess(token, returnPath));
   } catch (e) {
     res.redirect(oauthRedirect("google", (e as Error).message || "Google sign-in failed."));
   }
+});
+
+authRouter.get("/google/finish", (req, res) => {
+  const ip = clientIp(req);
+  const rl = rateLimit(`google-finish:${ip}`, 30, 15 * 60 * 1000);
+  if (!rl.ok) return res.redirect(oauthRedirect("google", "Too many sign-in attempts. Try again shortly."));
+  const ticket = String(req.query.t || "");
+  const handoff = redeemGoogleHandoff(ticket);
+  if (!handoff) {
+    return res.redirect(oauthRedirect("google", "Google sign-in expired. Please try again."));
+  }
+  res.redirect(oauthSuccess(handoff.sessionToken, safeReturnPath(handoff.returnPath)));
 });
 
 authRouter.get("/me", requireAuth, async (req, res) => {

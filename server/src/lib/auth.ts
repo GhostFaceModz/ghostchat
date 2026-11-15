@@ -103,19 +103,33 @@ export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
 }
 
-export function signOAuthState(provider: string, ttlSeconds = 600): string {
+export function signOAuthState(
+  provider: string,
+  opts?: { ttlSeconds?: number; returnPath?: string },
+): string {
   if (!config.sessionSecret) throw new Error("SESSION_SECRET is not set");
-  const body = b64url(JSON.stringify({ p: provider, exp: Math.floor(Date.now() / 1000) + ttlSeconds, n: randomBytes(8).toString("hex") }));
+  const ttlSeconds = opts?.ttlSeconds ?? 600;
+  const body = b64url(JSON.stringify({
+    p: provider,
+    exp: Math.floor(Date.now() / 1000) + ttlSeconds,
+    n: randomBytes(8).toString("hex"),
+    r: opts?.returnPath,
+  }));
   const sig = b64url(createHmac("sha256", config.sessionSecret).update(body).digest());
   return `${body}.${sig}`;
 }
 
-export function verifyOAuthState(token: string, provider: string): boolean {
+export function readOAuthState(token: string, provider: string): { returnPath?: string } | null {
   const payload = verifyTokenLike(token);
-  return Boolean(payload && payload.p === provider && payload.exp >= Math.floor(Date.now() / 1000));
+  if (!payload || payload.p !== provider || payload.exp < Math.floor(Date.now() / 1000)) return null;
+  return { returnPath: typeof payload.r === "string" ? payload.r : undefined };
 }
 
-function verifyTokenLike(token: string): { p?: string; exp: number } | null {
+export function verifyOAuthState(token: string, provider: string): boolean {
+  return Boolean(readOAuthState(token, provider));
+}
+
+function verifyTokenLike(token: string): { p?: string; exp: number; r?: string } | null {
   if (!config.sessionSecret) return null;
   const [body, sig] = token.split(".");
   if (!body || !sig) return null;

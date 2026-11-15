@@ -51,6 +51,9 @@ export const config = {
   discordClientSecret: str("DISCORD_CLIENT_SECRET"),
   googleClientId: str("GOOGLE_CLIENT_ID"),
   googleClientSecret: str("GOOGLE_CLIENT_SECRET"),
+  // Google OAuth redirect_uri origin. Defaults to the Render hostname already
+  // registered on the Google Cloud client (PUBLIC_URL may be a custom domain).
+  googleRedirectBase: (process.env.GOOGLE_REDIRECT_BASE ?? "https://ghostchat-nfoc.onrender.com").replace(/\/$/, ""),
   whopWebhookSecret: str("WHOP_WEBHOOK_SECRET"),
   whopApiKey: str("WHOP_API_KEY"),
   whopPlanProId: str("WHOP_PLAN_PRO_ID"),

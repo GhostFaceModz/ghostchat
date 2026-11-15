@@ -95,7 +95,8 @@ See `.env.example` for the full list. Important ones:
 | `EMBEDDING_PROVIDER` | Default `local`. Set `openai`, `gemini`, or `grok` to use a paid embeddings API (must stay 384-d). |
 | `EMBEDDING_MODEL` | Override the embeddings model id |
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Discord sign-in. Redirect: `{PUBLIC_URL}/api/auth/discord/callback` |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google sign-in. Redirect: `{PUBLIC_URL}/api/auth/google/callback` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google sign-in. Redirect: `{GOOGLE_REDIRECT_BASE}/api/auth/google/callback` |
+| `GOOGLE_REDIRECT_BASE` | Origin for the Google OAuth callback (default `https://ghostchat-nfoc.onrender.com`). After the callback, the session is handed to `PUBLIC_URL`. |
 | `WHOP_WEBHOOK_SECRET` | Verifies Whop Standard Webhooks at `POST {PUBLIC_URL}/api/webhooks/whop` |
 | `WHOP_PLAN_PRO_ID` / `WHOP_PLAN_BUSINESS_ID` | Map Whop plan or product IDs to GhostChat tiers |
 | `WHOP_CHECKOUT_PRO_URL` / `WHOP_CHECKOUT_BUSINESS_URL` | Checkout buttons in the dashboard |
@@ -147,7 +148,7 @@ By default the buttons sign in through **Supabase Auth** on the shared project, 
 
 Requirements: `https://ghostchat.pro/**` must be in Supabase → Authentication → URL Configuration → Redirect URLs (otherwise Supabase sends people to its Site URL instead). Keep the legacy `https://ghostchat-nfoc.onrender.com/**` entry too so existing sign-in links still work. `SUPABASE_ANON_KEY` defaults to the project's public publishable key; set `SUPABASE_OAUTH=false` to hide the buttons.
 
-Fallback: if `DISCORD_CLIENT_ID`/`DISCORD_CLIENT_SECRET` (or the Google pair) are set, that provider uses direct OAuth instead, with redirect URI `{PUBLIC_URL}/api/auth/discord/callback` (or `/google/callback`).
+Fallback: if `DISCORD_CLIENT_ID`/`DISCORD_CLIENT_SECRET` (or the Google pair) are set, that provider uses direct OAuth instead. Discord's redirect URI is `{PUBLIC_URL}/api/auth/discord/callback`. Google's redirect URI is `{GOOGLE_REDIRECT_BASE}/api/auth/google/callback` (default `https://ghostchat-nfoc.onrender.com`), because that origin is the one registered on the Google Cloud client. After Google returns, GhostChat issues a short-lived one-time ticket and sends the browser to `{PUBLIC_URL}/api/auth/google/finish` so the dashboard session is set on the public domain.
 
 `GET /api/auth/providers` shows which mode each provider uses and where its button goes.
 
