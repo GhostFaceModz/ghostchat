@@ -40,3 +40,13 @@ test("onboarding wizard has five steps: site, crawl, style, snippet, test chat",
   assert.match(v2, /\/crawl", \{ method: "POST" \}/);
   assert.match(html, /id="wz-chat"/);
 });
+
+test("dashboard and wizard embed snippets use https://ghostchat.pro, CNAME target stays on Render", () => {
+  assert.match(app, /https:\/\/ghostchat\.pro/);
+  assert.match(app, /GHOSTCHAT_PUBLIC_ORIGIN/);
+  assert.match(v2, /GHOSTCHAT_PUBLIC_ORIGIN \|\| "https:\/\/ghostchat\.pro"/);
+  assert.match(v2, /ghostchat-nfoc\.onrender\.com/);
+  assert.match(guide, /chat<\/code> → <code>ghostchat-nfoc\.onrender\.com<\/code>/);
+  assert.match(guide, /https:\/\/ghostchat\.pro\/widget\.js/);
+  assert.match(guide, /https:\/\/ghostchat\.pro\/api\/webhooks\/meta/);
+});

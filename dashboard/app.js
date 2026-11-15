@@ -3,6 +3,17 @@ const api = "";
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
+// Canonical public origin for embed snippets and share links. Local dev keeps location.origin.
+// Existing embeds that load widget.js from ghostchat-nfoc.onrender.com still work (API_BASE comes from the script URL).
+const PUBLIC_ORIGIN = (function () {
+  try {
+    const h = location.hostname;
+    if (h === "localhost" || h === "127.0.0.1") return location.origin;
+  } catch {}
+  return "https://ghostchat.pro";
+})();
+window.GHOSTCHAT_PUBLIC_ORIGIN = PUBLIC_ORIGIN;
+
 // Session token: localStorage when "Remember me" is on (about 30 days), sessionStorage otherwise.
 const tokenStore = {
   get() { try { return localStorage.getItem("gc_token") || sessionStorage.getItem("gc_token") || ""; } catch { return ""; } },
@@ -230,10 +241,10 @@ function renderSite() {
   $("#usage-bar i").style.width = Math.min(100, Math.round((used / limit) * 100)) + "%";
   renderUsageBanner(s);
   $("#site-key").value = s.site_key;
-  const snippet = `<script src="${location.origin}/widget.js" data-id="${s.site_key}"></script>`;
+  const snippet = `<script src="${PUBLIC_ORIGIN}/widget.js" data-id="${s.site_key}"></script>`;
   $("#embed").value = snippet;
   $("#open-demo").href = "/demo?key=" + encodeURIComponent(s.site_key);
-  const share = location.origin + "/c/" + encodeURIComponent(s.site_key);
+  const share = PUBLIC_ORIGIN + "/c/" + encodeURIComponent(s.site_key);
   $("#share-link").value = share;
   $("#open-share").href = share;
   $("#share-qr").src = "/api/widget/qr/" + encodeURIComponent(s.site_key) + "?format=png";

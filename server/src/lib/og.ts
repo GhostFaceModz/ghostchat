@@ -93,7 +93,7 @@ export function brandCardSvg(kind: "wide" | "square"): string {
   <rect width="${W}" height="${H}" fill="url(#shade)"/>
   <text x="${head.x}" y="${head.y}" text-anchor="${head.anchor}" font-family="Unbounded" font-weight="700" font-size="${head.size}" letter-spacing="-1" fill="#f5f3ff">${tspans}</text>
   ${chips}
-  <text x="${kind === "wide" ? head.x : W / 2}" y="${footY}" text-anchor="${head.anchor}" font-family="Inter" font-weight="500" font-size="${kind === "wide" ? 22 : 26}" fill="#a99bd6" letter-spacing=".5">ghostchat-nfoc.onrender.com</text>
+  <text x="${kind === "wide" ? head.x : W / 2}" y="${footY}" text-anchor="${head.anchor}" font-family="Inter" font-weight="500" font-size="${kind === "wide" ? 22 : 26}" fill="#a99bd6" letter-spacing=".5">ghostchat.pro</text>
 </svg>`;
 }
 

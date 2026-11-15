@@ -135,7 +135,7 @@ Free Render web service (`render.yaml`, Frankfurt, Node 22; Node 20 crashes beca
 4. Deploy and check `/healthz`.
 5. Add Discord/Google redirect URIs and the Whop webhook URL if you use those.
 
-Live service: `https://ghostchat-nfoc.onrender.com`, so `PUBLIC_URL` must be exactly that.
+Live service: `https://ghostchat.pro`. Set `PUBLIC_URL` to exactly that. The Render hostname `https://ghostchat-nfoc.onrender.com` still serves the app (and remains the CNAME target for white-label domains).
 
 ### Discord / Google sign-in
 
@@ -145,7 +145,7 @@ By default the buttons sign in through **Supabase Auth** on the shared project, 
 2. `/auth/callback` reads the Supabase session from the URL fragment and POSTs the access token to `POST /api/auth/supabase`.
 3. The server verifies it with the service key (`auth.getUser`), finds or creates the `ghostchat_owners` row by provider ID or email, and returns the normal GhostChat session token.
 
-Requirements: `https://ghostchat-nfoc.onrender.com/**` must be in Supabase → Authentication → URL Configuration → Redirect URLs (otherwise Supabase sends people to its Site URL instead). `SUPABASE_ANON_KEY` defaults to the project's public publishable key; set `SUPABASE_OAUTH=false` to hide the buttons.
+Requirements: `https://ghostchat.pro/**` must be in Supabase → Authentication → URL Configuration → Redirect URLs (otherwise Supabase sends people to its Site URL instead). Keep the legacy `https://ghostchat-nfoc.onrender.com/**` entry too so existing sign-in links still work. `SUPABASE_ANON_KEY` defaults to the project's public publishable key; set `SUPABASE_OAUTH=false` to hide the buttons.
 
 Fallback: if `DISCORD_CLIENT_ID`/`DISCORD_CLIENT_SECRET` (or the Google pair) are set, that provider uses direct OAuth instead, with redirect URI `{PUBLIC_URL}/api/auth/discord/callback` (or `/google/callback`).
 

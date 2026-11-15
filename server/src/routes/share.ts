@@ -8,7 +8,7 @@ import { rateLimit, clientIp } from "../lib/rateLimit.js";
 import type { Site } from "../types.js";
 
 const KEY = /^[A-Za-z0-9_-]{4,64}$/;
-const BASE = (process.env.SHARE_BASE_URL || "https://ghostchat-nfoc.onrender.com").replace(/\/$/, ""); // canonical public origin for share links and cards
+const BASE = (process.env.SHARE_BASE_URL || process.env.PUBLIC_URL || "https://ghostchat.pro").replace(/\/$/, ""); // canonical public origin for share links and cards
 
 type ShareSite = Pick<Site, "name" | "url" | "greeting" | "plan" | "show_branding" | "site_key"> & { updated_at?: string; theme: { primary?: string } | null };
 async function loadShareSite(key: string): Promise<ShareSite | null> {

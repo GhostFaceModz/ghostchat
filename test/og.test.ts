@@ -40,8 +40,22 @@ test("static brand cards exist at the right sizes and under 300KB", () => {
 test("every public page has full preview tags and icons", () => {
   for (const f of ["index.html", "guide.html", "privacy.html", "terms.html"]) {
     const h = readFileSync(`public/${f}`, "utf8");
-    for (const tag of ['property="og:title"', 'property="og:description"', 'property="og:image" content="https://ghostchat-nfoc.onrender.com/og-image.png"', 'og:image:width" content="1200"', 'og:image:height" content="630"', 'og:image:alt', 'property="og:url"', 'og:site_name', 'name="twitter:card" content="summary_large_image"', 'name="theme-color"', 'rel="apple-touch-icon"', 'rel="manifest"', 'href="/favicon.ico"'])
+    for (const tag of ['property="og:title"', 'property="og:description"', 'property="og:image" content="https://ghostchat.pro/og-image.png"', 'og:image:width" content="1200"', 'og:image:height" content="630"', 'og:image:alt', 'property="og:url"', 'og:site_name', 'name="twitter:card" content="summary_large_image"', 'name="theme-color"', 'rel="apple-touch-icon"', 'rel="manifest"', 'href="/favicon.ico"'])
       assert.ok(h.includes(tag), `${f} has ${tag}`);
     assert.equal((h.match(/property="og:title"/g) || []).length, 1, `${f}: one og:title`);
   }
+});
+
+test("brand cards and public pages use the canonical ghostchat.pro host", () => {
+  assert.match(brandCardSvg("wide"), /ghostchat\.pro/);
+  assert.doesNotMatch(brandCardSvg("wide"), /ghostchat-nfoc\.onrender\.com/);
+  assert.match(readFileSync("public/robots.txt", "utf8"), /Sitemap: https:\/\/ghostchat\.pro\/sitemap\.xml/);
+  const sm = readFileSync("public/sitemap.xml", "utf8");
+  for (const path of ["/", "/guide", "/pricing", "/demo", "/privacy", "/terms"])
+    assert.ok(sm.includes(`https://ghostchat.pro${path === "/" ? "/" : path}`), `sitemap has ${path}`);
+});
+
+test("share links default to https://ghostchat.pro", () => {
+  const src = readFileSync("server/src/routes/share.ts", "utf8");
+  assert.match(src, /process\.env\.SHARE_BASE_URL \|\| process\.env\.PUBLIC_URL \|\| "https:\/\/ghostchat\.pro"/);
 });

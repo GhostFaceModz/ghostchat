@@ -6,20 +6,20 @@
   <title>Getting started · GhostChat setup guide</title>
   <meta name="description" content="Sign up, train your bot on your site, match your brand, paste one script tag and go live. Free to start." />
   <meta name="theme-color" content="#8f6cff" />
-  <link rel="canonical" href="https://ghostchat-nfoc.onrender.com/guide" />
+  <link rel="canonical" href="https://ghostchat.pro/guide" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="GhostChat" />
   <meta property="og:locale" content="en_GB" />
   <meta property="og:title" content="GhostChat setup guide — live in about ten minutes" />
   <meta property="og:description" content="Sign up, train your bot on your site, match your brand, paste one script tag and go live. Free to start." />
-  <meta property="og:url" content="https://ghostchat-nfoc.onrender.com/guide" />
-  <meta property="og:image" content="https://ghostchat-nfoc.onrender.com/og-image.png" />
-  <meta property="og:image:secure_url" content="https://ghostchat-nfoc.onrender.com/og-image.png" />
+  <meta property="og:url" content="https://ghostchat.pro/guide" />
+  <meta property="og:image" content="https://ghostchat.pro/og-image.png" />
+  <meta property="og:image:secure_url" content="https://ghostchat.pro/og-image.png" />
   <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:image:alt" content="GhostChat — Premium AI chat for your website: a glowing violet ghost inside a chat bubble" />
-  <meta property="og:image" content="https://ghostchat-nfoc.onrender.com/og-image-square.png" />
+  <meta property="og:image" content="https://ghostchat.pro/og-image-square.png" />
   <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="1200" />
@@ -27,7 +27,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="GhostChat setup guide — live in about ten minutes" />
   <meta name="twitter:description" content="Sign up, train your bot on your site, match your brand, paste one script tag and go live. Free to start." />
-  <meta name="twitter:image" content="https://ghostchat-nfoc.onrender.com/og-image.png" />
+  <meta name="twitter:image" content="https://ghostchat.pro/og-image.png" />
   <meta name="twitter:image:alt" content="GhostChat — Premium AI chat for your website: a glowing violet ghost inside a chat bubble" />
   <link rel="icon" href="/favicon.ico" sizes="48x48" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
@@ -148,7 +148,7 @@
             <div class="tip"><b>Prefer Discord or Google?</b> Tap <b>Continue with Discord</b> or <b>Continue with Google</b> instead. If you use the same email as an existing account, it signs you into that account.</div>
           </div>
           <div class="shot" aria-hidden="true">
-            <div class="bar"><i></i><i></i><i></i><span>ghostchat-nfoc.onrender.com/signup</span></div>
+            <div class="bar"><i></i><i></i><i></i><span>ghostchat.pro/signup</span></div>
             <div class="body">
               <div class="m-title">Create your account</div>
               <div class="m-row"><div class="m-btn dc">Discord</div><div class="m-btn go">Google</div></div>
@@ -237,7 +237,7 @@
               <li>Open the <b>Setup</b> tab and tap <b>Copy snippet</b>.</li>
               <li>Paste it just before <code>&lt;/body&gt;</code> on every page (or in your site builder's custom code box).</li>
             </ol>
-            <div class="code"><code id="g-snippet"><span class="t">&lt;script</span> <span class="a">src</span>=<span class="s">"https://ghostchat-nfoc.onrender.com/widget.js"</span> <span class="a">data-id</span>=<span class="s">"gc_YOUR_KEY"</span><span class="t">&gt;&lt;/script&gt;</span></code><button class="copy" type="button" data-copy="#g-snippet">Copy</button></div>
+            <div class="code"><code id="g-snippet"><span class="t">&lt;script</span> <span class="a">src</span>=<span class="s">"https://ghostchat.pro/widget.js"</span> <span class="a">data-id</span>=<span class="s">"gc_YOUR_KEY"</span><span class="t">&gt;&lt;/script&gt;</span></code><button class="copy" type="button" data-copy="#g-snippet">Copy</button></div>
             <div class="platforms" style="margin-top:14px">
               <div><b>Shopify</b>Online Store → Themes → Edit code → theme.liquid</div>
               <div><b>WordPress</b>A "header & footer code" plugin → footer</div>
@@ -310,7 +310,7 @@
           <p class="muted">Your bot can answer WhatsApp and Instagram DMs with the same knowledge. It's off until you set it up, and it needs your own Meta Business app (Meta may charge for WhatsApp conversations).</p>
           <ol>
             <li>In <b>Meta for Developers</b>, create a Business app and add the <b>WhatsApp</b> and/or <b>Instagram</b> products.</li>
-            <li>Webhook callback URL: <code>https://ghostchat-nfoc.onrender.com/api/webhooks/meta</code>. Verify token: the value of <code>META_VERIFY_TOKEN</code> on the server. Subscribe to <code>messages</code>.</li>
+            <li>Webhook callback URL: <code>https://ghostchat.pro/api/webhooks/meta</code>. Verify token: the value of <code>META_VERIFY_TOKEN</code> on the server. Subscribe to <code>messages</code>.</li>
             <li>On the server set <code>META_CHANNELS_ENABLED=true</code>, <code>META_VERIFY_TOKEN</code>, <code>META_APP_SECRET</code> (used to check every webhook's signature) and <code>META_ACCESS_TOKEN</code> (a system-user token).</li>
             <li>In the dashboard open <b>Smart features → WhatsApp &amp; Instagram</b>, paste your Phone number ID / Instagram account ID and switch the channel on.</li>
           </ol>

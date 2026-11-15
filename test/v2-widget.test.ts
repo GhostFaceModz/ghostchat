@@ -35,3 +35,9 @@ test("widget greetings, owner forms, CSAT and voice fallback", () => {
   assert.match(src, /micBlocked/);
   assert.match(src, /gc-listening/);
 });
+
+test("widget API_BASE comes from the script src, so either host works", () => {
+  assert.match(src, /var API_BASE = \(function \(\) \{/);
+  assert.match(src, /var u = new URL\(script\.src, window\.location\.href\)/);
+  assert.match(src, /return u\.origin/);
+});

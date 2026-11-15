@@ -26,7 +26,7 @@ jobs:
           # Retries cover a cold start (the first request can take ~60s).
           curl --fail --silent --show-error --location \
             --retry 5 --retry-delay 15 --retry-all-errors --max-time 90 \
-            https://ghostchat-nfoc.onrender.com/healthz
+            https://ghostchat.pro/healthz
       - name: Trigger due re-crawls (optional)
         # Only runs when the CRON_SECRET repo secret is set; the server also re-crawls on its own every hour.
         env:
@@ -35,4 +35,4 @@ jobs:
         run: |
           curl --silent --show-error --max-time 30 -X POST \
             -H "x-cron-secret: $CRON_SECRET" \
-            https://ghostchat-nfoc.onrender.com/api/cron/recrawl || true
+            https://ghostchat.pro/api/cron/recrawl || true

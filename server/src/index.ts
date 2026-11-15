@@ -48,6 +48,7 @@ app.use((_req, res, next) => {
   res.setHeader("x-frame-options", "SAMEORIGIN");
   next();
 });
+// Reflect any Origin so the widget works on customer sites. widget.js may be loaded from ghostchat.pro or the legacy ghostchat-nfoc.onrender.com host.
 app.use(cors({ origin: true }));
 app.use("/api/webhooks/whop", express.raw({ type: "application/json" }), whopWebhookRouter);
 app.use("/api/webhooks/discord", express.raw({ type: "application/json" }), discordWebhookRouter);
