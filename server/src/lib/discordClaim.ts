@@ -16,8 +16,27 @@ import type { Site } from "../types.js";
 export const GCL = "gcl:";
 const VIOLET = 0x8b5cf6, GREEN = 0x10b981, GREY = 0x6b7280, AMBER = 0xf59e0b;
 const MANAGE = (1n << 3n) | (1n << 5n) | (1n << 13n) | (1n << 34n); // Administrator, Manage Server, Manage Messages, Manage Threads
-const ACTIONS = "claim|unclaim|transfer|transferto|back|close|transcript|ticket|resolve|qreply";
+const ACTIONS = "claim|unclaim|transfer|transferto|back|close|end|transcript|ticket|resolve|qreply|closethread|closeticket";
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+const ACTION_ALIAS: Record<string, string> = { end: "close", closeticket: "closethread" };
+const KNOWN_ACTIONS = new Set(ACTIONS.split("|"));
+
+/** Final notice posted in the Discord thread when a chat ends. */
+export function closeThreadMessage(rating?: number | null): string {
+  if (rating && rating >= 1 && rating <= 5) {
+    const stars = "★".repeat(rating) + "☆".repeat(5 - rating);
+    return `Chat closed · rating ${stars}`;
+  }
+  return "Chat closed. The visitor was asked to leave a review.";
+}
+
+export function threadTitle(siteName: string, sessionId: string): string {
+  return clip(`💬 ${siteName} · ${sessionId.slice(-6)}`, 95);
+}
+
+export function shouldReuseDiscordThread(conv: Pick<Conversation, "discord_thread_id">): boolean {
+  return Boolean(conv.discord_thread_id);
+}
 
 export type ClaimState = "open" | "claimed" | "back" | "closed" | "timeout";
 export type Line = { role: string; message: string; agent_name?: string | null; lang?: string | null };
@@ -26,6 +45,7 @@ export type ClaimViewOpts = {
   hasTicket?: boolean;
   rating?: number | null;
   comment?: string | null;
+  archived?: boolean;
 };
 
 export function supportName(displayName: string): string {
@@ -147,11 +167,12 @@ export function claimComponents(convId: string, state: ClaimState, opts: ClaimVi
   });
   const rows: Array<{ type: 1; components: Array<Record<string, unknown>> }> = [];
   if (state === "open" || state === "back") {
-    rows.push({ type: 1, components: [btn("claim", "Accept / Claim", 3, "🙋"), btn("close", "End chat", 4)] });
+    rows.push({ type: 1, components: [btn("claim", "Accept / Claim", 3, "🙋"), btn("close", "End chat", 4), btn("closethread", "Close ticket", 4)] });
     rows.push({ type: 1, components: [btn("transcript", "View transcript", 2, "📄"), btn("ticket", "Create ticket", 2, "🎫")] });
   } else if (state === "claimed") {
-    rows.push({ type: 1, components: [btn("close", "End chat", 4), btn("back", "Hand back to AI", 1, "🤖"), btn("transfer", "Transfer", 2, "🔁"), btn("unclaim", "Unclaim", 2)] });
-    rows.push({ type: 1, components: [btn("transcript", "View transcript", 2, "📄"), opts.hasTicket ? btn("resolve", "Mark resolved", 3, "✅") : btn("ticket", "Create ticket", 2, "🎫"), ...(opts.hasTicket ? [btn("ticket", "Create ticket", 2, "🎫")] : [])].slice(0, 5) });
+    rows.push({ type: 1, components: [btn("close", "End chat", 4), btn("closethread", "Close ticket", 4), btn("back", "Hand back to AI", 1, "🤖")] });
+    rows.push({ type: 1, components: [btn("transfer", "Transfer", 2, "🔁"), btn("unclaim", "Unclaim", 2), btn("transcript", "View transcript", 2, "📄")] });
+    rows.push({ type: 1, components: [opts.hasTicket ? btn("resolve", "Mark resolved", 3, "✅") : btn("ticket", "Create ticket", 2, "🎫"), ...(opts.hasTicket ? [btn("ticket", "Create ticket", 2, "🎫")] : [])].slice(0, 5) });
     const replies = (opts.quickReplies || []).filter(Boolean).slice(0, 25);
     if (replies.length) {
       rows.push({
@@ -169,7 +190,9 @@ export function claimComponents(convId: string, state: ClaimState, opts: ClaimVi
     }
   } else {
     // Closed or timed out: keep the layout visible but unusable so the outcome is clear.
-    rows.push({ type: 1, components: [btn("close", "End chat", 4), btn("back", "Hand back to AI", 1, "🤖"), btn("transcript", "View transcript", 2, "📄")] });
+    // Close thread stays clickable until the Discord thread is actually archived, even if the chat already ended.
+    rows.push({ type: 1, components: [{ ...btn("closethread", "Close thread", 4), disabled: Boolean(opts.archived) }, btn("close", "End chat", 4), btn("back", "Hand back to AI", 1, "🤖")] });
+    rows.push({ type: 1, components: [btn("transcript", "View transcript", 2, "📄")] });
   }
   return rows;
 }
@@ -187,13 +210,28 @@ export function componentActions(rows: ReturnType<typeof claimComponents>): stri
 }
 
 export function parseCustomId(id: string): { action: string; convId: string } | null {
-  const m = new RegExp(`^gcl:(${ACTIONS}):([0-9a-f-]{36})$`).exec(String(id || ""));
-  return m ? { action: m[1], convId: m[2] } : null;
+  // Allow a trailing suffix so older button ids still parse, and map legacy aliases (end, closeticket).
+  const m = /^gcl:([a-z]+):([0-9a-f-]{36})(?:[:|].*)?$/i.exec(String(id || ""));
+  if (!m) return null;
+  const raw = m[1].toLowerCase();
+  if (!KNOWN_ACTIONS.has(raw)) return null;
+  return { action: ACTION_ALIAS[raw] || raw, convId: m[2] };
 }
 
-export function canManage(permissions: string | undefined, userId: string, conv: Pick<Conversation, "claimed_by_id">): boolean {
-  if (conv.claimed_by_id && conv.claimed_by_id === userId) return true;
+export function canManage(
+  permissions: string | undefined,
+  userId: string,
+  conv: Pick<Conversation, "claimed_by_id">,
+  ownerDiscordId?: string | null,
+): boolean {
+  if (userId && conv.claimed_by_id && conv.claimed_by_id === userId) return true;
+  if (userId && ownerDiscordId && ownerDiscordId === userId) return true;
   try { return (BigInt(permissions || "0") & MANAGE) !== 0n; } catch { return false; }
+}
+
+export function closeDeniedMessage(conv: Pick<Conversation, "claimed_by_id">): string {
+  const who = conv.claimed_by_id ? `<@${conv.claimed_by_id}>` : "the claimer";
+  return `Only ${who}, the site owner, or someone with **Manage Threads** / **Manage Messages** can do that.`;
 }
 
 const eph = (content: string, extra?: Record<string, unknown>) => ({ type: 4, data: { content, flags: 64, allowed_mentions: { parse: [] }, ...extra } });
@@ -211,10 +249,22 @@ async function ticketInfo(siteId: string, sessionId: string): Promise<{ hasTicke
   return { hasTicket: Boolean(ticket), rating: csat?.rating ?? ticket?.rating ?? null, comment: csat?.comment ?? null };
 }
 
+async function threadIsArchived(threadId?: string | null): Promise<boolean> {
+  if (!threadId) return false;
+  try {
+    const t = await discord<{ archived?: boolean }>("GET", `/channels/${threadId}`);
+    return Boolean(t.archived);
+  } catch {
+    return false;
+  }
+}
+
 async function viewFor(site: Site, conv: Conversation, state: ClaimState, by?: string | null) {
   const lines = await transcript(site.id, conv.session_id, 50);
   const info = await ticketInfo(site.id, conv.session_id);
-  const opts: ClaimViewOpts = { quickReplies: agentQuickReplies(site), hasTicket: info.hasTicket, rating: info.rating, comment: info.comment };
+  const ended = state === "closed" || state === "timeout";
+  const archived = ended && await threadIsArchived(conv.discord_thread_id);
+  const opts: ClaimViewOpts = { quickReplies: agentQuickReplies(site), hasTicket: info.hasTicket, rating: info.rating, comment: info.comment, archived };
   return {
     embeds: [claimEmbed(site, conv, lines, state, by, opts)],
     components: claimComponents(conv.id, state, opts),
@@ -224,13 +274,42 @@ async function viewFor(site: Site, conv: Conversation, state: ClaimState, by?: s
   };
 }
 
-/** Post the claimable embed for a new handoff. */
+/** Post the claimable embed for a new handoff, reusing this session's existing Discord thread when there is one. */
 export async function postClaimMessage(site: Site, conv: Conversation, channelId: string): Promise<void> {
+  if (shouldReuseDiscordThread(conv) && conv.discord_thread_id) {
+    const reopened = await discord("PATCH", `/channels/${conv.discord_thread_id}`, { archived: false, locked: false }).then(() => true).catch((e) => {
+      console.error("discord reuse thread:", (e as Error).message);
+      return false;
+    });
+    if (reopened) {
+      const view = await viewFor(site, conv, claimStateFor(conv));
+      const body = { embeds: view.embeds, components: view.components, allowed_mentions: { parse: [] } };
+      let edited = false;
+      if (conv.discord_message_id) {
+        edited = await patchMessage(conv.discord_channel_id || channelId, conv.discord_message_id, body);
+        if (!edited && conv.discord_thread_id !== conv.discord_message_id) {
+          edited = await patchMessage(conv.discord_thread_id, conv.discord_message_id, body);
+        }
+      }
+      if (!edited) {
+        await discord("POST", `/channels/${conv.discord_thread_id}/messages`, body).catch((e) => console.error("claim reuse post:", (e as Error).message));
+      }
+      await upsertThreadPanel(conv, view, true);
+      await discord("POST", `/channels/${conv.discord_thread_id}/messages`, {
+        content: "🔔 This chat is waiting for a team member again. Use **Accept / Claim** on the controls below.",
+        allowed_mentions: { parse: [] },
+      }).catch(() => {});
+      if (!conv.discord_channel_id) await updateConversation(conv.id, { discord_channel_id: channelId });
+      return;
+    }
+  }
   const view = await viewFor(site, conv, "open");
   const msg = await discord<{ id: string }>("POST", `/channels/${channelId}/messages`, {
     embeds: view.embeds, components: view.components, allowed_mentions: { parse: [] },
   });
-  await updateConversation(conv.id, { discord_channel_id: channelId, discord_message_id: msg.id, discord_thread_id: null, discord_panel_id: null, claimed_by_id: null, claimed_by_name: null });
+  await updateConversation(conv.id, { discord_channel_id: channelId, discord_message_id: msg.id, claimed_by_id: null, claimed_by_name: null });
+  conv.discord_channel_id = channelId;
+  conv.discord_message_id = msg.id;
 }
 
 async function patchMessage(channelId: string, messageId: string, body: Record<string, unknown>): Promise<boolean> {
@@ -295,8 +374,13 @@ export async function refreshLiveControls(conv: Conversation, state?: ClaimState
 export async function refreshControlsForSession(siteId: string, sessionId: string): Promise<void> {
   const { data } = await getDb().from("ghostchat_live_conversations").select("*").eq("site_id", siteId).eq("session_id", sessionId).maybeSingle();
   const conv = data as Conversation | null;
-  if (!conv || (!conv.discord_message_id && !conv.discord_panel_id)) return;
-  await refreshLiveControls(conv, claimStateFor(conv), conv.claimed_by_id);
+  if (!conv || (!conv.discord_message_id && !conv.discord_panel_id && !conv.discord_thread_id)) return;
+  const state = claimStateFor(conv);
+  await refreshLiveControls(conv, state, conv.claimed_by_id);
+  if (state === "closed" || state === "timeout") {
+    const info = await ticketInfo(conv.site_id, conv.session_id);
+    if (info.rating) await archiveLiveThread(conv, { rating: info.rating, alreadyEnded: true });
+  }
 }
 
 /** After a claim: open (or reuse) the thread on the embed, add the claimer, post the transcript so far. */
@@ -304,30 +388,89 @@ async function openThreadFor(conv: Conversation, userId: string): Promise<void> 
   const site = await siteOf(conv);
   if (!site || !conv.discord_channel_id || !conv.discord_message_id) return;
   let threadId = conv.discord_thread_id;
+  if (threadId) {
+    const ok = await discord("PATCH", `/channels/${threadId}`, { archived: false, locked: false }).then(() => true).catch((e) => {
+      console.error("discord reopen thread:", (e as Error).message);
+      return false;
+    });
+    if (!ok) threadId = "";
+  }
   if (!threadId) {
-    const t = await discord<{ id: string }>("POST", `/channels/${conv.discord_channel_id}/messages/${conv.discord_message_id}/threads`, { name: clip(`💬 ${site.name} · ${conv.session_id.slice(-6)}`, 95), auto_archive_duration: 1440 });
+    const t = await discord<{ id: string }>("POST", `/channels/${conv.discord_channel_id}/messages/${conv.discord_message_id}/threads`, { name: threadTitle(site.name, conv.session_id), auto_archive_duration: 1440 });
     threadId = t.id;
     await updateConversation(conv.id, { discord_thread_id: threadId });
     conv.discord_thread_id = threadId;
     const lines = await transcript(site.id, conv.session_id, 30);
     const text = lines.map((l) => `${l.role === "user" ? "👤 **Visitor:**" : l.role === "agent" ? `🧑 **${l.agent_name || "Team"}:**` : l.role === "system" ? "•" : "🤖 **AI:**"} ${clip(l.message.replace(/\s+/g, " "), 300)}`).join("\n");
-    await discord("POST", `/channels/${threadId}/messages`, { content: clip(`${text}\n\nReply here to answer the visitor. Use **End chat** when you're done, or \`!back\` / \`!close\`.`, 1900), allowed_mentions: { parse: [] } });
+    await discord("POST", `/channels/${threadId}/messages`, { content: clip(`${text}\n\nReply here to answer the visitor. Use **End chat** or **Close ticket** when you're done, or \`!back\` / \`!close\`.`, 1900), allowed_mentions: { parse: [] } });
   }
   await discord("PUT", `/channels/${threadId}/thread-members/${userId}`).catch(() => {});
-  if (conv.discord_thread_id) await discord("PATCH", `/channels/${threadId}`, { archived: false, locked: false }).catch(() => {});
+  await discord("PATCH", `/channels/${threadId}`, { archived: false, locked: false }).catch(() => {});
   await refreshLiveControls({ ...conv, discord_thread_id: threadId }, "claimed", userId);
 }
 
-async function postTranscriptAndArchive(conv: Conversation, by: string): Promise<void> {
-  const site = await siteOf(conv);
-  if (!site || !conv.discord_thread_id) return;
-  const lines = await transcript(site.id, conv.session_id, 200);
-  const all = lines.map((l) => `[${l.role === "user" ? "Visitor" : l.role === "agent" ? l.agent_name || "Team" : l.role === "system" ? "•" : "AI"}] ${l.message.replace(/\s+/g, " ")}`).join("\n");
-  const chunks: string[] = [];
-  for (let i = 0; i < all.length && chunks.length < 5; i += 1800) chunks.push(all.slice(i, i + 1800));
-  await discord("POST", `/channels/${conv.discord_thread_id}/messages`, { content: `📄 **Transcript** (closed by <@${by}>)\n${inboxUrl(site.id, conv.session_id)}`, allowed_mentions: { parse: [] } }).catch(() => {});
-  for (const c of chunks) await discord("POST", `/channels/${conv.discord_thread_id}/messages`, { content: "```\n" + c.replace(/```/g, "ˋˋˋ") + "\n```", allowed_mentions: { parse: [] } }).catch(() => {});
-  await discord("PATCH", `/channels/${conv.discord_thread_id}`, { archived: true, locked: true }).catch(() => {});
+export function missingManageThreadsMessage(err?: string | null): string {
+  const extra = err && /missing|permission|403|50013/i.test(err) ? ` Discord said: ${err}` : err ? ` (${err})` : "";
+  return `I couldn't archive this thread.${extra} Please give the GhostChat bot **Manage Threads** in this channel, then press **Close thread** again.`.replace("  ", " ");
+}
+
+async function relatedSessionThreads(conv: Conversation): Promise<string[]> {
+  const ids = new Set<string>();
+  if (conv.discord_thread_id) ids.add(conv.discord_thread_id);
+  const channelId = conv.discord_channel_id;
+  if (!channelId) return [...ids];
+  const tail = conv.session_id.slice(-6);
+  try {
+    const ch = await discord<{ guild_id?: string }>("GET", `/channels/${channelId}`);
+    if (!ch.guild_id) return [...ids];
+    const active = await discord<{ threads?: Array<{ id: string; name?: string; parent_id?: string }> }>("GET", `/guilds/${ch.guild_id}/threads/active`);
+    for (const t of active.threads || []) {
+      if (t.parent_id === channelId && String(t.name || "").includes(tail)) ids.add(t.id);
+    }
+  } catch (e) {
+    console.error("discord list threads:", (e as Error).message);
+  }
+  return [...ids];
+}
+
+async function archiveOneThread(threadId: string, message?: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await discord("PATCH", `/channels/${threadId}`, { archived: false, locked: false }).catch(() => {});
+    if (message) {
+      await discord("POST", `/channels/${threadId}/messages`, { content: message, allowed_mentions: { parse: [] } }).catch(() => {});
+    }
+    await discord("PATCH", `/channels/${threadId}`, { archived: true, locked: true });
+    return { ok: true };
+  } catch (e) {
+    const error = (e as Error).message;
+    console.error("discord archive:", threadId, error);
+    return { ok: false, error };
+  }
+}
+
+/** Archive and lock every Discord thread for this session, and disable the live controls. */
+export async function archiveLiveThread(conv: Conversation, opts: { by?: string | null; rating?: number | null; alreadyEnded?: boolean } = {}): Promise<{ ok: boolean; error?: string; archived: number }> {
+  const rating = opts.rating ?? (await ticketInfo(conv.site_id, conv.session_id)).rating;
+  const note = closeThreadMessage(rating);
+  const ids = await relatedSessionThreads(conv);
+  let lastError: string | undefined;
+  let archived = 0;
+  for (const id of ids) {
+    const result = await archiveOneThread(id, note);
+    if (result.ok) archived += 1;
+    else lastError = result.error;
+  }
+  await editClaimMessage({ ...conv, status: "closed" }, "closed", opts.by || conv.claimed_by_id, { movePanel: false }).catch((e) => console.error("claim close edit:", (e as Error).message));
+  return { ok: !ids.length || archived > 0, error: lastError, archived };
+}
+
+export async function finalizeLiveClose(conv: Conversation, opts: { by?: string | null; rating?: number | null } = {}): Promise<{ ok: boolean; error?: string; archived: number }> {
+  return archiveLiveThread(conv, { ...opts, alreadyEnded: true });
+}
+
+async function siteOwnerDiscordId(site: Site): Promise<string | null> {
+  const { data } = await getDb().from("ghostchat_owners").select("discord_id").eq("id", site.owner_id).maybeSingle();
+  return (data as { discord_id: string | null } | null)?.discord_id ?? null;
 }
 
 export type ComponentEvent = {
@@ -352,10 +495,17 @@ export async function handleClaimComponent(ev: ComponentEvent): Promise<Record<s
   const site = await siteOf(conv);
   if (!site) return eph("That chat no longer exists.");
   const name = supportName(ev.user_name);
+  const ownerId = await siteOwnerDiscordId(site);
+  const allowed = canManage(ev.permissions, ev.user_id, conv, ownerId);
+  const deny = () => eph(closeDeniedMessage(conv));
   const respond = async (c: Conversation, state: ClaimState, by?: string | null) => {
     const view = await viewFor(site, c, state, by);
     bg(upsertThreadPanel(c, view, state === "claimed"));
     return { type: 7, data: { embeds: view.embeds, components: view.components, allowed_mentions: { parse: [] } } };
+  };
+  const afterClose = async (ended: Conversation, archive?: { ok: boolean; error?: string }) => {
+    if (archive && !archive.ok) return eph(missingManageThreadsMessage(archive.error));
+    return respond(ended, "closed", ev.user_id);
   };
 
   switch (parsed.action) {
@@ -374,18 +524,18 @@ export async function handleClaimComponent(ev: ComponentEvent): Promise<Record<s
       return respond(won, "claimed", ev.user_id);
     }
     case "unclaim": {
-      if (!canManage(ev.permissions, ev.user_id, conv)) return eph(`Only ${conv.claimed_by_id ? `<@${conv.claimed_by_id}>` : "the claimer"} or a moderator can do that.`);
+      if (!allowed) return deny();
       const patch = { claimed_by_id: null, claimed_by_name: null, claimed_at: null, status: "waiting" as const, waiting_since: new Date().toISOString() };
       await updateConversation(conv.id, patch);
       await addLog({ site_id: site.id, session_id: conv.session_id, role: "system", message: `${conv.claimed_by_name || "The team member"} stepped away. Waiting for a team member…`, thread: "support" });
       return respond({ ...conv, ...patch }, "open");
     }
     case "transfer": {
-      if (!canManage(ev.permissions, ev.user_id, conv)) return eph("Only the claimer or a moderator can transfer this chat.");
+      if (!allowed) return deny();
       return { type: 4, data: { flags: 64, content: "Transfer this chat to:", components: [{ type: 1, components: [{ type: 5, custom_id: `${GCL}transferto:${conv.id}`, placeholder: "Pick a team member", min_values: 1, max_values: 1 }] }] } };
     }
     case "transferto": {
-      if (!canManage(ev.permissions, ev.user_id, conv)) return eph("Only the claimer or a moderator can transfer this chat.");
+      if (!allowed) return deny();
       const to = ev.values?.[0];
       if (!to) return eph("Pick someone to transfer to.");
       const toName = supportName(ev.resolved_names?.[to] || "Team");
@@ -398,21 +548,31 @@ export async function handleClaimComponent(ev: ComponentEvent): Promise<Record<s
       return { type: 7, data: { content: `🔁 Transferred to <@${to}>.`, components: [], allowed_mentions: { parse: [] } } };
     }
     case "back": {
-      if (!canManage(ev.permissions, ev.user_id, conv)) return eph("Only the claimer or a moderator can hand this back.");
+      if (!allowed) return deny();
       const ended = await endLiveChat(conv, "discord", "handback");
-      return respond(ended, "closed", ev.user_id);
+      return afterClose(ended, ended.discordArchive);
     }
     case "close": {
-      if (!canManage(ev.permissions, ev.user_id, conv)) return eph("Only the claimer or a moderator can end this chat.");
+      if (!allowed) return deny();
       const ended = await endLiveChat(conv, "discord", "end");
-      bg(postTranscriptAndArchive(ended, ev.user_id));
-      return respond(ended, "closed", ev.user_id);
+      return afterClose(ended, ended.discordArchive);
+    }
+    case "closethread": {
+      if (!allowed) return deny();
+      if (conv.status === "waiting" || conv.status === "human" || conv.status === "bot") {
+        const ended = await endLiveChat(conv, "discord", "end");
+        return afterClose(ended, ended.discordArchive);
+      }
+      const result = await archiveLiveThread({ ...conv, status: "closed" }, { by: ev.user_id, alreadyEnded: true });
+      if (!result.ok) return eph(missingManageThreadsMessage(result.error));
+      if (!result.archived) return eph("There's no open Discord thread left to close.");
+      return respond({ ...conv, status: "closed" }, "closed", ev.user_id);
     }
     case "transcript": {
       return eph(await formatTranscript(site, conv));
     }
     case "ticket": {
-      if (conv.status === "human" && !canManage(ev.permissions, ev.user_id, conv)) return eph("Only the claimer or a moderator can create a ticket.");
+      if (conv.status === "human" && !allowed) return deny();
       const last = [...(await transcript(site.id, conv.session_id, 40))].reverse().find((l) => l.role === "user");
       const ticket = await openTicket(site, conv.session_id, { subject: last?.message || "Live chat", source: "discord", details: { via: "discord", agent: name } });
       if (conv.discord_thread_id) bg(discord("POST", `/channels/${conv.discord_thread_id}/messages`, { content: `🎫 Ticket #${ticket.number} created.`, allowed_mentions: { parse: [] } }));
@@ -420,7 +580,7 @@ export async function handleClaimComponent(ev: ComponentEvent): Promise<Record<s
       return eph(`🎫 Ticket #${ticket.number} created. Open it in the GhostChat dashboard → Tickets.`);
     }
     case "resolve": {
-      if (!canManage(ev.permissions, ev.user_id, conv)) return eph("Only the claimer or a moderator can mark this resolved.");
+      if (!allowed) return deny();
       const now = new Date().toISOString();
       const { data: existing } = await getDb().from("ghostchat_tickets").select("id, number").eq("site_id", site.id).eq("session_id", conv.session_id).in("status", ["open", "pending"]).order("created_at", { ascending: false }).limit(1);
       const row = (existing || [])[0] as { id: string; number: number } | undefined;
@@ -435,7 +595,7 @@ export async function handleClaimComponent(ev: ComponentEvent): Promise<Record<s
       return eph(`✅ Ticket #${ticket.number} created and marked resolved.`);
     }
     case "qreply": {
-      if (!canManage(ev.permissions, ev.user_id, conv)) return eph("Only the claimer or a moderator can send a quick reply.");
+      if (!allowed) return deny();
       if (conv.status !== "human" && conv.status !== "waiting") return eph("This chat isn't live any more.");
       const replies = agentQuickReplies(site);
       const idx = Number(ev.values?.[0]);

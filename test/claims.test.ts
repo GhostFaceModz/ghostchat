@@ -11,6 +11,10 @@ test("custom ids: only gcl actions with a uuid are accepted", () => {
   assert.deepEqual(c.parseCustomId(`gcl:transcript:${ID}`), { action: "transcript", convId: ID });
   assert.deepEqual(c.parseCustomId(`gcl:qreply:${ID}`), { action: "qreply", convId: ID });
   assert.deepEqual(c.parseCustomId(`gcl:close:${ID}`), { action: "close", convId: ID });
+  assert.deepEqual(c.parseCustomId(`gcl:end:${ID}`), { action: "close", convId: ID }, "legacy End alias");
+  assert.deepEqual(c.parseCustomId(`gcl:closeticket:${ID}`), { action: "closethread", convId: ID });
+  assert.deepEqual(c.parseCustomId(`gcl:closethread:${ID}`), { action: "closethread", convId: ID });
+  assert.deepEqual(c.parseCustomId(`gcl:close:${ID}:old`), { action: "close", convId: ID }, "legacy suffix still parses");
   assert.equal(c.parseCustomId(`gcl:nuke:${ID}`), null);
   assert.equal(c.parseCustomId("ticket:open"), null);
   assert.equal(c.parseCustomId(`gcl:claim:${ID}x`), null);
@@ -18,14 +22,15 @@ test("custom ids: only gcl actions with a uuid are accepted", () => {
 
 test("claim buttons per state: Accept, End chat, hand back, transfer, unclaim, transcript, ticket, quick replies", () => {
   const open = c.componentActions(c.claimComponents(ID, "open"));
-  assert.deepEqual(open, ["claim", "close", "transcript", "ticket"]);
+  assert.deepEqual(open, ["claim", "close", "closethread", "transcript", "ticket"]);
   const claimed = c.claimComponents(ID, "claimed", { quickReplies: ["We're looking into this now"] });
-  assert.deepEqual(c.componentActions(claimed), ["close", "back", "transfer", "unclaim", "transcript", "ticket", "qreply"]);
+  assert.deepEqual(c.componentActions(claimed), ["close", "closethread", "back", "transfer", "unclaim", "transcript", "ticket", "qreply"]);
   assert.equal(claimed[0].components.find((b: { custom_id: string }) => b.custom_id.includes(":close:"))?.label, "End chat");
+  assert.equal(claimed[0].components.find((b: { custom_id: string }) => b.custom_id.includes(":closethread:"))?.label, "Close ticket");
   assert.equal(claimed[0].components.find((b: { custom_id: string }) => b.custom_id.includes(":claim:"))?.label, undefined);
   const withTicket = c.componentActions(c.claimComponents(ID, "claimed", { hasTicket: true }));
   assert.ok(withTicket.includes("resolve"));
-  assert.deepEqual(c.componentActions(c.claimComponents(ID, "back")), ["claim", "close", "transcript", "ticket"]);
+  assert.deepEqual(c.componentActions(c.claimComponents(ID, "back")), ["claim", "close", "closethread", "transcript", "ticket"]);
   assert.ok(c.componentActions(c.claimComponents(ID, "claimed")).every((a) => a !== "block"), "no block-visitor button without spam protection");
   assert.ok(claimed.flatMap((r) => r.components).every((b: { custom_id: string }) => b.custom_id.length <= 100));
 });
@@ -40,7 +45,13 @@ test("live controls stay enabled after an agent-message refresh; only ending the
   assert.ok(c.componentActions(afterRelay).includes("unclaim"));
   const closed = c.claimComponents(ID, "closed");
   assert.ok(closed.length, "ended chats keep the button layout visible");
+  const closedBtns = closed[0].components as Array<{ custom_id: string; disabled?: boolean; label?: string }>;
+  assert.equal(closedBtns.find((b) => b.custom_id.includes(":close:"))?.disabled, true, "End chat disables when ended");
+  assert.equal(closedBtns.find((b) => b.custom_id.includes(":back:"))?.disabled, true);
+  assert.equal(closedBtns.find((b) => b.custom_id.includes(":closethread:"))?.disabled, false, "Close thread stays on so an already-ended chat can still be archived");
+  assert.equal(closedBtns.find((b) => b.custom_id.includes(":closethread:"))?.label, "Close thread");
   assert.equal(c.anyComponentDisabled(closed), true);
+  assert.equal((c.claimComponents(ID, "closed", { archived: true })[0].components as Array<{ custom_id: string; disabled?: boolean }>).find((b) => b.custom_id.includes(":closethread:"))?.disabled, true);
   assert.equal(c.anyComponentDisabled(c.claimComponents(ID, "timeout")), true);
   assert.equal(c.anyComponentDisabled(c.claimComponents(ID, "open")), false);
 });
@@ -70,10 +81,26 @@ test("only the claimer or moderators can unclaim/transfer/end a chat", () => {
   assert.equal(c.canManage("0", "42", { claimed_by_id: "42" }), true);
   assert.equal(c.canManage("0", "7", { claimed_by_id: "42" }), false);
   assert.equal(c.canManage(String(1n << 34n), "7", { claimed_by_id: "42" }), true, "Manage Threads");
+  assert.equal(c.canManage(String(1n << 13n), "7", { claimed_by_id: "42" }), true, "Manage Messages");
   assert.equal(c.canManage("8", "7", { claimed_by_id: "42" }), true, "Administrator");
   assert.equal(c.canManage("garbage", "7", { claimed_by_id: null }), false);
   assert.equal(c.canManage("0", "7", { claimed_by_id: null }), false, "unclaimed: only admins can end or transfer");
   assert.equal(c.canManage("8", "7", { claimed_by_id: null }), true);
+  assert.equal(c.canManage("0", "99", { claimed_by_id: "42" }, "99"), true, "site owner can always close");
+  assert.equal(c.canManage("0", "99", { claimed_by_id: null }, "99"), true, "site owner can close after the claimer is cleared");
+  assert.equal(c.canManage("0", "7", { claimed_by_id: null }, "99"), false);
+  assert.match(c.closeDeniedMessage({ claimed_by_id: "42" }), /site owner/);
+  assert.match(c.closeDeniedMessage({ claimed_by_id: "42" }), /Manage Threads/);
+});
+
+test("closing a chat posts a rating line and reuses the existing Discord thread", () => {
+  assert.equal(c.closeThreadMessage(5), "Chat closed · rating ★★★★★");
+  assert.equal(c.closeThreadMessage(3), "Chat closed · rating ★★★☆☆");
+  assert.match(c.closeThreadMessage(null), /leave a review/);
+  assert.equal(c.shouldReuseDiscordThread({ discord_thread_id: "123" }), true);
+  assert.equal(c.shouldReuseDiscordThread({ discord_thread_id: null }), false);
+  assert.match(c.threadTitle("GhostFlix", "s_ti09ut1gfssmwg26lmu"), /GhostFlix · g26lmu/);
+  assert.match(c.missingManageThreadsMessage("Discord 403: Missing Permissions"), /Manage Threads/);
 });
 
 test("staff names are the Discord display name, trimmed and capped at 32 characters", () => {

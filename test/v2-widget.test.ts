@@ -60,4 +60,14 @@ test("widget has Assistant and Support tabs, end-chat, connecting popup and a re
   assert.match(src, /csatComment/);
   assert.match(src, /gc-connect/);
   assert.doesNotMatch(src, /position:\s*fixed;[^"]*gc-connect/);
+  assert.match(src, /function finishSupportChat\(/);
+  assert.match(src, /function hideSupportTab\(/);
+  assert.match(src, /function showBackAiOnce\(/);
+  assert.match(src, /skipReview: "Skip review"/);
+  assert.match(src, /closeSupport: "Close support chat"/);
+  assert.match(src, /gc-tab-end/);
+  assert.match(src, /gc-tab-close/);
+  assert.match(src, /markSupportDone\(/);
+  assert.match(src, /data-tab='support'\]\[data-live='true'\] \.gc-tab-end/);
+  assert.match(src, /flex-shrink: 0/);
 });

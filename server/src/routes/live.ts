@@ -47,11 +47,12 @@ liveWidgetRouter.get("/:siteKey/:sessionId", async (req, res) => {
   const { data } = await q.order("created_at", { ascending: true }).limit(100);
   const { data: tickets } = await getDb().from("ghostchat_tickets").select("id").eq("site_id", site.id).eq("session_id", sessionId).limit(1);
   const ticket = (tickets || [])[0];
-  let reviewPending = Boolean(conv?.review_pending);
-  if (reviewPending) {
-    const { data: csatRows } = await getDb().from("ghostchat_csat").select("id").eq("site_id", site.id).eq("session_id", sessionId).limit(1);
-    if ((csatRows || []).length) reviewPending = false;
-  }
+  const { data: csatRows } = await getDb().from("ghostchat_csat").select("id").eq("site_id", site.id).eq("session_id", sessionId).limit(1);
+  const hasCsat = Boolean((csatRows || []).length);
+  const cancelNote = endChatSystemMessage("cancel");
+  const sawCancel = (data || []).some((m: { role?: string; message?: string }) => m.role === "system" && m.message === cancelNote);
+  let reviewPending = !hasCsat && Boolean(conv) && !sawCancel && (Boolean(conv?.review_pending) || conv?.status === "closed");
+  const liveSupport = conv?.status === "human" || conv?.status === "waiting";
   res.setHeader("cache-control", "no-store");
   res.json({
     status: conv?.status || "bot",
@@ -61,7 +62,7 @@ liveWidgetRouter.get("/:siteKey/:sessionId", async (req, res) => {
     fallback,
     reviewPending,
     hasTicket: Boolean(ticket),
-    hasSupport: Boolean(conv || ticket),
+    hasSupport: Boolean(liveSupport || reviewPending || ticket),
   });
 });
 
@@ -423,14 +424,22 @@ telegramWebhookRouter.post("/:channelId", async (req, res) => {
 /** Relayed from the GhostBot gateway / interactions (HMAC-signed). */
 export async function handleDiscordRelay(body: Record<string, unknown>): Promise<{ status: number; reply?: string; response?: Record<string, unknown> }> {
   if (body.type === "component") {
-    if (!String(body.custom_id || "").startsWith(GCL)) return { status: 400 };
-    const response = await handleClaimComponent({
-      custom_id: String(body.custom_id), user_id: String(body.user_id || ""), user_name: String(body.user_name || "Team"),
+    const customId = String(body.custom_id || "");
+    const ev = {
+      custom_id: customId, user_id: String(body.user_id || ""), user_name: String(body.user_name || "Team"),
       permissions: typeof body.permissions === "string" ? body.permissions : undefined,
       values: Array.isArray(body.values) ? body.values.map(String) : undefined,
       resolved_names: (body.resolved_names && typeof body.resolved_names === "object") ? body.resolved_names as Record<string, string> : undefined,
-    });
-    return { status: 200, response };
+    };
+    try {
+      const response = customId.startsWith(GCL)
+        ? await handleClaimComponent(ev)
+        : { type: 4, data: { content: "That button isn't recognised.", flags: 64, allowed_mentions: { parse: [] } } };
+      return { status: 200, response };
+    } catch (err) {
+      console.error("discord component:", (err as Error).message);
+      return { status: 200, response: { type: 4, data: { content: `Something went wrong closing that action: ${(err as Error).message}. Please try again.`, flags: 64, allowed_mentions: { parse: [] } } } };
+    }
   }
   if (body.type === "link") {
     const code = String(body.code || "").toUpperCase();
@@ -450,8 +459,16 @@ export async function handleDiscordRelay(body: Record<string, unknown>): Promise
     const { data } = await getDb().from("ghostchat_live_conversations").select("*").eq("discord_thread_id", threadId).maybeSingle();
     const conv = data as Conversation | null;
     if (!conv) return { status: 200 };
-    if (/^!back\b/i.test(content)) { await handBack(conv, "discord"); return { status: 200, reply: "🤖 Handed back to the AI assistant. The visitor can leave a review." }; }
-    if (/^!close\b/i.test(content)) { await endLiveChat(conv, "discord", "end"); return { status: 200, reply: "✅ Chat closed. The visitor can leave a review." }; }
+    if (/^!back\b/i.test(content)) {
+      const ended = await endLiveChat(conv, "discord", "handback");
+      if (ended.discordArchive && !ended.discordArchive.ok) return { status: 200, reply: `🤖 Handed back to the AI, but I couldn't archive this thread. Please give the GhostChat bot **Manage Threads** in this channel, then press **Close thread**.` };
+      return { status: 200, reply: "🤖 Handed back to the AI assistant. The visitor can leave a review." };
+    }
+    if (/^!close\b/i.test(content)) {
+      const ended = await endLiveChat(conv, "discord", "end");
+      if (ended.discordArchive && !ended.discordArchive.ok) return { status: 200, reply: `✅ Chat closed in GhostChat, but I couldn't archive this thread. Please give the GhostChat bot **Manage Threads** in this channel, then press **Close thread**.` };
+      return { status: 200, reply: "✅ Chat closed. The visitor can leave a review." };
+    }
     const name = typeof body.author_name === "string" ? supportName(body.author_name) : null;
     if (/^!take\b/i.test(content)) { await takeOver(conv, name || conv.claimed_by_name); return { status: 200, reply: "🧑 You have the chat. The AI will stay quiet." }; }
     if (conv.status === "bot" || conv.status === "closed") return { status: 200, reply: "This chat was handed back to the AI. Type `!take` to jump back in." };
@@ -472,7 +489,7 @@ discordWebhookRouter.post("/", async (req, res) => {
     res.status(out.status).json({ ok: out.status === 200, reply: out.reply ?? null, response: out.response ?? null });
   } catch (err) {
     console.error("discord relay:", (err as Error).message);
-    res.status(500).json({ ok: false });
+    res.status(200).json({ ok: false, response: { type: 4, data: { content: `Something went wrong: ${(err as Error).message}. Please try again.`, flags: 64, allowed_mentions: { parse: [] } } } });
   }
 });
 

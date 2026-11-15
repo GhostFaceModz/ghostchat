@@ -34,7 +34,10 @@ export async function startHandoff(site: Site, sessionId: string, reason: "asked
   if (existing) {
     const fresh = existing.status === "bot" || existing.status === "closed";
     const patch: Partial<Conversation> = { status: fresh ? status : existing.status === "waiting" && reason === "manual" ? "human" : existing.status, reason, agent_name: agent, page_url: pageUrl ?? existing.page_url, review_pending: false };
-    if (fresh) Object.assign(patch, { telegram_chat_id: null, telegram_thread_id: null, discord_thread_id: null, discord_channel_id: null, discord_message_id: null, discord_panel_id: null, claimed_by_id: null, claimed_by_name: null, claimed_at: null, waiting_since: new Date().toISOString(), last_agent_at: null });
+    if (fresh) {
+      // Keep any existing Discord thread so a new handoff reuses it instead of opening a duplicate.
+      Object.assign(patch, { telegram_chat_id: null, telegram_thread_id: null, claimed_by_id: null, claimed_by_name: null, claimed_at: null, waiting_since: new Date().toISOString(), last_agent_at: null });
+    }
     await updateConversation(existing.id, patch);
     conv = { ...existing, ...patch } as Conversation;
     if (!fresh) return conv;
@@ -123,27 +126,36 @@ export async function clearReviewPending(siteId: string, sessionId: string): Pro
   await getDb().from("ghostchat_live_conversations").update({ review_pending: false, updated_at: new Date().toISOString() }).eq("site_id", siteId).eq("session_id", sessionId);
 }
 
-/** End or cancel a live handoff: close the support thread, notify the agent, optionally prompt for a review. */
-export async function endLiveChat(conv: Conversation, via: EndVia, kind: EndKind = "end"): Promise<Conversation> {
-  if (conv.status === "closed" && kind !== "cancel") return { ...conv, status: "closed", review_pending: conv.review_pending ?? true };
-  const site = await loadSite(conv.site_id);
+export type ClosedConversation = Conversation & { discordArchive?: { ok: boolean; error?: string; archived: number } };
+
+/** End or cancel a live handoff: close the support thread, notify the agent, optionally prompt for a review, and archive the Discord thread. */
+export async function endLiveChat(conv: Conversation, via: EndVia, kind: EndKind = "end"): Promise<ClosedConversation> {
+  const already = conv.status === "closed" && kind !== "cancel";
+  const site = already ? null : await loadSite(conv.site_id);
   const review = kind !== "cancel";
-  const patch: Partial<Conversation> = {
-    status: "closed",
-    claimed_by_id: null,
-    claimed_by_name: null,
-    review_pending: review,
-  };
-  await updateConversation(conv.id, patch);
-  if (site) {
-    await addLog({ site_id: site.id, session_id: conv.session_id, role: "system", message: endChatSystemMessage(kind), thread: "support" });
-    if (review) await closeOpenTickets(site.id, conv.session_id);
+  const patch: Partial<Conversation> = already
+    ? { status: "closed", review_pending: conv.review_pending || review }
+    : { status: "closed", claimed_by_id: null, claimed_by_name: null, review_pending: review };
+  if (!already) {
+    await updateConversation(conv.id, patch);
+    if (site) {
+      await addLog({ site_id: site.id, session_id: conv.session_id, role: "system", message: endChatSystemMessage(kind), thread: "support" });
+      if (review) await closeOpenTickets(site.id, conv.session_id);
+    }
+    echoToChannels(conv, endChatAgentNotice(kind, via), via === "visitor" || via === "dashboard" ? undefined : via).catch(() => {});
+  } else if (review && !conv.review_pending) {
+    await updateConversation(conv.id, { review_pending: true });
   }
-  echoToChannels(conv, endChatAgentNotice(kind, via), via === "visitor" || via === "dashboard" ? undefined : via).catch(() => {});
-  if (conv.discord_message_id || conv.discord_channel_id || conv.discord_panel_id) {
-    import("./discordClaim.js").then((m) => m.refreshLiveControls({ ...conv, ...patch }, kind === "cancel" ? "back" : "closed", null)).catch(() => {});
+  const ended = { ...conv, ...patch } as ClosedConversation;
+  if (kind !== "cancel" && (conv.discord_message_id || conv.discord_channel_id || conv.discord_panel_id || conv.discord_thread_id)) {
+    try {
+      const m = await import("./discordClaim.js");
+      ended.discordArchive = await m.finalizeLiveClose(ended, {});
+    } catch (e) {
+      ended.discordArchive = { ok: false, error: (e as Error).message, archived: 0 };
+    }
   }
-  return { ...conv, ...patch } as Conversation;
+  return ended;
 }
 
 export async function handBack(conv: Conversation, via: "dashboard" | "telegram" | "discord"): Promise<void> {

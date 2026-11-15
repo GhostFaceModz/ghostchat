@@ -92,7 +92,7 @@ chatRouter.post("/", async (req, res) => {
       res.write(`data: ${JSON.stringify(live)}\n\n`);
       return res.end();
     }
-    const live = { type: "live", status: conv?.status || "closed", ended: true, reviewPending: Boolean(conv?.review_pending), thread: "support", note: "This support chat has ended. You're back with the AI assistant." };
+    const live = { type: "live", status: conv?.status || "closed", ended: true, reviewPending: Boolean(conv?.review_pending), thread: "support", note: "You're back with the AI assistant." };
     if (!wantStream) return res.json({ live, answer: null });
     res.status(200).setHeader("content-type", "text/event-stream; charset=utf-8");
     res.write(`data: ${JSON.stringify(live)}\n\n`);
