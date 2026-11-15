@@ -502,6 +502,11 @@
                 <input name="idle_timeout_min" type="number" min="3" max="120" value="15" />
               </label>
               <p class="muted tiny">We'll warn both sides 2 minutes before closing. Claimed chats continue in Discord DMs, not in a public thread.</p>
+              <label class="check"><input type="checkbox" name="clear_closed_discord" checked /> Remove closed chats from the Discord channel</label>
+              <label>Wait before removing a closed chat (seconds)
+                <input name="clear_closed_discord_sec" type="number" min="10" max="600" value="60" />
+              </label>
+              <p class="muted tiny">The ticket card and any fallback thread are deleted from the channel after this delay, so a star rating can land first. Transcripts and ratings stay in GhostChat. Open or unclaimed tickets are never removed.</p>
               <label>Name shown to visitors
                 <input name="agent_name" maxlength="40" placeholder="e.g. Zane" />
               </label>

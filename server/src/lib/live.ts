@@ -20,6 +20,10 @@ export type LiveSettings = {
   timeout_fallback: "ai" | "form";
   /** Minutes of silence (either side) after a claim before the chat auto-closes. */
   idle_timeout_min: number;
+  /** Remove the inbox card (and any fallback thread) from the Discord support channel after a chat closes. */
+  clear_closed_discord: boolean;
+  /** Seconds to wait after close before removing the card, so a rating can land first. */
+  clear_closed_discord_sec: number;
 };
 export type LiveStatus = "waiting" | "human" | "bot" | "closed";
 export type Conversation = {
@@ -32,6 +36,8 @@ export type Conversation = {
   review_pending?: boolean;
   discord_dm_channel_id?: string | null; discord_dm_header_id?: string | null; discord_dm_kind?: string | null;
   close_warned_at?: string | null;
+  closed_at?: string | null;
+  discord_cleared_at?: string | null;
 };
 
 export const LIVE_PLANS = new Set(["pro", "business"]);
@@ -48,6 +54,47 @@ export function liveSettings(site: Pick<Site, "live_chat">): LiveSettings {
     claim_timeout_min: Math.min(30, Math.max(1, Math.round(Number(raw.claim_timeout_min) || 5))),
     timeout_fallback: raw.timeout_fallback === "form" ? "form" : "ai",
     idle_timeout_min: Math.min(120, Math.max(3, Math.round(Number(raw.idle_timeout_min) || 15))),
+    clear_closed_discord: raw.clear_closed_discord !== false,
+    clear_closed_discord_sec: Math.min(600, Math.max(10, Math.round(Number(raw.clear_closed_discord_sec) || 60))),
+  };
+}
+
+export function clearClosedDiscordSec(settings: Pick<LiveSettings, "clear_closed_discord_sec">): number {
+  return Math.min(600, Math.max(10, Math.round(Number(settings.clear_closed_discord_sec) || 60)));
+}
+
+/** Closed tickets whose Discord inbox card (and any fallback thread) is due to be removed. */
+export function shouldClearClosedDiscord(
+  conv: Pick<Conversation, "status" | "closed_at" | "updated_at" | "discord_channel_id" | "discord_message_id" | "discord_thread_id" | "discord_dm_channel_id" | "discord_dm_kind" | "discord_cleared_at">,
+  settings: Pick<LiveSettings, "clear_closed_discord" | "clear_closed_discord_sec">,
+  now = Date.now(),
+): boolean {
+  if (!settings.clear_closed_discord) return false;
+  if (conv.status !== "closed") return false;
+  if (conv.discord_cleared_at) return false;
+  const hasCard = Boolean(conv.discord_channel_id && conv.discord_message_id);
+  const hasFallback = (conv.discord_dm_kind === "thread" || conv.discord_dm_kind === "private_thread") && Boolean(conv.discord_dm_channel_id);
+  const hasLegacyThread = Boolean(conv.discord_thread_id);
+  if (!hasCard && !hasFallback && !hasLegacyThread) return false;
+  const closed = Date.parse(conv.closed_at || conv.updated_at);
+  if (!Number.isFinite(closed)) return false;
+  return now - closed >= clearClosedDiscordSec(settings) * 1000;
+}
+
+/** Discord channel targets to delete after a close — never a DM. */
+export function closedDiscordCleanupTargets(conv: Pick<Conversation, "discord_channel_id" | "discord_message_id" | "discord_thread_id" | "discord_dm_channel_id" | "discord_dm_kind">): {
+  card: { channelId: string; messageId: string } | null;
+  threads: string[];
+} {
+  const threads: string[] = [];
+  const add = (id?: string | null) => { if (id && !threads.includes(id)) threads.push(id); };
+  if (conv.discord_dm_kind === "thread" || conv.discord_dm_kind === "private_thread") add(conv.discord_dm_channel_id);
+  add(conv.discord_thread_id);
+  return {
+    card: conv.discord_channel_id && conv.discord_message_id
+      ? { channelId: conv.discord_channel_id, messageId: conv.discord_message_id }
+      : null,
+    threads,
   };
 }
 
@@ -103,6 +150,8 @@ export function normalizeLiveSettings(input: unknown, current: LiveSettings): Li
       claim_timeout_min: b.claim_timeout_min ?? current.claim_timeout_min,
       timeout_fallback: b.timeout_fallback ?? current.timeout_fallback,
       idle_timeout_min: b.idle_timeout_min ?? current.idle_timeout_min,
+      clear_closed_discord: typeof b.clear_closed_discord === "boolean" ? b.clear_closed_discord : current.clear_closed_discord,
+      clear_closed_discord_sec: b.clear_closed_discord_sec ?? current.clear_closed_discord_sec,
     },
   } as never);
 }

@@ -101,3 +101,52 @@ test("claim-opened copy explains DMs and the public-thread fallback", () => {
   assert.match(inbox.claimOpenedMessage(null, "Discord 403: Cannot send messages to this user"), /dashboard|DMs/i);
   assert.doesNotMatch(inbox.claimOpenedMessage(null, "Discord 403: Missing Access"), /Create Private Threads/i);
 });
+
+test("closed Discord cards are only removed after the grace delay, and never while open or unclaimed", () => {
+  const now = Date.parse("2026-11-15T05:15:00Z");
+  const card = {
+    discord_channel_id: "ch",
+    discord_message_id: "msg",
+    discord_thread_id: null as string | null,
+    discord_dm_channel_id: null as string | null,
+    discord_dm_kind: null as string | null,
+    discord_cleared_at: null as string | null,
+    closed_at: "2026-11-15T05:14:00Z",
+    updated_at: "2026-11-15T05:14:00Z",
+  };
+  const on = { clear_closed_discord: true, clear_closed_discord_sec: 60 };
+  assert.equal(live.shouldClearClosedDiscord({ ...card, status: "waiting" as const }, on, now), false);
+  assert.equal(live.shouldClearClosedDiscord({ ...card, status: "human" as const }, on, now), false);
+  assert.equal(live.shouldClearClosedDiscord({ ...card, status: "bot" as const }, on, now), false);
+  assert.equal(live.shouldClearClosedDiscord({ ...card, status: "closed" as const, closed_at: "2026-11-15T05:14:30Z" }, on, now), false); // 30s < 60s
+  assert.equal(live.shouldClearClosedDiscord({ ...card, status: "closed" as const }, on, now), true);
+  assert.equal(live.shouldClearClosedDiscord({ ...card, status: "closed" as const }, { clear_closed_discord: false, clear_closed_discord_sec: 60 }, now), false);
+  assert.equal(live.shouldClearClosedDiscord({ ...card, status: "closed" as const, discord_cleared_at: "2026-11-15T05:14:50Z" }, on, now), false);
+  assert.equal(live.shouldClearClosedDiscord({ ...card, status: "closed" as const, discord_channel_id: null, discord_message_id: null }, on, now), false);
+  assert.equal(live.shouldClearClosedDiscord({ ...card, status: "closed" as const, closed_at: "2026-11-15T05:14:45Z" }, { clear_closed_discord: true, clear_closed_discord_sec: 10 }, now), true);
+});
+
+test("closed cleanup targets the inbox card and fallback thread, never a DM", () => {
+  const card = live.closedDiscordCleanupTargets({
+    discord_channel_id: "live", discord_message_id: "card1",
+    discord_thread_id: null, discord_dm_channel_id: "dm-chan", discord_dm_kind: "dm",
+  });
+  assert.deepEqual(card.card, { channelId: "live", messageId: "card1" });
+  assert.deepEqual(card.threads, []);
+  const fallback = live.closedDiscordCleanupTargets({
+    discord_channel_id: "live", discord_message_id: "card1",
+    discord_thread_id: null, discord_dm_channel_id: "thread1", discord_dm_kind: "thread",
+  });
+  assert.deepEqual(fallback.threads, ["thread1"]);
+  const legacy = live.closedDiscordCleanupTargets({
+    discord_channel_id: "live", discord_message_id: "card1",
+    discord_thread_id: "legacy-th", discord_dm_channel_id: "legacy-th", discord_dm_kind: "thread",
+  });
+  assert.deepEqual(legacy.threads, ["legacy-th"]);
+  const both = live.closedDiscordCleanupTargets({
+    discord_channel_id: "live", discord_message_id: "card1",
+    discord_thread_id: "legacy-th", discord_dm_channel_id: "fallback", discord_dm_kind: "private_thread",
+  });
+  assert.deepEqual(both.threads, ["fallback", "legacy-th"]);
+});
+

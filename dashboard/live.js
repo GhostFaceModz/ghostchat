@@ -187,6 +187,8 @@
     f.claim_timeout_min.value = cfg.claim_timeout_min || 5;
     f.timeout_fallback.value = cfg.timeout_fallback || "ai";
     if (f.idle_timeout_min) f.idle_timeout_min.value = cfg.idle_timeout_min || 15;
+    if (f.clear_closed_discord) f.clear_closed_discord.checked = cfg.clear_closed_discord !== false;
+    if (f.clear_closed_discord_sec) f.clear_closed_discord_sec.value = cfg.clear_closed_discord_sec || 60;
     f.agent_name.placeholder = "e.g. " + ((state.owner && state.owner.name || "").split(" ")[0] || "Sam");
     $$("input[name=status]", f).forEach((r) => { r.checked = r.value === cfg.status; });
     [...f.elements].forEach((el) => { el.disabled = locked; });
@@ -211,6 +213,8 @@
       trigger: f.trigger.value, misses: Number(f.misses.value) || 2, agent_name: f.agent_name.value.trim(),
       claim_timeout_min: Number(f.claim_timeout_min.value) || 5, timeout_fallback: f.timeout_fallback.value,
       idle_timeout_min: Number(f.idle_timeout_min && f.idle_timeout_min.value) || 15,
+      clear_closed_discord: Boolean(f.clear_closed_discord && f.clear_closed_discord.checked),
+      clear_closed_discord_sec: Number(f.clear_closed_discord_sec && f.clear_closed_discord_sec.value) || 60,
       status: ($("input[name=status]:checked", f) || {}).value || "online",
       ...(extra || {}),
     };

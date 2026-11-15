@@ -12,11 +12,18 @@ const pro = (live_chat: Record<string, unknown>) => ({ plan: "pro" as const, liv
 
 test("live settings normalise and default safely", () => {
   const s = live.liveSettings({ live_chat: { enabled: true, trigger: "weird", misses: 99, status: "x", agent_name: "  Zane  " } } as never);
-  assert.deepEqual(s, { enabled: true, trigger: "ask_or_misses", misses: 5, status: "online", agent_name: "Zane", claim_timeout_min: 5, timeout_fallback: "ai", idle_timeout_min: 15 });
+  assert.deepEqual(s, { enabled: true, trigger: "ask_or_misses", misses: 5, status: "online", agent_name: "Zane", claim_timeout_min: 5, timeout_fallback: "ai", idle_timeout_min: 15, clear_closed_discord: true, clear_closed_discord_sec: 60 });
   assert.equal(live.liveSettings({ live_chat: null } as never).enabled, false);
   const next = live.normalizeLiveSettings({ status: "away" }, s);
   assert.equal(next.status, "away");
   assert.equal(next.enabled, true);
+  assert.equal(next.clear_closed_discord, true);
+  assert.equal(next.clear_closed_discord_sec, 60);
+  const off = live.normalizeLiveSettings({ clear_closed_discord: false, clear_closed_discord_sec: 15 }, s);
+  assert.equal(off.clear_closed_discord, false);
+  assert.equal(off.clear_closed_discord_sec, 15);
+  assert.equal(live.liveSettings({ live_chat: { clear_closed_discord_sec: 3 } } as never).clear_closed_discord_sec, 10);
+  assert.equal(live.liveSettings({ live_chat: { clear_closed_discord_sec: 9999 } } as never).clear_closed_discord_sec, 600);
 });
 
 test("live chat is Pro-gated and needs the owner online", () => {

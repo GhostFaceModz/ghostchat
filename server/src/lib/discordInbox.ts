@@ -5,7 +5,8 @@
  */
 import { getDb } from "./supabase.js";
 import {
-  liveSettings, lastActivityMs, updateConversation,
+  liveSettings, lastActivityMs, updateConversation, getConversationById,
+  shouldClearClosedDiscord, closedDiscordCleanupTargets, clearClosedDiscordSec,
   type Conversation,
 } from "./live.js";
 import { agentReply, endLiveChat } from "./handoff.js";
@@ -342,6 +343,7 @@ export async function finalizeInboxClose(conv: Conversation, opts: { by?: string
   const site = await siteOf(conv);
   const state: ClaimState = "closed";
   await editInboxCard({ ...conv, status: "closed" }, state, opts.by);
+  scheduleClosedCardClear({ ...conv, status: "closed", closed_at: conv.closed_at || new Date().toISOString() }, site);
   if (conv.discord_dm_channel_id && site) {
     const q = agentQuickReplies(site);
     const rating = opts.rating ?? null;
@@ -382,6 +384,71 @@ async function warnIdle(conv: Conversation, site: Site): Promise<void> {
   await postAgentNote(conv, `⚠️ No messages for a while. This chat with **${visitorTag(site.name, conv.session_id)}** will close in about ${warning} minutes if no one replies.`);
 }
 
+/** Remove a closed chat's inbox card and fallback thread from the support channel. Never touches DMs or open tickets. */
+export async function clearClosedDiscordCard(convId: string, now = Date.now()): Promise<"cleared" | "skipped" | "failed"> {
+  const fresh = await getConversationById(convId);
+  if (!fresh) return "skipped";
+  // Guard at the moment of deletion: open, waiting, or in-progress chats stay put.
+  if (fresh.status !== "closed") return "skipped";
+  const site = await siteOf(fresh);
+  if (!site || !shouldClearClosedDiscord(fresh, liveSettings(site), now)) return "skipped";
+  const targets = closedDiscordCleanupTargets(fresh);
+  try {
+    for (const tid of targets.threads) {
+      await discord("PATCH", `/channels/${tid}`, { archived: false, locked: false }).catch(() => {});
+      try {
+        await discord("DELETE", `/channels/${tid}`);
+      } catch (e) {
+        if (!/Discord 404\b/.test((e as Error).message)) throw e;
+      }
+    }
+    if (targets.card) {
+      try {
+        await discord("DELETE", `/channels/${targets.card.channelId}/messages/${targets.card.messageId}`);
+      } catch (e) {
+        if (!/Discord 404\b/.test((e as Error).message)) throw e;
+      }
+    }
+    await updateConversation(fresh.id, { discord_cleared_at: new Date().toISOString() } as Partial<Conversation>);
+    return "cleared";
+  } catch (e) {
+    console.error("clear closed discord:", (e as Error).message);
+    return "failed";
+  }
+}
+
+/** Closed conversations whose channel card is due for removal. Survives restarts via closed_at. */
+export async function sweepClosedDiscordCards(now = Date.now()): Promise<{ cleared: number; skipped: number; failed: number }> {
+  const { data } = await getDb().from("ghostchat_live_conversations")
+    .select("*").eq("status", "closed").is("discord_cleared_at", null).limit(200);
+  let cleared = 0, skipped = 0, failed = 0;
+  for (const raw of data || []) {
+    const conv = raw as Conversation;
+    const site = await siteOf(conv);
+    if (!site || !shouldClearClosedDiscord(conv, liveSettings(site), now)) {
+      skipped++;
+      continue;
+    }
+    const result = await clearClosedDiscordCard(conv.id, now);
+    if (result === "cleared") cleared++;
+    else if (result === "failed") failed++;
+    else skipped++;
+  }
+  return { cleared, skipped, failed };
+}
+
+function scheduleClosedCardClear(conv: Conversation, site?: Site | null): void {
+  if (process.env.NODE_ENV === "test") return;
+  const settings = site ? liveSettings(site) : { clear_closed_discord: true, clear_closed_discord_sec: 60 };
+  if (!settings.clear_closed_discord) return;
+  const delaySec = clearClosedDiscordSec(settings);
+  const closed = Date.parse(conv.closed_at || conv.updated_at || "") || Date.now();
+  const wait = Math.max(1_000, closed + delaySec * 1000 - Date.now());
+  setTimeout(() => {
+    clearClosedDiscordCard(conv.id).catch((e) => console.error("scheduled clear closed discord:", (e as Error).message));
+  }, wait).unref();
+}
+
 /** Warn, then auto-close, claimed chats that have been silent. */
 export async function sweepIdleLiveChats(now = Date.now()): Promise<{ warned: number; closed: number }> {
   const { idleAction } = await import("./live.js");
@@ -408,8 +475,13 @@ export function startIdleSweep(): void {
   const tick = () => sweepIdleLiveChats().then((r) => {
     if (r.warned || r.closed) console.log("idle sweep:", JSON.stringify(r));
   }).catch((e) => console.error("idle sweep failed:", (e as Error).message));
+  const clearTick = () => sweepClosedDiscordCards().then((r) => {
+    if (r.cleared || r.failed) console.log("closed discord clear:", JSON.stringify(r));
+  }).catch((e) => console.error("closed discord clear failed:", (e as Error).message));
   setTimeout(tick, 20_000).unref();
   setInterval(tick, 30_000).unref();
+  setTimeout(clearTick, 15_000).unref();
+  setInterval(clearTick, 15_000).unref();
 }
 
 export { lastActivityMs };

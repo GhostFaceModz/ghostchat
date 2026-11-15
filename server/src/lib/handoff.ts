@@ -36,7 +36,7 @@ export async function startHandoff(site: Site, sessionId: string, reason: "asked
     const patch: Partial<Conversation> = { status: fresh ? status : existing.status === "waiting" && reason === "manual" ? "human" : existing.status, reason, agent_name: agent, page_url: pageUrl ?? existing.page_url, review_pending: false };
     if (fresh) {
       // Keep any existing Discord thread so a new handoff reuses it instead of opening a duplicate.
-      Object.assign(patch, { telegram_chat_id: null, telegram_thread_id: null, claimed_by_id: null, claimed_by_name: null, claimed_at: null, waiting_since: new Date().toISOString(), last_agent_at: null });
+      Object.assign(patch, { telegram_chat_id: null, telegram_thread_id: null, claimed_by_id: null, claimed_by_name: null, claimed_at: null, waiting_since: new Date().toISOString(), last_agent_at: null, closed_at: null, discord_cleared_at: null });
     }
     await updateConversation(existing.id, patch);
     conv = { ...existing, ...patch } as Conversation;
@@ -134,9 +134,10 @@ export async function endLiveChat(conv: Conversation, via: EndVia, kind: EndKind
   const already = conv.status === "closed" && kind !== "cancel";
   const site = already ? null : await loadSite(conv.site_id);
   const review = kind !== "cancel";
+  const closedAt = conv.closed_at || new Date().toISOString();
   const patch: Partial<Conversation> = already
     ? { status: "closed", review_pending: conv.review_pending || review }
-    : { status: "closed", claimed_by_id: null, claimed_by_name: null, review_pending: review };
+    : { status: "closed", claimed_by_id: null, claimed_by_name: null, review_pending: review, closed_at: closedAt };
   if (!already) {
     await updateConversation(conv.id, patch);
     if (site) {
