@@ -73,6 +73,7 @@ export type Site = {
   max_suggestions?: number | null;
   search_tools?: unknown;
   crawl_scope?: unknown;
+  open_site_links?: "same_tab" | "new_tab";
   usage_alert_level?: number;
   reveal_model?: boolean;
   live_chat?: Record<string, unknown> | null;

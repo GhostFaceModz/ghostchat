@@ -159,6 +159,7 @@ sitesRouter.patch("/:id", async (req, res) => {
   }
   if (typeof body.chat_provider === "string") patch.chat_provider = body.chat_provider.trim() || null;
   if (body.answer_mode === "helpful" || body.answer_mode === "strict") patch.answer_mode = body.answer_mode;
+  if (body.open_site_links === "same_tab" || body.open_site_links === "new_tab") patch.open_site_links = body.open_site_links;
   if (typeof body.reveal_model === "boolean") patch.reveal_model = body.reveal_model;
   if ([0, 1, 3].includes(Number(body.max_sources)) && body.max_sources !== null && body.max_sources !== "") patch.max_sources = Number(body.max_sources);
   if (Number.isInteger(Number(body.max_suggestions)) && Number(body.max_suggestions) >= 0 && Number(body.max_suggestions) <= 3 && body.max_suggestions !== null && body.max_suggestions !== "") patch.max_suggestions = Number(body.max_suggestions);

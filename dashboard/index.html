@@ -328,7 +328,7 @@
             <button type="button" class="btn" id="tool-add-feed">+ Catalogue feed</button>
             <button type="button" class="btn primary" id="tool-save">Save tools</button>
           </div>
-          <p class="muted tiny">URL placeholders: <code>{query}</code> <code>{genre}</code> <code>{mood}</code> <code>{year_from}</code> <code>{year_to}</code> <code>{similar_to}</code> <code>{type}</code> <code>{language}</code> <code>{actors}</code>. Empty ones are dropped from the query string. Fields use dot paths, e.g. <code>poster.url</code>.</p>
+          <p class="muted tiny">URL placeholders: <code>{query}</code> <code>{genre}</code> <code>{mood}</code> <code>{keyword}</code> <code>{year_from}</code> <code>{year_to}</code> <code>{similar_to}</code> <code>{type}</code> <code>{language}</code> <code>{actors}</code> <code>{rating}</code>. Empty ones are dropped from the query string. Fields use dot paths, e.g. <code>poster.url</code>.</p>
         </section>
 
         <section class="panel glass hidden" data-panel="persona">
@@ -353,6 +353,13 @@
                   <option value="1">1 (most relevant page)</option>
                   <option value="3">Up to 3</option>
                 </select>
+              </label>
+              <label>Open your site's links
+                <select name="open_site_links">
+                  <option value="same_tab">Same tab (best for apps and PWAs)</option>
+                  <option value="new_tab">New tab</option>
+                </select>
+                <small class="muted">Recommendation cards, source links and Open buttons to your own pages stay on this site. External links still open in a new tab.</small>
               </label>
               <label>Follow-up suggestions
                 <select name="max_suggestions">

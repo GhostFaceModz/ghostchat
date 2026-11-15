@@ -55,5 +55,6 @@ test("widget keeps follow-up chips only under the latest reply and a compact act
   assert.match(w, /\.gc-fb button \{ width: 24px; height: 24px;/);
   const d = readFileSync("dashboard/index.html", "utf8");
   assert.match(d, /name="max_sources"/);
+  assert.match(d, /name="open_site_links"/);
   assert.match(d, /name="max_suggestions"/);
 });

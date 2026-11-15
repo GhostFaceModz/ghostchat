@@ -260,6 +260,7 @@ function renderSite() {
   persona.answer_mode.value = s.answer_mode === "strict" ? "strict" : "helpful";
   persona.reveal_model.checked = !!s.reveal_model;
   persona.max_sources.value = String([0, 1, 3].includes(s.max_sources) ? s.max_sources : 1);
+  persona.open_site_links.value = s.open_site_links === "new_tab" ? "new_tab" : "same_tab";
   persona.max_suggestions.value = String(Number.isInteger(s.max_suggestions) && s.max_suggestions >= 0 && s.max_suggestions <= 3 ? s.max_suggestions : 2);
   persona.greeting.value = s.greeting || "";
   persona.starter_questions.value = (s.starter_questions || []).join("\n");
@@ -455,6 +456,7 @@ $("#persona-form").addEventListener("submit", async (ev) => {
       answer_mode: fd.get("answer_mode") === "strict" ? "strict" : "helpful",
       reveal_model: ev.target.reveal_model.checked,
       max_sources: Number(fd.get("max_sources")),
+      open_site_links: fd.get("open_site_links") === "new_tab" ? "new_tab" : "same_tab",
       max_suggestions: Number(fd.get("max_suggestions")),
       greeting: fd.get("greeting"),
       starter_questions: lines(fd.get("starter_questions")),

@@ -1,6 +1,6 @@
 import { completeChat } from "./ai.js";
 import { classifyIntent, parseJsonObject, type Intent } from "./intent.js";
-import { pickTool, runTool, toolsFor, type SearchTool, type ToolItem } from "./siteTools.js";
+import { pickTool, runSearch, relaxFilters, relaxedNote, toolsFor, type SearchTool, type ToolItem } from "./siteTools.js";
 import { getDb } from "./supabase.js";
 import type { Site } from "../types.js";
 
@@ -37,7 +37,7 @@ export function salvage(raw: string): { intro: string; picks: Array<{ n: number;
  * The model only picks from the numbered results (by number) and writes a short reason for each.
  * Titles, links and images are copied from the tool results, so nothing can be invented.
  */
-export async function composePicks(site: Site, message: string, items: ToolItem[], tool: Pick<SearchTool, "button_label">, ask = completeChat): Promise<{ intro: string; cards: ResultCard[] }> {
+export async function composePicks(site: Site, message: string, items: ToolItem[], tool: Pick<SearchTool, "button_label">, ask = completeChat, note: string | null = null): Promise<{ intro: string; cards: ResultCard[] }> {
   items = items.slice(0, 12);
   const list = items.map((it, i) => `${i + 1}. ${it.title}${it.year ? ` (${it.year})` : ""}${it.rating ? ` ★${it.rating}` : ""}${it.subtitle ? ` — ${it.subtitle}` : ""}${it.description ? `: ${it.description.slice(0, 140)}` : ""}`).join("\n");
   let intro = "";
@@ -49,10 +49,11 @@ export async function composePicks(site: Site, message: string, items: ToolItem[
           role: "system",
           content: `You are the assistant on "${site.name}". Pick the best matches for the visitor from the numbered RESULTS (found on ${site.name}).
 Reply with ONE JSON object only: {"intro": string, "picks": [{"n": number, "why": string}]}
-- intro: one short friendly sentence (under 140 characters). Do not name any title that is not in RESULTS. No lists, no links.
-- picks: 3 to 6 result numbers (fewer only if fewer fit), best first. why: max 12 words, why it fits this request. Only use numbers from RESULTS.`,
+- intro: one short friendly sentence (under 160 characters). Do not name any title that is not in RESULTS. No lists, no links.
+- If NOTE is present, the results are a wider search (not an exact match). The intro must mention that briefly, then present the picks. Never pretend they were exact matches.
+- picks: 3 to 6 result numbers (fewer only if fewer fit), best first. why: max 12 words, why it fits this request. Only use numbers from RESULTS. Do not invent a connection that the title does not have.`,
         },
-        { role: "user", content: `Visitor: ${message.slice(0, 500)}\n\nRESULTS:\n${list}` },
+        { role: "user", content: `Visitor: ${message.slice(0, 500)}${note ? `\n\nNOTE: ${note}` : ""}\n\nRESULTS:\n${list}` },
       ],
       { maxTokens: 700, temperature: 0.4, json: true, fast: true, site },
     );
@@ -72,7 +73,9 @@ Reply with ONE JSON object only: {"intro": string, "picks": [{"n": number, "why"
     .map((p) => ({ ...items[p.n - 1], why: p.why || items[p.n - 1].subtitle || null, cta: tool.button_label }));
   // An intro that names a title we don't have would be an invented recommendation: replace it.
   const quoted = [...intro.matchAll(/["“”*_]+([^"“”*_]{2,60})["“”*_]+/g)].map((m) => m[1].toLowerCase());
-  if (!intro || quoted.some((q) => !items.some((it) => it.title.toLowerCase() === q) && !message.toLowerCase().includes(q))) intro = `Here are some picks from ${site.name}:`;
+  if (!intro || quoted.some((q) => !items.some((it) => it.title.toLowerCase() === q) && !message.toLowerCase().includes(q))) {
+    intro = (note && note.slice(0, 200)) || `Here are some picks from ${site.name}:`;
+  }
   return { intro, cards };
 }
 
@@ -89,14 +92,32 @@ export async function toolTurn(site: Site, sessionId: string, message: string, d
   const tool = pickTool(tools, intent.intent);
   if (!tool) return null;
   let items: ToolItem[] = [];
+  let note: string | null = null;
+  let kind = "exact";
   try {
-    items = await runTool(tool, intent.filters, deps.fetcher);
+    const attempts = relaxFilters(intent.filters);
+    for (const attempt of attempts) {
+      const found = await runSearch(tool, attempt.filters, deps.fetcher);
+      if (!found.items.length) continue;
+      items = found.items;
+      kind = found.match === "relaxed" ? "relaxed" : attempt.kind;
+      note = found.note || (kind !== "exact" ? relaxedNote(kind === "relaxed" ? attempt.kind : kind, intent.filters) : null);
+      break;
+    }
   } catch (err) {
     console.warn(`site tool ${tool.name} failed:`, (err as Error).message);
     return null;
   }
-  if (!items.length) return null;
-  const { intro, cards } = await composePicks(site, message, items, tool, deps.ask);
+  if (!items.length) {
+    return {
+      answer: "I couldn't find a close match in the catalogue. Want to try a broader search, like dropping the year or the mood?",
+      results: [],
+      suggestions: ["Drop the year", "Drop the mood", "Show popular titles"].filter(Boolean).slice(0, 3),
+      intent,
+      tool: tool.name,
+    };
+  }
+  const { intro, cards } = await composePicks(site, message, items, tool, deps.ask, note);
   return { answer: intro, results: cards, suggestions: [], intent, tool: tool.name };
 }
 

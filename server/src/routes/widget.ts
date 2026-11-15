@@ -7,6 +7,7 @@ import { BOT_TEMPLATES } from "../lib/templates.js";
 import { botMode, supportSettings } from "../lib/modes.js";
 import { suggestionLimit } from "../lib/chat.js";
 import type { Site } from "../types.js";
+import { siteHostsFrom, openSiteLinksMode } from "../lib/siteLinks.js";
 
 export const widgetRouter = Router();
 
@@ -19,7 +20,7 @@ widgetRouter.get("/config/:siteKey", async (req, res) => {
   const { data, error } = await getDb()
     .from("ghostchat_sites")
     .select(
-      "name, url, theme, greeting, starter_questions, proactive_delay_ms, sound_default, show_branding, plan, site_key, booking_url, booking_provider, voice_enabled, greetings, memory_enabled, multilingual, bot_mode, support, live_lookup, max_suggestions",
+      "name, url, theme, greeting, starter_questions, proactive_delay_ms, sound_default, show_branding, plan, site_key, booking_url, booking_provider, voice_enabled, greetings, memory_enabled, multilingual, bot_mode, support, live_lookup, max_suggestions, open_site_links, custom_domain",
     )
     .eq("site_key", siteKey)
     .maybeSingle();
@@ -48,6 +49,9 @@ widgetRouter.get("/config/:siteKey", async (req, res) => {
       quickReplies: botMode(site) === "support" ? supportSettings(site).quick_replies.slice(0, suggestionLimit(site)) : [],
       csat: botMode(site) === "support" ? supportSettings(site).csat : null,
       supportGreeting: botMode(site) === "support" ? supportSettings(site).greeting : null,
+      openSiteLinks: openSiteLinksMode((site as Site).open_site_links),
+      siteUrl: site.url || null,
+      siteHosts: siteHostsFrom(site.url, (site as Site).custom_domain),
     },
   });
 });

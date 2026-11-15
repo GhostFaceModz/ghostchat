@@ -20,7 +20,7 @@ export type SearchTool = {
 };
 export type ToolItem = { title: string; url: string; image: string | null; subtitle: string | null; rating: number | null; description: string | null; year: number | null };
 
-export const PLACEHOLDERS = ["query", "genre", "mood", "year_from", "year_to", "similar_to", "type", "language", "actors"] as const;
+export const PLACEHOLDERS = ["query", "genre", "mood", "year_from", "year_to", "similar_to", "type", "language", "actors", "rating", "keyword"] as const;
 const TOOL_INTENTS: IntentKind[] = ["recommend", "find", "howto", "account", "support", "other"];
 const MAX_TOOLS = 3;
 const MAX_BYTES = 1_500_000;
@@ -72,7 +72,8 @@ export function toolsFor(site: { search_tools?: unknown }): SearchTool[] {
 /** Fill {placeholders}; query-string params whose value ends up empty are dropped entirely. */
 export function fillTemplate(template: string, f: IntentFilters): string {
   const val = (k: string): string => {
-    const v = (f as Record<string, unknown>)[k];
+    const src = k === "keyword" && (f as IntentFilters).mood != null ? "mood" : k === "rating" && (f as IntentFilters).rating != null ? "rating" : k;
+    const v = (f as Record<string, unknown>)[src];
     if (Array.isArray(v)) return v.join(",");
     return v == null ? "" : String(v);
   };
@@ -158,18 +159,70 @@ async function fetchJson(url: string, fetcher: typeof fetch): Promise<unknown> {
   }
 }
 
-export async function runTool(tool: SearchTool, f: IntentFilters, fetcher: typeof fetch = fetch, limit = 8): Promise<ToolItem[]> {
+export type ToolSearch = { items: ToolItem[]; note: string | null; match: "exact" | "relaxed" | null; url: string };
+
+function metaFrom(body: unknown): Pick<ToolSearch, "note" | "match"> {
+  const o = body && typeof body === "object" ? body as Record<string, unknown> : {};
+  const note = typeof o.note === "string" && o.note.trim() ? o.note.trim().slice(0, 240) : null;
+  const match = o.match === "relaxed" || o.match === "exact" ? o.match : (note ? "relaxed" : null);
+  return { note, match };
+}
+
+export async function runSearch(tool: SearchTool, f: IntentFilters, fetcher: typeof fetch = fetch, limit = 8): Promise<ToolSearch> {
   if (tool.kind === "feed") {
     const url = tool.url_template;
     const hit = feedCache.get(url);
     let body = hit && Date.now() - hit.at < 10 * 60_000 ? hit.body : null;
     if (!body) { body = await fetchJson(url, fetcher); feedCache.set(url, { at: Date.now(), body }); if (feedCache.size > 50) feedCache.delete(feedCache.keys().next().value!); }
-    return filterFeed(mapItems(body, tool, url), f, limit);
+    return { items: filterFeed(mapItems(body, tool, url), f, limit), note: null, match: null, url };
   }
   const url = fillTemplate(tool.url_template, f);
   const body = await fetchJson(url, fetcher);
   const seen = new Set<string>();
-  return mapItems(body, tool, url).filter((it) => (seen.has(it.url) ? false : (seen.add(it.url), true))).slice(0, limit);
+  const items = mapItems(body, tool, url).filter((it) => (seen.has(it.url) ? false : (seen.add(it.url), true))).slice(0, limit);
+  return { items, url, ...metaFrom(body) };
+}
+
+export async function runTool(tool: SearchTool, f: IntentFilters, fetcher: typeof fetch = fetch, limit = 8): Promise<ToolItem[]> {
+  return (await runSearch(tool, f, fetcher, limit)).items;
+}
+
+/** Progressively drop or widen filters when an exact catalogue search is empty. */
+export function relaxFilters(f: IntentFilters): Array<{ filters: IntentFilters; kind: string }> {
+  const out: Array<{ filters: IntentFilters; kind: string }> = [{ filters: { ...f }, kind: "exact" }];
+  const push = (kind: string, filters: IntentFilters) => {
+    const key = JSON.stringify(filters);
+    if (out.some((x) => JSON.stringify(x.filters) === key)) return;
+    out.push({ kind, filters });
+  };
+  if (f.rating != null) { const { rating: _r, ...rest } = f; push("drop_rating", rest); }
+  if (f.year_from != null || f.year_to != null) {
+    const widen = { ...f };
+    if (f.year_from != null) widen.year_from = f.year_from - 2;
+    if (f.year_to != null) widen.year_to = f.year_to + 1;
+    push("wider_year", widen);
+  }
+  if (f.mood) { const { mood: _m, ...rest } = f; push("drop_mood", rest); }
+  if (f.year_from != null || f.year_to != null) {
+    const rest = { ...f }; delete rest.year_from; delete rest.year_to;
+    push("drop_year", rest);
+  }
+  const core: IntentFilters = {};
+  if (f.genre) core.genre = f.genre;
+  if (f.type) core.type = f.type;
+  if (f.query) core.query = f.query;
+  if (Object.keys(core).length) push("broad", core);
+  return out;
+}
+
+export function relaxedNote(kind: string, f: IntentFilters): string {
+  const year = f.year_from && f.year_to && f.year_from === f.year_to ? String(f.year_from) : (f.year_from && f.year_to ? `${f.year_from}–${f.year_to}` : (f.year_from || f.year_to || ""));
+  if (kind === "wider_year") return year ? `I couldn't find an exact ${year} match, so here are close titles from nearby years.` : "No exact year matches, so here are nearby years.";
+  if (kind === "drop_mood") return f.mood ? `I couldn't find ${f.mood} titles${year ? ` from ${year}` : ""}, so here are close matches without that mood.` : "Here are close matches with a wider search.";
+  if (kind === "drop_year") return year ? `I couldn't find that mix in ${year}, so here are matches from other years.` : "Here are matches from a wider search.";
+  if (kind === "drop_rating") return "Nothing at that rating, so here are solid matches without the rating filter.";
+  if (kind === "broad") return "No exact matches, so here are the closest titles from the catalogue.";
+  return "No exact matches, so here are the closest titles from the catalogue.";
 }
 
 export function pickTool(tools: SearchTool[], intent: IntentKind): SearchTool | null {

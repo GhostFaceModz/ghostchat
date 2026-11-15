@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeIntent, ruleIntent, parseJsonObject } from "../server/src/lib/intent.js";
-import { fillTemplate, getPath, mapItems, filterFeed, runTool, normalizeTools, pickTool, type SearchTool } from "../server/src/lib/siteTools.js";
-import { composePicks, logText } from "../server/src/lib/recommend.js";
+import { fillTemplate, getPath, mapItems, filterFeed, runTool, runSearch, normalizeTools, pickTool, relaxFilters, type SearchTool } from "../server/src/lib/siteTools.js";
+import { composePicks, logText, toolTurn } from "../server/src/lib/recommend.js";
 import { inScope, pageChunk } from "../server/src/lib/crawl.js";
 import type { Site } from "../server/src/types.js";
 
@@ -114,4 +114,74 @@ test("a reply cut off mid-JSON still yields the complete picks", async () => {
   const { salvage } = await import("../server/src/lib/recommend.js");
   const r = salvage('{"intro": "Try these.", "picks": [{"n": 2, "why": "Folk \\"horror\\""}, {"n": 1, "why": "Day');
   assert.deepEqual(r, { intro: "Try these.", picks: [{ n: 2, why: 'Folk "horror"' }] });
+});
+
+test("rules understand a 2025 stoner comedy and don't treat 'like a stoner movie' as a title", () => {
+  const i = ruleIntent("Find me a good comedy made in 2025 like a stoner movie");
+  assert.equal(i.intent, "recommend");
+  assert.equal(i.filters.genre, "comedy");
+  assert.equal(i.filters.mood, "stoner");
+  assert.equal(i.filters.year_from, 2025);
+  assert.equal(i.filters.year_to, 2025);
+  assert.equal(i.filters.type, "movie");
+  assert.equal(i.filters.similar_to, undefined);
+});
+
+test("between 2024 and 2025 is a year range, and Hereditary is still a title", () => {
+  const i = ruleIntent("Recommend me a few good stoner movies on here made between 2024 and 2025");
+  assert.equal(i.intent, "recommend");
+  assert.equal(i.filters.mood, "stoner");
+  assert.equal(i.filters.year_from, 2024);
+  assert.equal(i.filters.year_to, 2025);
+  const h = ruleIntent("recommend me a horror film like Hereditary");
+  assert.equal(h.filters.similar_to, "Hereditary");
+});
+
+test("relaxFilters widens the year then drops the mood", () => {
+  const steps = relaxFilters({ genre: "comedy", mood: "stoner", year_from: 2025, year_to: 2025, type: "movie" });
+  assert.equal(steps[0].kind, "exact");
+  assert.ok(steps.some((s) => s.kind === "wider_year" && s.filters.year_from === 2023 && s.filters.year_to === 2026 && s.filters.mood === "stoner"));
+  assert.ok(steps.some((s) => s.kind === "drop_mood" && !s.filters.mood && s.filters.year_from === 2025));
+});
+
+test("runSearch surfaces the catalogue's relaxed note", async () => {
+  const fetcher = (async () => new Response(JSON.stringify({ match: "relaxed", note: "Nearby years.", results: body.results }))) as unknown as typeof fetch;
+  const out = await runSearch(ghostflix, { genre: "comedy", mood: "stoner", year_from: 2025, year_to: 2025 }, fetcher);
+  assert.equal(out.match, "relaxed");
+  assert.equal(out.note, "Nearby years.");
+  assert.equal(out.items[0].title, "Midsommar");
+});
+
+test("toolTurn retries a wider search and tells the visitor it relaxed, instead of giving up", async () => {
+  let calls = 0;
+  const fetcher = (async (url: string) => {
+    calls += 1;
+    const exact = /yf=2025/.test(url) && /yt=2025/.test(url) && /mood=stoner/.test(url);
+    if (exact) return new Response(JSON.stringify({ match: "exact", results: [] }));
+    return new Response(JSON.stringify({ match: "relaxed", note: "No exact 2025 stoner comedy, so here are nearby years.", results: body.results.slice(0, 2) }));
+  }) as unknown as typeof fetch;
+  const site = { id: "site-1", name: "GhostFlix", search_tools: [ghostflix] } as Site;
+  const out = await toolTurn(site, "s1", "Find me a good comedy made in 2025 like a stoner movie", {
+    classify: async (msg) => ruleIntent(msg),
+    fetcher,
+    ask: (async () => JSON.stringify({ intro: "I couldn't find a 2025 stoner comedy, so here are close matches.", picks: [{ n: 1, why: "A recent comedy" }] })) as never,
+  });
+  assert.ok(out);
+  assert.ok(calls >= 2);
+  assert.match(out!.answer, /close matches|nearby years/i);
+  assert.equal(out!.results[0].title, "Midsommar");
+  assert.ok(out!.results[0].url.startsWith("https://ghostflix.example/"));
+});
+
+test("toolTurn does not invent titles when the catalogue is empty; it asks to widen the search", async () => {
+  const fetcher = (async () => new Response(JSON.stringify({ results: [] }))) as unknown as typeof fetch;
+  const site = { id: "site-1", name: "GhostFlix", search_tools: [ghostflix] } as Site;
+  const out = await toolTurn(site, "s1", "Find me a good comedy made in 2025 like a stoner movie", {
+    classify: async (msg) => ruleIntent(msg),
+    fetcher,
+    ask: (async () => { throw new Error("should not compose picks"); }) as never,
+  });
+  assert.ok(out);
+  assert.equal(out!.results.length, 0);
+  assert.match(out!.answer, /couldn't find a close match/i);
 });

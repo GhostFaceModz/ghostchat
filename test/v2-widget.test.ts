@@ -83,3 +83,15 @@ test("widget traps host-page swipes and announces open/close to the host page", 
   assert.match(src, /"pointerdown", "pointermove", "pointerup", "pointercancel"/);
   assert.match(src, /panel\.addEventListener\(type, trapHostGestures, \{ passive: true \}\)/);
 });
+
+test("widget opens the site's own links in the same tab and restores the chat", () => {
+  assert.match(src, /function isSiteLink\(/);
+  assert.match(src, /function openSiteUrl\(/);
+  assert.match(src, /function linkTarget\(/);
+  assert.match(src, /gc_restore_open_/);
+  assert.match(src, /GhostChatNavigate/);
+  assert.match(src, /location\.assign/);
+  assert.match(src, /openSiteLinks/);
+  assert.match(src, /siteHosts/);
+  assert.match(src, /data-link/);
+});

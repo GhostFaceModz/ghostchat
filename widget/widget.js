@@ -41,6 +41,8 @@
     name: "GhostChat",
     starters: [],
     showBranding: true,
+    openSiteLinks: "same_tab",
+    siteHosts: [],
     sessionId: null,
     sending: false,
     lastLogId: null,
@@ -100,6 +102,10 @@
     var soundPref = localStorage.getItem("gc_sound_" + SITE_KEY);
     if (soundPref === "1") state.sound = true;
     if (soundPref === "0") state.sound = false;
+    if (sessionStorage.getItem("gc_restore_open_" + SITE_KEY) === "1") {
+      sessionStorage.removeItem("gc_restore_open_" + SITE_KEY);
+      state.open = true;
+    }
   } catch (e) {
     state.sessionId = "s_" + Date.now();
   }
@@ -138,7 +144,10 @@
     html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
     html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     html = html.replace(/(^|[\s(])\*([^*]+)\*/g, "$1<em>$2</em>");
-    html = html.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    html = html.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, function (_, label, href) {
+      var blank = linkTarget(href) === "_blank";
+      return '<a href="' + href + '"' + (blank ? ' target="_blank" rel="noopener noreferrer"' : "") + ">" + label + "</a>";
+    });
     html = html.replace(/^(?:- |\* )(.+)$/gm, "<li>$1</li>");
     html = html.replace(/(?:<li>.*<\/li>\n?)+/g, function (m) { return "<ul>" + m + "</ul>"; });
     html = html.replace(/\n/g, "<br>");
@@ -563,6 +572,48 @@
     return row;
   }
 
+
+  function isSiteLink(href) {
+    try {
+      var u = new URL(href, window.location.href);
+      if (u.origin === window.location.origin) return true;
+      var host = (u.hostname || "").toLowerCase();
+      var hosts = state.siteHosts || [];
+      for (var i = 0; i < hosts.length; i++) if (host === String(hosts[i]).toLowerCase()) return true;
+      return false;
+    } catch (e) { return false; }
+  }
+  function linkTarget(href) {
+    return (state.openSiteLinks !== "new_tab" && isSiteLink(href)) ? "" : "_blank";
+  }
+  function rememberOpen() {
+    try { if (state.open) sessionStorage.setItem("gc_restore_open_" + SITE_KEY, "1"); } catch (e) {}
+  }
+  function openSiteUrl(href) {
+    var url;
+    try { url = new URL(href, window.location.href); } catch (e) { return false; }
+    rememberOpen();
+    try {
+      if (typeof window.GhostChatNavigate === "function") {
+        if (window.GhostChatNavigate(url.href) !== false) return true;
+      }
+    } catch (e) {}
+    try {
+      var a = document.createElement("a");
+      a.setAttribute("href", url.href);
+      a.setAttribute("data-link", "");
+      a.style.display = "none";
+      document.body.appendChild(a);
+      var ev = new MouseEvent("click", { bubbles: true, cancelable: true, view: window });
+      a.dispatchEvent(ev);
+      var handled = ev.defaultPrevented;
+      a.remove();
+      if (handled) return true;
+    } catch (e) {}
+    window.location.assign(url.href);
+    return true;
+  }
+
   function addSources(row, sources) {
     if (!sources || !sources.length) return;
     var wrap = el("div", { class: "gc-sources" });
@@ -573,7 +624,11 @@
       seen[key] = 1;
       var label = s.title || s.url || "Source";
       var inner = ICONS.link + "<span>" + escapeHtml(label) + "</span>";
-      if (s.url) wrap.appendChild(el("a", { class: "gc-src", href: s.url, target: "_blank", rel: "noopener noreferrer", title: label, html: inner }));
+      if (s.url) {
+        var srcAttrs = { class: "gc-src", href: s.url, title: label, html: inner };
+        if (linkTarget(s.url) === "_blank") { srcAttrs.target = "_blank"; srcAttrs.rel = "noopener noreferrer"; }
+        wrap.appendChild(el("a", srcAttrs));
+      }
       else wrap.appendChild(el("span", { class: "gc-src", title: label, html: inner }));
     });
     if (wrap.firstChild) row.appendChild(wrap);
@@ -705,7 +760,9 @@
       var meta = [r.year, r.subtitle].filter(Boolean).join(" \u00b7 ");
       if (meta) b.appendChild(el("div", { class: "gc-rc-m", text: meta }));
       if (r.why) b.appendChild(el("div", { class: "gc-rc-w", text: r.why }));
-      b.appendChild(el("a", { class: "gc-rc-cta", href: url, text: r.cta || "Open", "aria-label": (r.cta || "Open") + ": " + r.title }));
+      var ctaAttrs = { class: "gc-rc-cta", href: url, text: r.cta || "Open", "aria-label": (r.cta || "Open") + ": " + r.title };
+      if (linkTarget(url) === "_blank") { ctaAttrs.target = "_blank"; ctaAttrs.rel = "noopener noreferrer"; }
+      b.appendChild(el("a", ctaAttrs));
       card.appendChild(b);
       rail.appendChild(card);
     });
@@ -750,12 +807,13 @@
         body.appendChild(code);
         body.appendChild(copy);
       } else if (card.type === "booking" || card.url) {
+        var cardBlank = card.type !== "booking" && linkTarget(card.url) === "_blank";
         var cta = el(card.type === "booking" ? "button" : "a", {
           class: "gc-cta",
           type: card.type === "booking" ? "button" : undefined,
           href: card.type === "booking" ? undefined : card.url,
-          target: card.type === "booking" ? undefined : "_blank",
-          rel: "noopener noreferrer",
+          target: cardBlank ? "_blank" : undefined,
+          rel: cardBlank ? "noopener noreferrer" : undefined,
           text: card.cta || (card.type === "booking" ? "Open calendar" : "View")
         });
         if (card.type === "booking") cta.addEventListener("click", function () { openBooking(card.url || state.bookingUrl); });
@@ -1259,6 +1317,21 @@
     }
   }
 
+  shadow.addEventListener("click", function (ev) {
+    var a = ev.target && ev.target.closest ? ev.target.closest("a[href]") : null;
+    if (!a || ev.defaultPrevented) return;
+    if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey || ev.button) return;
+    var href = a.href;
+    if (!href || href.charAt(0) === "#") return;
+    if (state.openSiteLinks === "same_tab" && isSiteLink(href)) {
+      ev.preventDefault();
+      openSiteUrl(href);
+      return;
+    }
+    if (a.target === "_blank") return;
+    ev.preventDefault();
+    window.open(href, "_blank", "noopener,noreferrer");
+  });
   launcher.addEventListener("click", function () { setOpen(!state.open); });
   closeBtn.addEventListener("click", function () { setOpen(false); launcher.focus(); });
   panel.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { setOpen(false); launcher.focus(); } });
@@ -1318,6 +1391,16 @@
     if (typeof cfg.voiceEnabled === "boolean") state.voice = cfg.voiceEnabled;
     if (cfg.bookingUrl) state.bookingUrl = cfg.bookingUrl;
     if (cfg.bookingProvider) state.bookingProvider = cfg.bookingProvider;
+    state.openSiteLinks = cfg.openSiteLinks === "new_tab" ? "new_tab" : "same_tab";
+    if (Array.isArray(cfg.siteHosts) && cfg.siteHosts.length) {
+      state.siteHosts = cfg.siteHosts.map(function (h) { return String(h || "").toLowerCase(); }).filter(Boolean);
+    } else if (cfg.siteUrl) {
+      try {
+        var host = new URL(cfg.siteUrl, window.location.href).hostname.toLowerCase();
+        var apex = host.replace(/^www\./, "");
+        state.siteHosts = apex ? [apex, "www." + apex] : [];
+      } catch (e) { state.siteHosts = []; }
+    }
     voiceBtn.hidden = !(state.voice && window.speechSynthesis);
     input.placeholder = t("ph");
     sub.textContent = t("online");
