@@ -1,6 +1,6 @@
 /**
  * Discord inbox + DM live chat. New handoffs post a compact card in the support channel (no public thread).
- * Claiming opens a DM with the agent (or a private thread if DMs are closed). Each visitor is labelled in
+ * Claiming opens a DM with the agent (or a public thread under that card if DMs are closed). Each visitor is labelled in
  * the shared DM channel; replies go to the agent's active chat or a Reply modal for a specific visitor.
  */
 import { getDb } from "./supabase.js";
@@ -11,7 +11,7 @@ import {
 import { agentReply, endLiveChat } from "./handoff.js";
 import { discord } from "./relay.js";
 import {
-  GCL, aiSummary, closeThreadMessage, conversationLanguage, agentQuickReplies,
+  GCL, aiSummary, closeThreadMessage, conversationLanguage, agentQuickReplies, threadTitle,
   type ClaimState, type Line,
 } from "./discordClaim.js";
 import type { Site } from "../types.js";
@@ -242,17 +242,20 @@ async function postDmHeader(site: Site, conv: Conversation, channelId: string, u
   return msg.id;
 }
 
-/** Open a DM with the claimer, or a private thread under the inbox card if DMs are closed. */
-export async function openAgentSession(conv: Conversation, userId: string): Promise<{ ok: boolean; mode: "dm" | "private_thread" | null; error?: string }> {
+/** Session kind used when a claimed chat is opened with the agent. "private_thread" is kept for older rows. */
+export type AgentSessionMode = "dm" | "thread" | "private_thread";
+
+/** Open a DM with the claimer, or a public thread under the inbox card if DMs are closed. */
+export async function openAgentSession(conv: Conversation, userId: string): Promise<{ ok: boolean; mode: AgentSessionMode | null; error?: string }> {
   const site = await siteOf(conv);
   if (!site) return { ok: false, mode: null, error: "That site is no longer available." };
-  // Reuse an existing DM / private thread for this visitor if we already have one.
+  // Reuse an existing DM / thread for this visitor if we already have one.
   if (conv.discord_dm_channel_id) {
     try {
       await discord("PATCH", `/channels/${conv.discord_dm_channel_id}`, { archived: false, locked: false }).catch(() => {});
       await postDmHeader(site, conv, conv.discord_dm_channel_id, userId, true);
       await setActiveChat(userId, { ...conv, claimed_by_id: userId });
-      return { ok: true, mode: (conv.discord_dm_kind as "dm" | "private_thread") || "dm" };
+      return { ok: true, mode: (conv.discord_dm_kind as AgentSessionMode) || "dm" };
     } catch (e) {
       console.error("inbox reuse session:", (e as Error).message);
     }
@@ -267,33 +270,32 @@ export async function openAgentSession(conv: Conversation, userId: string): Prom
     return { ok: true, mode: "dm" };
   } catch (dmErr) {
     const dmError = (dmErr as Error).message;
-    if (!conv.discord_channel_id) return { ok: false, mode: null, error: dmError };
+    if (!conv.discord_channel_id || !conv.discord_message_id) return { ok: false, mode: null, error: dmError };
     try {
-      const th = await discord<{ id: string }>("POST", `/channels/${conv.discord_channel_id}/threads`, {
-        name: clip(`🔒 ${site.name} · ${conv.session_id.slice(-6)}`, 95),
-        type: 12,
-        invitable: false,
+      // Public thread attached to the inbox card. Uses Create Public Threads + Manage Threads, already granted.
+      const th = await discord<{ id: string }>("POST", `/channels/${conv.discord_channel_id}/messages/${conv.discord_message_id}/threads`, {
+        name: threadTitle(site.name, conv.session_id),
         auto_archive_duration: 1440,
       });
       await discord("PUT", `/channels/${th.id}/thread-members/${userId}`).catch(() => {});
       await postDmHeader(site, { ...conv, discord_dm_channel_id: th.id }, th.id, userId, true);
-      await updateConversation(conv.id, { discord_dm_channel_id: th.id, discord_dm_kind: "private_thread" } as Partial<Conversation>);
+      await updateConversation(conv.id, { discord_dm_channel_id: th.id, discord_dm_kind: "thread" } as Partial<Conversation>);
       await setActiveChat(userId, { ...conv, claimed_by_id: userId, discord_dm_channel_id: th.id });
       conv.discord_dm_channel_id = th.id;
-      conv.discord_dm_kind = "private_thread";
-      return { ok: true, mode: "private_thread", error: dmError };
+      conv.discord_dm_kind = "thread";
+      return { ok: true, mode: "thread", error: dmError };
     } catch (thErr) {
-      return { ok: false, mode: null, error: `${dmError}; private thread: ${(thErr as Error).message}` };
+      return { ok: false, mode: null, error: `${dmError}; thread: ${(thErr as Error).message}` };
     }
   }
 }
 
-export function claimOpenedMessage(mode: "dm" | "private_thread" | null, error?: string): string {
+export function claimOpenedMessage(mode: AgentSessionMode | null, error?: string): string {
   if (mode === "dm") return "📬 I opened a **DM** with you for this visitor. Type a reply there, or press **Reply** under a visitor message.";
-  if (mode === "private_thread") {
-    return "I couldn't DM you — your DMs with the bot may be closed, or the bot needs to share a server with you. I opened a **private thread** under this card instead. " + (error && /permission|403|50013/i.test(error) ? "If you don't see it, grant the bot **Create Private Threads**." : "");
+  if (mode === "thread" || mode === "private_thread") {
+    return "I couldn't DM you — your DMs with the bot may be closed, or the bot needs to share a server with you. I opened a **thread** under this card instead. Type your replies there.";
   }
-  return `I claimed the chat, but I couldn't open a DM or a private thread. ${error || "Please allow DMs from server members, and make sure the GhostChat bot shares a server with you."} You can still reply from the GhostChat dashboard.`;
+  return `I claimed the chat, but I couldn't open a DM or a thread under this card. ${error || "Please allow DMs from server members, and make sure the GhostChat bot shares a server with you."} You can still reply from the GhostChat dashboard.`;
 }
 
 export async function editInboxCard(conv: Conversation, state: ClaimState, by?: string | null): Promise<void> {
@@ -351,7 +353,7 @@ export async function finalizeInboxClose(conv: Conversation, opts: { by?: string
         components: dmControlComponents(conv.id, "closed", { quickReplies: q }),
         allowed_mentions: { parse: [] },
       });
-      if (conv.discord_dm_kind === "private_thread") {
+      if (conv.discord_dm_kind === "thread" || conv.discord_dm_kind === "private_thread") {
         await discord("PATCH", `/channels/${conv.discord_dm_channel_id}`, { archived: true, locked: true }).catch(() => {});
       }
     } catch (e) {

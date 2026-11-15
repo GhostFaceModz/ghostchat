@@ -5,8 +5,8 @@ import type { Site } from "../types.js";
 
 export const TELEGRAM_BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || "GhostFaceZenBot";
 export const DISCORD_APP_ID = process.env.DISCORD_APP_ID || "1558950916823195718";
-// View Channel, Send Messages, Send Messages in Threads, Create Public Threads, Create Private Threads, Manage Threads, Read Message History, Embed Links
-export const DISCORD_PERMISSIONS = String(1024 + 2048 + 274877906944 + 34359738368 + 68719476736 + 17179869184 + 65536 + 16384);
+// View Channel, Send Messages, Send Messages in Threads, Create Public Threads, Manage Threads, Read Message History, Embed Links
+export const DISCORD_PERMISSIONS = String(1024 + 2048 + 274877906944 + 34359738368 + 17179869184 + 65536 + 16384);
 export const DISCORD_INVITE_URL = `https://discord.com/oauth2/authorize?client_id=${DISCORD_APP_ID}&scope=bot%20applications.commands&permissions=${DISCORD_PERMISSIONS}`;
 
 const sharedTelegramToken = () => process.env.TELEGRAM_BOT_TOKEN || "";

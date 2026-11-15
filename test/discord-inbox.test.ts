@@ -92,8 +92,12 @@ test("idle auto-close warns two minutes before, then closes; activity resets it"
   assert.match(handoff.endChatAgentNotice("end", "idle"), /inactivity/i);
 });
 
-test("claim-opened copy explains DMs and the private-thread fallback", () => {
+test("claim-opened copy explains DMs and the public-thread fallback", () => {
   assert.match(inbox.claimOpenedMessage("dm"), /DM/);
-  assert.match(inbox.claimOpenedMessage("private_thread"), /private thread/i);
+  assert.match(inbox.claimOpenedMessage("thread"), /thread.+under this card/i);
+  assert.doesNotMatch(inbox.claimOpenedMessage("thread"), /private thread|Create Private Threads/i);
+  // Older conversations stored as private_thread still get the new copy.
+  assert.match(inbox.claimOpenedMessage("private_thread"), /thread.+under this card/i);
   assert.match(inbox.claimOpenedMessage(null, "Discord 403: Cannot send messages to this user"), /dashboard|DMs/i);
+  assert.doesNotMatch(inbox.claimOpenedMessage(null, "Discord 403: Missing Access"), /Create Private Threads/i);
 });

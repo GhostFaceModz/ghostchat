@@ -86,6 +86,7 @@ test("GhostBot invite asks only for what live chat needs", () => {
   const has = (bit: bigint) => (perms & bit) === bit;
   assert.ok(has(1n << 10n) && has(1n << 11n) && has(1n << 38n) && has(1n << 35n) && has(1n << 34n) && has(1n << 16n));
   assert.equal(has(1n << 3n), false, "no Administrator");
+  assert.equal(has(1n << 36n), false, "no Create Private Threads");
   assert.match(relay.DISCORD_INVITE_URL, /client_id=1558950916823195718/);
 });
 
