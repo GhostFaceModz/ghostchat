@@ -56,7 +56,15 @@
   }
   // keep the badge fresh everywhere in the dashboard
   setInterval(() => { if (state.owner && $("#inbox-view").classList.contains("hidden")) refreshInbox(); }, 20000);
-  setTimeout(() => { if (state.owner) refreshInbox(); }, 1500);
+  function openInboxFromUrl() {
+    try {
+      const q = new URLSearchParams(location.search).get("inbox");
+      const m = q && /^([0-9a-f-]{36}):(.{1,80})$/i.exec(q);
+      if (!m || !state.owner) return;
+      showInbox().then(() => openConversation(m[1], m[2]));
+    } catch {}
+  }
+  setTimeout(() => { if (state.owner) { refreshInbox(); openInboxFromUrl(); } }, 1500);
 
   async function openConversation(siteId, sessionId) {
     live.open = { key: siteId + ":" + sessionId, siteId, sessionId };

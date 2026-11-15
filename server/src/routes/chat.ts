@@ -6,6 +6,7 @@ import { assertCanSend, dailyCapCheck } from "../lib/usage.js";
 import { addLog, countUnsure, getConversation, shouldStartLive, liveOnline, liveSettings, handoffTimedOut } from "../lib/live.js";
 import { applyTimeout } from "../lib/discordClaim.js";
 import { agentNameFor, clearReviewPending, startHandoff, visitorLiveMessage } from "../lib/handoff.js";
+import { refreshControlsForSession } from "../lib/discordClaim.js";
 import { HUMAN_REQUEST } from "../lib/guardrails.js";
 import { detectLanguage } from "../lib/lang.js";
 import { loadVisitor, memoryOn, memoryPrompt, rememberVisitor, forgetVisitor, VISITOR_ID_RE, type Visitor } from "../lib/memory.js";
@@ -208,6 +209,7 @@ chatRouter.post("/csat", async (req, res) => {
   if (error) return res.status(500).json({ error: "Could not save your rating." });
   if (ticket?.id) await db.from("ghostchat_tickets").update({ rating, updated_at: new Date().toISOString() }).eq("id", ticket.id);
   await clearReviewPending(site.id, sessionId).catch(() => {});
+  refreshControlsForSession(site.id, sessionId).catch(() => {});
   res.json({ ok: true });
 });
 

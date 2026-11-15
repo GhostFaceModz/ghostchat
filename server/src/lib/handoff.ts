@@ -34,7 +34,7 @@ export async function startHandoff(site: Site, sessionId: string, reason: "asked
   if (existing) {
     const fresh = existing.status === "bot" || existing.status === "closed";
     const patch: Partial<Conversation> = { status: fresh ? status : existing.status === "waiting" && reason === "manual" ? "human" : existing.status, reason, agent_name: agent, page_url: pageUrl ?? existing.page_url, review_pending: false };
-    if (fresh) Object.assign(patch, { telegram_chat_id: null, telegram_thread_id: null, discord_thread_id: null, discord_channel_id: null, discord_message_id: null, claimed_by_id: null, claimed_by_name: null, claimed_at: null, waiting_since: new Date().toISOString(), last_agent_at: null });
+    if (fresh) Object.assign(patch, { telegram_chat_id: null, telegram_thread_id: null, discord_thread_id: null, discord_channel_id: null, discord_message_id: null, discord_panel_id: null, claimed_by_id: null, claimed_by_name: null, claimed_at: null, waiting_since: new Date().toISOString(), last_agent_at: null });
     await updateConversation(existing.id, patch);
     conv = { ...existing, ...patch } as Conversation;
     if (!fresh) return conv;
@@ -61,6 +61,9 @@ export async function visitorLiveMessage(site: Site, conv: Conversation, message
   await addLog({ site_id: site.id, session_id: conv.session_id, role: "user", message, page_url: pageUrl, thread: "support" });
   await updateConversation(conv.id, { last_visitor_at: new Date().toISOString() });
   relayVisitor(site, conv, message).catch(() => {});
+  if (conv.discord_message_id || conv.discord_panel_id || conv.discord_thread_id) {
+    import("./discordClaim.js").then((m) => m.refreshLiveControls(conv, undefined, conv.claimed_by_id)).catch(() => {});
+  }
 }
 
 /** A human reply from the dashboard, Telegram or Discord. */
@@ -77,6 +80,10 @@ export async function agentReply(conv: Conversation, text: string, via: "dashboa
   const id = await addLog({ site_id: site.id, session_id: conv.session_id, role: "agent", message: text.slice(0, 4000), agent_name: agent, thread: "support" });
   await updateConversation(conv.id, { status: "human", agent_name: agent, last_agent_at: new Date().toISOString() });
   if (via === "dashboard") echoToChannels(conv, `🧑 ${agent} (dashboard): ${text}`).catch(() => {});
+  if (conv.discord_message_id || conv.discord_panel_id || conv.discord_thread_id) {
+    const next = { ...conv, status: "human" as const, agent_name: agent };
+    import("./discordClaim.js").then((m) => m.refreshLiveControls(next, "claimed", conv.claimed_by_id)).catch(() => {});
+  }
   return id;
 }
 
@@ -133,8 +140,8 @@ export async function endLiveChat(conv: Conversation, via: EndVia, kind: EndKind
     if (review) await closeOpenTickets(site.id, conv.session_id);
   }
   echoToChannels(conv, endChatAgentNotice(kind, via), via === "visitor" || via === "dashboard" ? undefined : via).catch(() => {});
-  if (conv.discord_message_id || conv.discord_channel_id) {
-    import("./discordClaim.js").then((m) => m.editClaimMessage({ ...conv, ...patch }, kind === "cancel" ? "back" : "closed", null)).catch(() => {});
+  if (conv.discord_message_id || conv.discord_channel_id || conv.discord_panel_id) {
+    import("./discordClaim.js").then((m) => m.refreshLiveControls({ ...conv, ...patch }, kind === "cancel" ? "back" : "closed", null)).catch(() => {});
   }
   return { ...conv, ...patch } as Conversation;
 }

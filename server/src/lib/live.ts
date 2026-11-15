@@ -25,7 +25,7 @@ export type Conversation = {
   reason: string | null; agent_name: string | null; page_url: string | null;
   telegram_chat_id: string | null; telegram_thread_id: number | null; discord_thread_id: string | null;
   last_visitor_at: string | null; last_agent_at: string | null; created_at: string; updated_at: string;
-  discord_channel_id?: string | null; discord_message_id?: string | null;
+  discord_channel_id?: string | null; discord_message_id?: string | null; discord_panel_id?: string | null;
   claimed_by_id?: string | null; claimed_by_name?: string | null; claimed_at?: string | null; waiting_since?: string | null;
   review_pending?: boolean;
 };
@@ -196,11 +196,11 @@ export async function addLog(row: { site_id: string; session_id: string; role: "
   return (data as { id: string } | null)?.id ?? null;
 }
 export async function transcript(siteId: string, sessionId: string, limit = 200, thread?: "assistant" | "support") {
-  let q = getDb().from("ghostchat_logs").select("id, role, message, agent_name, thread, created_at")
+  let q = getDb().from("ghostchat_logs").select("id, role, message, agent_name, thread, lang, created_at")
     .eq("site_id", siteId).eq("session_id", sessionId);
   if (thread) q = q.eq("thread", thread);
   const { data } = await q.order("created_at", { ascending: true }).limit(limit);
-  return (data || []) as Array<{ id: string; role: string; message: string; agent_name: string | null; thread?: string; created_at: string }>;
+  return (data || []) as Array<{ id: string; role: string; message: string; agent_name: string | null; thread?: string; lang?: string | null; created_at: string }>;
 }
 export async function ownerChannels(ownerId: string) {
   const { data } = await getDb().from("ghostchat_live_channels").select("*").eq("owner_id", ownerId);
