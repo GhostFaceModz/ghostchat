@@ -552,3 +552,52 @@ body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-ne
 button.topic-chip { cursor: pointer; color: inherit; font: inherit; }
 .topic-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
 #log-topic { max-width: 180px; }
+
+
+/* Light dashboard theme. Body and muted text are checked to WCAG AA (4.5:1) on --bg. */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f0ff;
+  --text: #1a1330;
+  --muted: #3e3954;
+  --soft: #5a5470;
+  --line: rgba(40, 20, 80, .14);
+  --line-2: rgba(40, 20, 80, .22);
+  --primary: #5b3cc4;
+  --violet-2: #4c2fb8;
+  --pink: #b01380;
+  --cyan: #0e7490;
+  --danger: #b42318;
+  --glass: rgba(255, 255, 255, .76);
+}
+[data-theme="light"] a { color: #4c2fb8; }
+[data-theme="light"] code { background: rgba(91, 60, 196, .12); color: #3b1d8f; }
+[data-theme="light"] .mesh { mix-blend-mode: multiply; opacity: .22; }
+[data-theme="light"] .vignette { background: radial-gradient(ellipse at 50% 40%, transparent 40%, #f4f0ffd0 100%); }
+[data-theme="light"] .glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .86), rgba(247, 243, 255, .8));
+  box-shadow: 0 24px 60px -36px rgba(40, 20, 80, .28), inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select,
+[data-theme="light"] .dash-lang-wrap select {
+  background: #ffffff;
+  color: var(--text);
+}
+[data-theme="light"] .btn { background: rgba(255, 255, 255, .72); }
+[data-theme="light"] .btn:hover { background: #ffffff; border-color: #5b3cc455; }
+[data-theme="light"] .btn.primary { color: #fff; background: linear-gradient(135deg, #5b3cc4 0%, #6a3fe0 55%, #a21caf 100%); }
+[data-theme="light"] .pill { background: rgba(91, 60, 196, .12); color: #3b1d8f; }
+[data-theme="light"] dialog,
+[data-theme="light"] .cmd-palette { background: rgba(255, 255, 255, .96); color: var(--text); box-shadow: 0 30px 80px -20px rgba(40, 20, 80, .28); }
+[data-theme="light"] .auth-art { background: linear-gradient(180deg, rgba(255, 255, 255, .45), rgba(244, 240, 255, .2)); }
+[data-theme="light"] .checklist li button,
+[data-theme="light"] .cards button,
+[data-theme="light"] .mode-picks button,
+[data-theme="light"] .tk { background: rgba(255, 255, 255, .7); color: var(--text); }
+[data-theme="light"] .ip-reply { background: var(--bg); }
+[data-theme="light"] #auth .theme-toggle { position: absolute; top: 16px; right: 16px; z-index: 2; }
+[data-theme="light"] .error { color: var(--danger); }
+.theme-toggle { width: auto; }
+#auth { position: relative; }
