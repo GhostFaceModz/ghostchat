@@ -1449,7 +1449,8 @@ const AUDIT_LABELS = {
   "training.teach": "Taught an unanswered question",
   "team.invite": "Invited a teammate",
   "team.remove": "Removed a teammate",
-  "team.accept": "Accepted a team invite"
+  "team.accept": "Accepted a team invite",
+  "team.credit_cap": "Set a teammate copilot credit cap"
 };
 
 async function renderAudit() {
@@ -1483,8 +1484,13 @@ async function renderTeam() {
     intro.textContent = "This workspace has " + seats.used + " of " + seats.cap + " seats. Pro includes 2, Business includes 5.";
     const rows = (t.members || []).map((m) => {
       const st = m.status === "pending" ? "Pending" : "Active";
+      const used = m.credits_used || 0;
+      const capLabel = m.credit_cap ? used + " / " + m.credit_cap + " copilot credits this month" : "No copilot cap";
+      const cap = t.role === "owner" && m.role === "agent"
+        ? "<form class='row team-cap' data-cap='" + escapeHtml(m.id) + "'><input name='credit_cap' type='number' min='1' max='10000' placeholder='No cap' value='" + (m.credit_cap || "") + "' /><button class='btn tiny' type='submit'>Set cap</button></form><div class='muted tiny'>" + escapeHtml(capLabel) + "</div>"
+        : (m.role === "agent" ? "<div class='muted tiny'>" + escapeHtml(capLabel) + "</div>" : "");
       const del = t.role === "owner" ? "<button type='button' class='btn tiny ghost' data-remove-member='" + escapeHtml(m.id) + "'>Remove</button>" : "";
-      return "<div class='team-row'><div><b>" + escapeHtml(m.email) + "</b><div class='muted tiny'>" + escapeHtml(m.role) + " · " + st + "</div></div>" + del + "</div>";
+      return "<div class='team-row'><div><b>" + escapeHtml(m.email) + "</b><div class='muted tiny'>" + escapeHtml(m.role) + " · " + st + "</div>" + cap + "</div>" + del + "</div>";
     }).join("") || "<p class='muted tiny'>No teammates yet.</p>";
     const form = t.role === "owner" && seats.cap > 1
       ? "<form id='team-invite-form' class='row' style='margin-top:10px'><input name='email' type='email' required placeholder='teammate@email.com' /><select name='role'><option value='agent'>Agent</option><option value='viewer'>Viewer</option></select><button class='btn primary' type='submit'>Invite</button></form><p class='muted tiny' id='team-invite-url' hidden></p>"
@@ -1495,6 +1501,17 @@ async function renderTeam() {
         if (!confirm("Remove this teammate?")) return;
         try { await req("/api/team/" + btn.getAttribute("data-remove-member"), { method: "DELETE" }); toast("Removed"); renderTeam(); }
         catch (e) { toast(e.message); }
+      });
+    });
+    box.querySelectorAll("form[data-cap]").forEach((form) => {
+      form.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const cap = form.credit_cap.value;
+        try {
+          await req("/api/team/" + form.getAttribute("data-cap"), { method: "PATCH", body: { credit_cap: cap === "" ? null : Number(cap) } });
+          toast("Copilot cap saved");
+          renderTeam();
+        } catch (e) { toast(e.message); }
       });
     });
     const inviteForm = $("#team-invite-form");
