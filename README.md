@@ -199,6 +199,7 @@ Still to build:
 - [x] **Transcript search** (find conversations from the Transcripts tab)
 - [x] **Knowledge coverage map** (trained page URLs vs visitor pages and cited sources)
 - [x] **Broken-link report in recrawl preview** (404s and redirects shown before you publish)
+- [x] **Training recycle bin** (restore removed documents for 7 days, or delete forever)
 - [ ] Server-side TTS / STT beyond the browser voice mode
 
 ## License

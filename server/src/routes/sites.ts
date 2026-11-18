@@ -32,6 +32,7 @@ import { auditFromReq } from "../lib/audit.js";
 import { addEvalQuestion, deleteEvalQuestion, listEvalQuestions, runEvalSet } from "../lib/evalSet.js";
 import { shopifySnippet } from "../lib/integrations.js";
 import { siteCoverage } from "../lib/coverageMap.js";
+import { listDeletedDocuments, purgeDocument, restoreDocument, softDeleteDocument } from "../lib/recycleBin.js";
 
 export const sitesRouter = Router();
 const upload = multer({
@@ -496,6 +497,7 @@ sitesRouter.get("/:id/documents", async (req, res) => {
     .from("ghostchat_documents")
     .select("id, filename, source_type, source_url, byte_size, chunk_count, created_at")
     .eq("site_id", site.id)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (error) return res.status(500).json({ error: "Could not load documents." });
   res.json({ documents: data ?? [] });
@@ -615,19 +617,56 @@ sitesRouter.post("/:id/documents/notion", async (req, res) => {
   }
 });
 
+sitesRouter.get("/:id/documents/trash", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    res.json({ documents: await listDeletedDocuments(site.id) });
+  } catch {
+    res.status(500).json({ error: "Could not load the recycle bin." });
+  }
+});
+
+sitesRouter.post("/:id/documents/:docId/restore", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const document = await restoreDocument(site.id, req.params.docId);
+    auditFromReq(req, "training.restore_document", { targetType: "document", targetId: req.params.docId, meta: { siteId: site.id } }).catch(() => {});
+    res.json({ ok: true, document });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status ?? 500;
+    res.status(status).json({ error: (err as Error).message || "Could not restore that document." });
+  }
+});
+
+sitesRouter.delete("/:id/documents/:docId/purge", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    await purgeDocument(site.id, req.params.docId);
+    auditFromReq(req, "training.purge_document", { targetType: "document", targetId: req.params.docId, meta: { siteId: site.id } }).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status ?? 500;
+    res.status(status).json({ error: (err as Error).message || "Could not delete that document forever." });
+  }
+});
+
 sitesRouter.delete("/:id/documents/:docId", async (req, res) => {
   if (denyIfNotOwner(req, res)) return;
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
-  const { error } = await getDb()
-    .from("ghostchat_documents")
-    .delete()
-    .eq("id", req.params.docId)
-    .eq("site_id", site.id);
-  if (error) return res.status(500).json({ error: "Could not delete the document." });
-  await refreshCounts(site.id);
-  auditFromReq(req, "training.delete_document", { targetType: "document", targetId: req.params.docId, meta: { siteId: site.id } }).catch(() => {});
-  res.json({ ok: true });
+  try {
+    await softDeleteDocument(site.id, req.params.docId);
+    auditFromReq(req, "training.delete_document", { targetType: "document", targetId: req.params.docId, meta: { siteId: site.id } }).catch(() => {});
+    res.json({ ok: true, recycled: true });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status ?? 500;
+    res.status(status).json({ error: (err as Error).message || "Could not move that document to the recycle bin." });
+  }
 });
 
 sitesRouter.get("/:id/logs", async (req, res) => {

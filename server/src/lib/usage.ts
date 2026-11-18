@@ -133,7 +133,8 @@ export async function countUploads(siteId: string): Promise<number> {
     .from("ghostchat_documents")
     .select("id", { count: "exact", head: true })
     .eq("site_id", siteId)
-    .in("source_type", ["upload", "paste", "pdf", "notion"]);
+    .in("source_type", ["upload", "paste", "pdf", "notion"])
+    .is("deleted_at", null);
   if (error) throw error;
   const staged = await countStagingUploads(siteId).catch(() => 0);
   return (count ?? 0) + staged;

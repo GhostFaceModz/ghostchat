@@ -50,9 +50,9 @@ export function hideUrlsFromDiff(diff: { updated?: Array<{ url?: string }>; remo
 }
 
 export async function hasCrawlDocuments(siteId: string): Promise<boolean> {
-  const { count } = await getDb().from("ghostchat_documents").select("id", { count: "exact", head: true }).eq("site_id", siteId).eq("source_type", "crawl");
+  const { count } = await getDb().from("ghostchat_documents").select("id", { count: "exact", head: true }).eq("site_id", siteId).eq("source_type", "crawl").is("deleted_at", null);
   if (count) return true;
-  const lookup = await getDb().from("ghostchat_documents").select("id", { count: "exact", head: true }).eq("site_id", siteId).eq("source_type", "lookup");
+  const lookup = await getDb().from("ghostchat_documents").select("id", { count: "exact", head: true }).eq("site_id", siteId).eq("source_type", "lookup").is("deleted_at", null);
   return (lookup.count ?? 0) > 0;
 }
 
@@ -142,7 +142,8 @@ async function loadExistingDocs(siteId: string): Promise<ExistingDoc[]> {
     .from("ghostchat_documents")
     .select("id, source_url, content_hash, source_type, filename")
     .eq("site_id", siteId)
-    .in("source_type", ["crawl", "lookup"]);
+    .in("source_type", ["crawl", "lookup"])
+    .is("deleted_at", null);
   if (error) throw error;
   return (data ?? []) as ExistingDoc[];
 }

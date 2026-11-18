@@ -715,9 +715,43 @@ async function loadDocs() {
   loadPreviewAndStaging();
   loadEvalSet();
   loadCoverageMap();
+  loadRecycleBin();
 }
 
 
+
+
+async function loadRecycleBin() {
+  if (!state.site) return;
+  const box = $("#recycle-list");
+  if (!box) return;
+  try {
+    const { documents } = await req("/api/sites/" + state.site.id + "/documents/trash");
+    if (!documents.length) {
+      box.innerHTML = "<p class='muted tiny'>Nothing in the recycle bin.</p>";
+      return;
+    }
+    box.innerHTML = documents.map((d) => {
+      const until = d.purge_at ? new Date(d.purge_at).toLocaleString() : "7 days";
+      return "<div class='item' data-trash='" + escapeHtml(d.id) + "'><strong>" + escapeHtml(d.filename || "Untitled") + "</strong> · " + escapeHtml(d.source_type || "") + " · removed, kept until " + escapeHtml(until)
+        + "<div class='row'><button type='button' class='btn tiny' data-restore='" + escapeHtml(d.id) + "'>Restore</button>"
+        + "<button type='button' class='btn tiny ghost' data-purge='" + escapeHtml(d.id) + "'>Delete forever</button></div></div>";
+    }).join("");
+    box.querySelectorAll("[data-restore]").forEach((btn) => btn.addEventListener("click", async () => {
+      await req("/api/sites/" + state.site.id + "/documents/" + btn.getAttribute("data-restore") + "/restore", { method: "POST" });
+      toast("Training restored");
+      loadDocs();
+    }));
+    box.querySelectorAll("[data-purge]").forEach((btn) => btn.addEventListener("click", async () => {
+      if (!confirm("Delete this training forever? This cannot be undone.")) return;
+      await req("/api/sites/" + state.site.id + "/documents/" + btn.getAttribute("data-purge") + "/purge", { method: "DELETE" });
+      toast("Deleted forever");
+      loadRecycleBin();
+    }));
+  } catch {
+    box.innerHTML = "<p class='muted tiny'>Could not load the recycle bin.</p>";
+  }
+}
 
 async function loadCoverageMap() {
   if (!state.site) return;
