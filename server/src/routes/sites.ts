@@ -26,6 +26,7 @@ import { BOT_MODES, normalizeSupport } from "../lib/modes.js";
 import { normalizeChannels } from "../lib/meta.js";
 import { saveCorrection } from "../lib/corrections.js";
 import { listFaqDrafts, setFaqDraftStatus } from "../lib/faqDrafts.js";
+import { importFaqRows, parseFaqCsv } from "../lib/faqImport.js";
 import type { Site, Theme } from "../types.js";
 import { checkInstallHealth } from "../lib/widgetHealth.js";
 import { auditFromReq } from "../lib/audit.js";
@@ -800,6 +801,22 @@ sitesRouter.delete("/:id/corrections/:cid", async (req, res) => {
   const { error } = await getDb().from("ghostchat_corrections").delete().eq("id", req.params.cid).eq("site_id", site.id);
   if (error) return res.status(500).json({ error: "Could not delete the correction." });
   res.json({ ok: true });
+});
+
+sitesRouter.post("/:id/faq/import", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const csv = String(req.body?.csv || req.body?.text || "");
+    const rows = parseFaqCsv(csv);
+    const result = await importFaqRows(site, rows);
+    auditFromReq(req, "training.faq_import", { targetType: "site", targetId: site.id, meta: { imported: result.imported } }).catch(() => {});
+    res.status(201).json(result);
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status ?? 500;
+    res.status(status).json({ error: (err as Error).message || "Could not import that FAQ CSV." });
+  }
 });
 
 sitesRouter.get("/:id/faq-drafts", async (req, res) => {

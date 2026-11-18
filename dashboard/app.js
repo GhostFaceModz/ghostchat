@@ -628,6 +628,26 @@ $("#eval-form")?.addEventListener("submit", async (ev) => {
   toast("Eval question saved");
   loadEvalSet();
 });
+
+$("#faq-import-form")?.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if (!state.site) return;
+  const file = $("#faq-import-file")?.files?.[0];
+  const status = $("#faq-import-status");
+  if (!file) { if (status) status.textContent = "Choose a CSV file first."; return; }
+  const csv = await file.text();
+  if (status) status.textContent = "Importing…";
+  try {
+    const r = await req("/api/sites/" + state.site.id + "/faq/import", { method: "POST", body: { csv } });
+    if (status) status.textContent = "Imported " + r.imported + " FAQ " + (r.imported === 1 ? "source" : "sources");
+    toast("FAQ CSV imported");
+    ev.target.reset();
+    loadDocs();
+  } catch (e) {
+    if (status) status.textContent = e.message;
+  }
+});
+
 $("#eval-run")?.addEventListener("click", () => runEvalSet(false));
 $("#eval-run-staging")?.addEventListener("click", () => runEvalSet(true));
 

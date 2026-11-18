@@ -202,6 +202,7 @@ Still to build:
 - [x] **Training recycle bin** (restore removed documents for 7 days, or delete forever)
 - [x] **Workspace canned replies** (shared saved replies in the inbox and tickets)
 - [x] **Inbox keyboard shortcuts** (j/k, Enter, Esc, t to take over)
+- [x] **FAQ CSV import** (question/answer rows become training sources, including the faq source type)
 - [ ] Server-side TTS / STT beyond the browser voice mode
 
 ## License
