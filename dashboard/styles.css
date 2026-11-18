@@ -545,3 +545,5 @@ body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-ne
 .eval-history .item { padding: 8px 0; border-top: 1px solid var(--line); }
 .eval-list .item.pass { border-left: 3px solid #86efac; padding-left: 10px; }
 .eval-list .item.fail, #eval-list .item.fail { border-left: 3px solid #fb7185; padding-left: 10px; }
+
+.coverage-gap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0; }

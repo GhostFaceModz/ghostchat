@@ -25,7 +25,7 @@ import { normalizeChatForm } from "../lib/forms.js";
 import { BOT_MODES, normalizeSupport } from "../lib/modes.js";
 import { normalizeChannels } from "../lib/meta.js";
 import { saveCorrection } from "../lib/corrections.js";
-import { listFaqDrafts, setFaqDraftStatus } from "../lib/faqDrafts.js";
+import { createOwnerFaqDraft, listFaqDrafts, setFaqDraftStatus } from "../lib/faqDrafts.js";
 import { importFaqRows, parseFaqCsv } from "../lib/faqImport.js";
 import type { Site, Theme } from "../types.js";
 import { checkInstallHealth } from "../lib/widgetHealth.js";
@@ -840,6 +840,32 @@ sitesRouter.get("/:id/faq-drafts", async (req, res) => {
     res.json({ drafts });
   } catch {
     res.status(500).json({ error: "Could not load FAQ drafts." });
+  }
+});
+
+sitesRouter.post("/:id/faq-drafts", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const draft = await createOwnerFaqDraft(site.id, {
+      question: String(req.body?.question || ""),
+      answer: String(req.body?.answer || ""),
+      source_url: req.body?.source_url || req.body?.url || null,
+    });
+    let trained = false;
+    if (String(draft.answer || "").trim().length >= 20 && req.body?.train) {
+      const saved = await setFaqDraftStatus(site, draft.id, "approved");
+      if (saved) {
+        auditFromReq(req, "training.faq_approve", { targetType: "faq", targetId: draft.id, meta: { siteId: site.id, gap: true } }).catch(() => {});
+        return res.status(201).json({ draft: saved, trained: true });
+      }
+    }
+    auditFromReq(req, "training.faq_draft", { targetType: "faq", targetId: draft.id, meta: { siteId: site.id, gap: true } }).catch(() => {});
+    res.status(201).json({ draft, trained });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status ?? 500;
+    res.status(status).json({ error: (err as Error).message || "Could not save that draft." });
   }
 });
 

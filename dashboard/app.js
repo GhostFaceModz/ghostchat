@@ -781,15 +781,65 @@ async function loadCoverageMap() {
     const { coverage: c } = await req("/api/sites/" + state.site.id + "/coverage");
     const pct = c.coverage == null ? "—" : c.coverage + "%";
     const unused = (c.unused || []).slice(0, 8).map((u) => "<li>" + escapeHtml(u.title || u.url) + (u.title && u.url && u.title !== u.url ? " <span class='muted tiny'>" + escapeHtml(u.url) + "</span>" : "") + "</li>").join("") || "<li class='muted'>Every trained page has been cited, or there isn't enough chat history yet.</li>";
-    const gaps = (c.gaps || []).slice(0, 8).map((g) => "<li>" + escapeHtml(g.url) + " <span class='muted'>×" + g.questions + "</span></li>").join("") || "<li class='muted'>No visitor pages outside your training in the last 30 days.</li>";
+    const gaps = (c.gaps || []).slice(0, 8).map((g) => {
+      const label = (window.GhostChatI18n && window.GhostChatI18n.t("gap.title")) || "Train this gap";
+      return "<li class='coverage-gap'><span>" + escapeHtml(g.url) + " <span class='muted'>×" + g.questions + "</span></span>"
+        + "<button type='button' class='btn tiny' data-train-gap='" + escapeHtml(g.url) + "'>" + escapeHtml(label) + "</button></li>";
+    }).join("") || "<li class='muted'>No visitor pages outside your training in the last 30 days.</li>";
     box.innerHTML = "<p><b>" + pct + "</b> of trained pages were cited in answers · " + (c.cited || 0) + " of " + (c.trained || 0) + " pages with a URL</p>"
       + "<div class='coverage-cols'><div><h5>Trained but never cited</h5><ul>" + unused + "</ul></div>"
       + "<div><h5>Visitor pages missing from training</h5><ul>" + gaps + "</ul></div></div>";
+    box.querySelectorAll("[data-train-gap]").forEach((btn) => {
+      btn.addEventListener("click", () => openTrainGap(btn.getAttribute("data-train-gap")));
+    });
   } catch {
     box.innerHTML = "<p class='muted tiny'>Could not load the coverage map.</p>";
   }
 }
 
+
+function suggestGapQuestion(url) {
+  try {
+    const path = new URL(url, location.href).pathname || "/";
+    const slug = decodeURIComponent(path).split("/").filter(Boolean).pop() || "";
+    const title = slug.replace(/[-_]+/g, " ").replace(/\.\w+$/, "").trim();
+    if (title) return "What should visitors know about " + title.charAt(0).toUpperCase() + title.slice(1) + "?";
+  } catch {}
+  return "What should visitors know about this page?";
+}
+
+function openTrainGap(url) {
+  const dlg = $("#gap-dialog");
+  const f = $("#gap-form");
+  if (!dlg || !f) return;
+  f.source_url.value = url || "";
+  f.question.value = suggestGapQuestion(url || "");
+  f.answer.value = "";
+  $("#gap-url").textContent = url || "";
+  $("#gap-error").hidden = true;
+  dlg.showModal();
+  setTimeout(() => f.answer.focus(), 30);
+}
+$("#gap-cancel")?.addEventListener("click", () => $("#gap-dialog")?.close());
+$("#gap-form")?.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const f = ev.target;
+  const intent = ev.submitter && ev.submitter.value === "draft" ? "draft" : "train";
+  const err = $("#gap-error");
+  try {
+    const data = await req("/api/sites/" + state.site.id + "/faq-drafts", {
+      method: "POST",
+      body: { question: f.question.value, answer: f.answer.value, source_url: f.source_url.value, train: intent === "train" },
+    });
+    $("#gap-dialog").close();
+    toast(data.trained ? "Added to training." : "Saved as an FAQ draft. Approve it when the answer is ready.");
+    loadCoverageMap();
+    if (state.tab === "analytics") loadFaqDrafts();
+  } catch (e) {
+    if (err) { err.textContent = e.message; err.hidden = false; }
+    toast(e.message);
+  }
+});
 
 function previewIssueList(items, kind) {
   return (items || []).slice(0, 12).map((e) => {
