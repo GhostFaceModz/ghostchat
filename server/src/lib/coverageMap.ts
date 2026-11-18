@@ -46,7 +46,7 @@ export async function siteCoverage(siteId: string) {
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
   const db = getDb();
   const [{ data: docs, error: docErr }, { data: logs, error: logErr }] = await Promise.all([
-    db.from("ghostchat_documents").select("source_url, filename, source_type").eq("site_id", siteId),
+    db.from("ghostchat_documents").select("source_url, filename, source_type").eq("site_id", siteId).is("deleted_at", null),
     db.from("ghostchat_logs").select("role, page_url, sources").eq("site_id", siteId).gte("created_at", since).limit(4000),
   ]);
   if (docErr) throw docErr;

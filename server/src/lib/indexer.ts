@@ -45,9 +45,13 @@ export async function storeChunks(opts: {
 
 export async function refreshCounts(siteId: string): Promise<void> {
   const db = getDb();
+  const { data: trash } = await db.from("ghostchat_documents").select("id").eq("site_id", siteId).not("deleted_at", "is", null);
+  const trashIds = (trash ?? []).map((d: { id: string }) => d.id);
+  let chunkQ = db.from("ghostchat_chunks").select("id", { count: "exact", head: true }).eq("site_id", siteId);
+  if (trashIds.length) chunkQ = chunkQ.not("document_id", "in", `(${trashIds.join(",")})`);
   const [{ count: chunks }, { count: docs }] = await Promise.all([
-    db.from("ghostchat_chunks").select("id", { count: "exact", head: true }).eq("site_id", siteId),
-    db.from("ghostchat_documents").select("id", { count: "exact", head: true }).eq("site_id", siteId).in("source_type", ["crawl", "lookup"]),
+    chunkQ,
+    db.from("ghostchat_documents").select("id", { count: "exact", head: true }).eq("site_id", siteId).in("source_type", ["crawl", "lookup"]).is("deleted_at", null),
   ]);
   await db.from("ghostchat_sites").update({ chunk_count: chunks ?? 0, page_count: docs ?? 0, updated_at: new Date().toISOString() }).eq("id", siteId);
   await bumpKnowledge(siteId).catch((err) => console.error("knowledge rev:", (err as Error).message));
@@ -89,7 +93,7 @@ export function planIncremental(existing: ExistingDoc[], pages: CrawledPage[], o
 /** Index pages, re-embedding only new or changed ones. Returns counts. */
 export async function indexPages(site: Pick<Site, "id">, pages: CrawledPage[], opts: { sourceType: "crawl" | "lookup"; removeMissing: boolean; scope?: CrawlScope }) {
   const db = getDb();
-  const { data, error } = await db.from("ghostchat_documents").select("id, source_url, content_hash, source_type").eq("site_id", site.id).in("source_type", ["crawl", "lookup"]);
+  const { data, error } = await db.from("ghostchat_documents").select("id, source_url, content_hash, source_type").eq("site_id", site.id).in("source_type", ["crawl", "lookup"]).is("deleted_at", null);
   if (error) throw error;
   const plan = planIncremental((data ?? []) as ExistingDoc[], pages, { removeMissing: opts.removeMissing });
   let chunks = 0;
