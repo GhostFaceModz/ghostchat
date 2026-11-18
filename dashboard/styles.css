@@ -535,3 +535,6 @@ body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-ne
 @media (prefers-reduced-motion: reduce) {
   .cmd-palette { transition: none; }
 }
+
+.dash-lang-wrap { display: grid; gap: 4px; }
+.dash-lang-wrap select { width: 100%; border: 1px solid var(--line-2); background: rgba(5, 3, 12, .55); color: var(--text); border-radius: 12px; padding: 8px 10px; font: inherit; font-size: 13px; }

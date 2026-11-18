@@ -32,16 +32,22 @@
 
   function actionCommands() {
     return [
-      { group: "Go", label: "Live inbox", run: () => $("#open-inbox")?.click() },
-      { group: "Go", label: "My account", run: () => $("#open-account")?.click() },
-      { group: "Go", label: "Plan & billing", run: () => $("#open-billing")?.click() },
-      { group: "Go", label: "New site", run: () => $("#new-site")?.click() },
-      { group: "Go", label: "Setup guide", run: () => window.open("/guide", "_blank", "noopener") },
+      { group: "Go", key: "nav.inbox", label: "Live inbox", run: () => $("#open-inbox")?.click() },
+      { group: "Go", key: "nav.account", label: "My account", run: () => $("#open-account")?.click() },
+      { group: "Go", key: "nav.billing", label: "Plan & billing", run: () => $("#open-billing")?.click() },
+      { group: "Go", key: "nav.new", label: "New site", run: () => $("#new-site")?.click() },
+      { group: "Go", key: "nav.guide", label: "Setup guide", run: () => window.open("/guide", "_blank", "noopener") },
     ];
   }
 
+  function localize(c) {
+    const i18n = window.GhostChatI18n;
+    if (i18n && c.key) return { ...c, label: i18n.t(c.key) };
+    return c;
+  }
+
   function allCommands() {
-    return [...actionCommands(), ...tabCommands(), ...siteCommands()];
+    return [...actionCommands(), ...tabCommands(), ...siteCommands()].map(localize);
   }
 
   function filter(q) {
