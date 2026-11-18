@@ -385,6 +385,8 @@ function renderSite() {
   theme.sound_default.checked = !!s.sound_default;
   theme.show_branding.checked = s.show_branding !== false;
   theme.show_branding.disabled = s.plan === "free";
+  theme.ai_disclosure.value = s.ai_disclosure != null ? s.ai_disclosure : "This chat uses AI.";
+  theme.ai_disclosure.placeholder = "This chat uses AI.";
   $("#branding-note").textContent = s.plan === "free"
     ? "Free plan always shows the badge. Pro and Business can remove it."
     : "Pro and Business can hide the badge.";
@@ -610,7 +612,8 @@ $("#theme-form").addEventListener("submit", async (ev) => {
       sound_default: $("#theme-form").sound_default.checked,
       show_branding: $("#theme-form").show_branding.checked,
       voice_enabled: $("#theme-form").voice_enabled ? $("#theme-form").voice_enabled.checked : false,
-      read_aloud_enabled: $("#theme-form").read_aloud_enabled ? $("#theme-form").read_aloud_enabled.checked : true
+      read_aloud_enabled: $("#theme-form").read_aloud_enabled ? $("#theme-form").read_aloud_enabled.checked : true,
+      ai_disclosure: $("#theme-form").ai_disclosure ? $("#theme-form").ai_disclosure.value : "This chat uses AI."
     }
   });
   state.site = site;

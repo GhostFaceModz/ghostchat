@@ -52,6 +52,7 @@ export type Site = {
   proactive_delay_ms: number;
   sound_default: boolean;
   show_branding: boolean;
+  ai_disclosure?: string;
   plan: Plan;
   messages_this_period: number;
   leads_this_period: number;

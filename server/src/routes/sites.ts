@@ -12,7 +12,7 @@ import { chunkText } from "../lib/chunk.js";
 import { storeChunks, refreshCounts } from "../lib/indexer.js";
 import { assertPublicHttpUrl } from "../lib/ssrf.js";
 import { clientIp, rateLimitAsync } from "../lib/rateLimit.js";
-import { countOwnerSites, countUploads, messageLimit, refreshPeriod, effectiveBranding } from "../lib/usage.js";
+import { countOwnerSites, countUploads, messageLimit, refreshPeriod, effectiveBranding, sanitizeDisclosure } from "../lib/usage.js";
 import { getTemplate } from "../lib/templates.js";
 import { extractPdfText, isPdfFile } from "../lib/pdf.js";
 import { importNotionPage } from "../lib/notion.js";
@@ -163,6 +163,7 @@ sitesRouter.patch("/:id", async (req, res) => {
     const limits = PLAN_LIMITS[site.plan];
     patch.show_branding = limits.brandingRequired ? true : body.show_branding;
   }
+  if (typeof body.ai_disclosure === "string") patch.ai_disclosure = sanitizeDisclosure(body.ai_disclosure, site.plan);
   if (typeof body.voice_enabled === "boolean") patch.voice_enabled = body.voice_enabled;
   if (typeof body.read_aloud_enabled === "boolean") patch.read_aloud_enabled = body.read_aloud_enabled;
   if (typeof body.booking_url === "string") {
