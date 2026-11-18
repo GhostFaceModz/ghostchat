@@ -132,6 +132,7 @@
         <a href="#embed"><span>5</span>Copy the embed</a>
         <a href="#test"><span>6</span>Test it</a>
         <a href="#upgrade"><span>7</span>Upgrade with Whop</a>
+        <a href="#power"><span>+</span>Training tools</a>
         <a href="#help"><span>?</span>Troubleshooting</a>
       </aside>
 
@@ -188,12 +189,13 @@
             <span class="num"><i>3</i>Step three</span>
             <h2>Train it on your content</h2>
             <ol>
-              <li>Open the <b>Train</b> tab.</li>
+              <li>Open the <b>Train</b> tab. The tools are grouped in sections you can open and close.</li>
               <li>Tap <b>Crawl site</b>. GhostChat reads your pages and sitemap.xml (this can take a minute).</li>
-              <li>Optional: <b>upload</b> PDFs or docs, or <b>paste</b> your FAQ and tap <b>Add to training</b>.</li>
-              <li>Check the list below: each source shows how many chunks it learned.</li>
+              <li>Optional: <b>upload</b> PDFs or docs, <b>paste</b> a FAQ, or <b>import a FAQ CSV</b> (<code>question,answer</code> header) and tap <b>Add to training</b>.</li>
+              <li>To try unpublished training first, tick <b>Add to the test widget first</b> and open the test page. Live visitors still see the published assistant until you publish.</li>
+              <li>Check <b>Training sources</b>: each source shows how many chunks it learned. Removed sources stay in <b>Recently removed</b> for 7 days so you can restore them.</li>
             </ol>
-            <div class="tip"><b>Tip:</b> a clear FAQ paste (questions and answers) is the fastest way to great answers.</div>
+            <div class="tip"><b>Tip:</b> a clear FAQ paste or CSV is the fastest way to great answers. Use <b>Eval set</b> and <b>Knowledge coverage</b> (below) before you publish a big recrawl.</div>
           </div>
           <div class="shot" aria-hidden="true">
             <div class="bar"><i></i><i></i><i></i><span>Dashboard · Train</span></div>
@@ -263,7 +265,7 @@
             <ol>
               <li>In <b>Setup</b>, tap <b>Open demo</b> to chat with your bot without touching your site.</li>
               <li>Ask 3–5 real customer questions. Check the answers and their source links.</li>
-              <li>Wrong or missing answer? Add that info in <b>Train</b> and ask again.</li>
+              <li>Wrong or missing answer? Add that info in <b>Train</b> (or on the test widget first) and ask again. An <b>eval set</b> of must-get-right questions can check sources without using credits.</li>
               <li>Visit your live site: the ghost launcher appears in the bottom corner.</li>
             </ol>
             <div class="tip"><b>No website?</b> The <b>Share</b> tab gives you a hosted chat link and QR code.</div>
@@ -287,7 +289,7 @@
             <h2>Upgrade with Whop</h2>
             <ol>
               <li>Tap <b>Plan &amp; billing</b> in the dashboard sidebar.</li>
-              <li>Pick <b>Pro</b> or <b>Business</b> and complete checkout on Whop.</li>
+              <li>Pick <b>Pro</b> or <b>Business</b>, monthly or yearly (yearly is two months free), and complete checkout on Whop.</li>
               <li>Use the <b>same email</b> as your GhostChat account. Your plan and limits update automatically.</li>
             </ol>
             <div class="tip"><b>Didn't update?</b> Refresh the dashboard after a minute. If it's still on Free, check the email on your Whop purchase matches.</div>
@@ -303,6 +305,23 @@
             </div>
           </div>
         </article>
+
+
+        <section class="help glass reveal" id="power">
+          <span class="tag">Dashboard</span>
+          <h2>Training tools and shortcuts</h2>
+          <p class="muted">Once you have a site, these tools live on the Train tab, in My account, and behind the Jump to… palette (<kbd>Ctrl</kbd>+<kbd>K</kbd> or <kbd>⌘K</kbd>).</p>
+          <dl>
+            <div><dt>Eval set</dt><dd>Add questions the assistant must get right, with the phrases you expect in the sources. Run them against live training or the test widget. This checks retrieval only — it does not call the chat model or use credits.</dd></div>
+            <div><dt>Knowledge coverage</dt><dd>See which trained pages visitors actually ask from, and which sources the bot cites, over the last 30 days.</dd></div>
+            <div><dt>Recently removed</dt><dd>Deleted training stays in a recycle bin for 7 days. Restore it to put the sources back into live answers, or delete it forever.</dd></div>
+            <div><dt>FAQ CSV</dt><dd>On Train, import a <code>question,answer</code> CSV. Each row becomes a FAQ training source.</dd></div>
+            <div><dt>Canned replies</dt><dd>In My account, save reusable replies for the live inbox. Inbox shortcuts: <kbd>j</kbd>/<kbd>k</kbd> move, <kbd>Enter</kbd> opens, <kbd>Esc</kbd> closes, <kbd>t</kbd> takes over.</dd></div>
+            <div><dt>Agent credit caps</dt><dd>Workspace owners can cap an agent’s monthly inbox and email copilot use. The visitor widget and the account owner are not capped.</dd></div>
+            <div><dt>Language</dt><dd>The dashboard tabs and sidebar can be shown in English, Spanish, French, German, Portuguese, Italian, Dutch or Polish — the same set as the widget.</dd></div>
+            <div><dt>Slack alerts</dt><dd>Paste a Slack incoming webhook URL in My account to get a message when a visitor is waiting for a human. GhostChat does not install a Slack app.</dd></div>
+          </dl>
+        </section>
 
         <section class="help glass reveal" id="meta">
           <span class="tag">Business plan · optional</span>
@@ -334,7 +353,9 @@
             <div><dt>The bubble doesn't appear on my site.</dt><dd>Make sure the snippet is on the page (view source and search "widget.js") and the <code>data-id</code> matches your site key exactly.</dd></div>
             <div><dt>The first reply is slow.</dt><dd>On the free host the server can take up to a minute to wake up if nobody has visited for a while. After that it's quick.</dd></div>
             <div><dt>The crawl found nothing.</dt><dd>Some sites block crawlers or load content with JavaScript. Paste your key pages or FAQ into Train instead.</dd></div>
-            <div><dt>It says it doesn't know.</dt><dd>That's by design: it only answers from your content. Add the missing info and ask again.</dd></div>
+            <div><dt>It says it doesn't know.</dt><dd>That's by design: it only answers from your content. Add the missing info and ask again. Coverage and the eval set on the Train tab help you find gaps.</dd></div>
+            <div><dt>I removed a page by mistake.</dt><dd>Open <b>Recently removed</b> on the Train tab within 7 days and restore it.</dd></div>
+            <div><dt>The demo chat covers the form on my phone.</dt><dd>On small screens the widget stays closed until you tap the bubble, and the panel uses the full width with a safe area at the top.</dd></div>
           </dl>
           <div class="gstep-actions" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:22px"><a class="btn primary" href="/signup">Create your bot</a><a class="btn" href="/dashboard">Go to dashboard</a></div>
         </section>
