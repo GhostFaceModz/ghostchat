@@ -35,9 +35,10 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
     baseUrl: "https://openrouter.ai/api/v1",
     chatModels: [
       { id: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash (default, very cheap)" },
+      { id: "openrouter/free", label: "OpenRouter free router (no cost)", free: true },
       { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B IT (free)", free: true },
-      { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (free)", free: true },
-      { id: "qwen/qwen3-8b:free", label: "Qwen3 8B (free)", free: true },
+      { id: "google/gemma-4-26b-a4b-it:free", label: "Gemma 4 26B A4B (free)", free: true },
+      { id: "nvidia/nemotron-3.5-lightning:free", label: "Nemotron 3.5 Lightning (free)", free: true },
       { id: "openai/gpt-4o-mini", label: "GPT-4o mini via OpenRouter" },
       { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash via OpenRouter" },
       { id: "x-ai/grok-4.7", label: "Grok 4.7 via OpenRouter" },

@@ -2,11 +2,16 @@ import { EMBEDDING_DIMENSIONS, planChatChoice, resolveChatModel, resolveEmbeddin
 
 /** Used when the default OpenRouter model returns 402 (no credits) or a free model is rate-limited. These do not cost money. */
 export const FREE_OPENROUTER_FALLBACKS = [
+  "openrouter/free",
   "google/gemma-4-31b-it:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "qwen/qwen3-8b:free",
+  "google/gemma-4-26b-a4b-it:free",
+  "nvidia/nemotron-3.5-lightning:free",
 ];
 export const FREE_OPENROUTER_FALLBACK = FREE_OPENROUTER_FALLBACKS[0];
+
+export function isFreeOpenRouterModel(model: string): boolean {
+  return model.endsWith(":free") || model === "openrouter/free";
+}
 import { embedInActiveSpace } from "./embeddingSpace.js";
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
@@ -70,7 +75,12 @@ async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, str
     }
     lastStatus = res.status;
     const text = await res.text().catch(() => "");
-    const canSwitchFree = resolved.provider === "openrouter" && (res.status === 402 || (res.status === 429 && String(resolved.model).endsWith(":free") && attempt >= AI_MAX_RETRIES));
+    const freeModel = isFreeOpenRouterModel(String(resolved.model));
+    const canSwitchFree = resolved.provider === "openrouter" && (
+      res.status === 402
+      || ((res.status === 404 || res.status === 400) && freeModel)
+      || (res.status === 429 && freeModel && attempt >= AI_MAX_RETRIES)
+    );
     if (canSwitchFree) {
       const next = nextFreeOpenRouter(String(resolved.model), usedFree);
       if (next) {
