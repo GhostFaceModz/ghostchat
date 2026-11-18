@@ -2,6 +2,8 @@
 import crypto from "node:crypto";
 import { decryptSecret, ownerChannels, rememberRelay, updateConversation, type Conversation } from "./live.js";
 import type { Site } from "../types.js";
+import { isSlackIncomingWebhookUrl, postSlackWaitingAlert } from "./slackWebhook.js";
+import { getDb } from "./supabase.js";
 
 export const TELEGRAM_BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || "GhostFaceZenBot";
 export const DISCORD_APP_ID = process.env.DISCORD_APP_ID || "1558950916823195718";
@@ -101,6 +103,18 @@ export async function announceHandoff(site: Site, conv: Conversation, recent: Ar
       }
     } catch (err) {
       console.error(`live: ${ch.kind} announce failed:`, (err as Error).message);
+    }
+  }
+  if (conv.status === "waiting") {
+    try {
+      const { data } = await getDb().from("ghostchat_owners").select("slack_webhook_url").eq("id", conv.owner_id).maybeSingle();
+      const hook = String(data?.slack_webhook_url || "");
+      if (isSlackIncomingWebhookUrl(hook)) {
+        const ok = await postSlackWaitingAlert({ webhookUrl: hook, siteName: site.name, why });
+        if (ok) delivered.push("slack");
+      }
+    } catch (err) {
+      console.error("live: slack announce failed:", (err as Error).message);
     }
   }
   return delivered;
