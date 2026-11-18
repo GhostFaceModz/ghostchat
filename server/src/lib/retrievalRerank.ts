@@ -128,7 +128,7 @@ export function rerankChunks(
         inserted++;
         continue;
       }
-      const evictIdx = [...picked].map((p, i) => i).reverse().find((i) => isLegalUrl(picked[i].url) || !(isHomeUrl(picked[i].url) || isOverviewChunk(picked[i])));
+      const evictIdx = picked.map((_, i) => i).reverse().find((i) => isLegalUrl(picked[i].url) || !(isHomeUrl(picked[i].url) || isOverviewChunk(picked[i])));
       if (picked.length >= keep && evictIdx != null) picked.splice(evictIdx, 1);
       const insertAt = Math.min(isBroadQuestion(question) ? 1 : 2, picked.length);
       picked.splice(insertAt, 0, o);
