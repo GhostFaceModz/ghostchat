@@ -2,45 +2,54 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GhostChat widget demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Widget demo · GhostChat</title>
+  <link rel="icon" href="/favicon.ico" sizes="48x48" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Inter:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="/assets/site.css" />
   <style>
-    :root { color-scheme: dark; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; min-height: 100vh; font-family: "Instrument Sans", system-ui, sans-serif;
-      background:
-        radial-gradient(1000px 500px at 0% 0%, rgba(167,139,250,.25), transparent 55%),
-        #0a0712;
-      color: #f5f3ff; padding: 48px 24px;
+    :root { --gc-offset-bottom: 24px; --gc-offset-right: 24px; }
+    body { padding: 0; }
+    .demo-page { display: grid; gap: 0; min-height: 100svh; }
+    .demo-main { max-width: 640px; padding: 72px 24px 140px; margin: 0 auto; width: 100%; }
+    .demo-main h1 { margin-bottom: 10px; }
+    .box { margin-top: 28px; padding: 20px; border-radius: 20px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+    .box input { width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(8,6,18,.6); color: var(--ink); font: 500 15px/1.4 Inter, system-ui, sans-serif; }
+    .box .btn { margin-top: 12px; }
+    .demo-note { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
+    @media (min-width: 960px) {
+      .demo-page { grid-template-columns: minmax(0, 1fr) 420px; }
+      .demo-main { margin: 0 0 0 auto; padding: 80px 48px 80px 24px; max-width: 680px; }
+      .demo-gutter { /* reserved column so the open widget does not cover the form */ }
     }
-    main { max-width: 720px; margin: 0 auto; }
-    h1 { font-family: Syne, sans-serif; font-weight: 800; letter-spacing: -.04em; margin: 0 0 8px; }
-    p { color: #c4b5fd; line-height: 1.6; }
-    code { background: rgba(167,139,250,.12); padding: 2px 6px; border-radius: 6px; }
-    a { color: #e9d5ff; }
-    .box { margin-top: 28px; padding: 20px; border: 1px solid rgba(196,181,253,.16); border-radius: 20px; background: rgba(18,10,32,.6); }
-    label { display: block; font-size: 13px; color: #c4b5fd; margin: 0 0 6px; }
-    input { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(196,181,253,.2); background: transparent; color: #fff; font: inherit; }
-    button { margin-top: 12px; border: 0; border-radius: 12px; padding: 10px 16px; background: #a78bfa; color: #160b27; font-weight: 700; cursor: pointer; }
   </style>
 </head>
 <body>
-  <main>
-    <h1>Widget demo</h1>
-    <p>Talk to GhostChat’s own assistant, trained on this site and the setup guide. Or paste a <code>SITE_KEY</code> from your dashboard to try your bot.</p>
-    <div class="box">
-      <label for="key">Site key</label>
-      <input id="key" placeholder="gc_…" value="gc_demo_ghostchat_pro" />
-      <button type="button" id="go">Load widget</button>
-      <p style="margin:12px 0 0;font-size:13px">Need a key? Open the <a href="/dashboard">dashboard</a>.</p>
+  <header class="nav">
+    <div class="wrap">
+      <a class="brand" href="/"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V10a7 7 0 0 1 14 0v11l-3.5-2-3.5 2-3.5-2Z"/><path d="M9.5 10v1.5m5-1.5v1.5"/></svg></span>GhostChat</a>
+      <nav class="nav-links"><a href="/guide">Setup guide</a><a href="/dashboard">Dashboard</a></nav>
     </div>
-  </main>
+  </header>
+  <div class="demo-page">
+    <main class="demo-main">
+      <h1>Widget demo</h1>
+      <p class="lede">Talk to GhostChat’s own assistant, trained on this site and the setup guide. Or paste a <code>SITE_KEY</code> from your dashboard to try your bot.</p>
+      <div class="box glass">
+        <label for="key">Site key</label>
+        <input id="key" placeholder="gc_…" value="gc_demo_ghostchat_pro" />
+        <button type="button" class="btn primary" id="go">Load widget</button>
+        <p class="demo-note" id="demo-note">Need a key? Open the <a href="/dashboard">dashboard</a>. On a phone, tap the bubble in the corner to open the chat — it stays off the form until you do.</p>
+      </div>
+    </main>
+    <div class="demo-gutter" aria-hidden="true"></div>
+  </div>
   <script>
-    document.getElementById("go").addEventListener("click", function () {
+    function isNarrow() { return window.matchMedia("(max-width: 959px)").matches; }
+    function loadWidget(open) {
       var key = document.getElementById("key").value.trim();
       if (!key) return;
       var old = document.getElementById("ghostchat-host");
@@ -49,13 +58,14 @@
       var s = document.createElement("script");
       s.src = "/widget.js";
       s.setAttribute("data-id", key);
-      s.setAttribute("data-open", "true");
+      if (open) s.setAttribute("data-open", "true");
       s.setAttribute("data-delay", "0");
       document.body.appendChild(s);
-    });
+    }
+    document.getElementById("go").addEventListener("click", function () { loadWidget(true); });
     var q = new URLSearchParams(location.search).get("key");
     if (q) document.getElementById("key").value = q;
-    if (document.getElementById("key").value.trim()) document.getElementById("go").click();
+    if (document.getElementById("key").value.trim()) loadWidget(!isNarrow());
   </script>
 </body>
 </html>

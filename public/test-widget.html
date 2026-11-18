@@ -2,23 +2,34 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="robots" content="noindex,nofollow" />
-  <title>GhostChat test widget</title>
+  <title>Test widget · GhostChat</title>
+  <link rel="icon" href="/favicon.ico" sizes="48x48" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Inter:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="/assets/site.css" />
   <style>
-    :root { color-scheme: dark; }
-    body { margin: 0; min-height: 100vh; font: 16px/1.5 Inter, system-ui, sans-serif; color: #f6f3ff; background: #07060f; }
-    main { max-width: 40rem; margin: 0 auto; padding: 48px 20px; }
-    h1 { font-family: Unbounded, system-ui, sans-serif; letter-spacing: -.03em; }
-    .muted { color: #aaa5c2; }
-    .warn { color: #fb7185; }
-    code { background: rgba(143,108,255,.16); padding: 1px 6px; border-radius: 6px; }
+    .test-main { max-width: 40rem; margin: 0 auto; padding: 72px 20px 140px; }
+    .test-card { padding: 28px 24px; border-radius: 24px; }
+    .test-card h1 { margin-bottom: 10px; }
+    .test-card .ok { color: var(--muted); }
+    .test-card .empty-title { color: var(--ink); font-weight: 600; margin: 0 0 8px; }
   </style>
 </head>
 <body>
-  <main>
-    <h1>Test widget</h1>
-    <p id="msg" class="muted">This page is for trying unpublished training and recrawl previews. Live visitors still see the published assistant.</p>
+  <header class="nav">
+    <div class="wrap">
+      <a class="brand" href="/"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V10a7 7 0 0 1 14 0v11l-3.5-2-3.5 2-3.5-2Z"/><path d="M9.5 10v1.5m5-1.5v1.5"/></svg></span>GhostChat</a>
+      <nav class="nav-links" aria-label="Site"><a href="/dashboard">Dashboard</a><a href="/guide">Setup guide</a></nav>
+    </div>
+  </header>
+  <main class="test-main">
+    <div class="test-card glass">
+      <h1>Test widget</h1>
+      <p id="msg" class="ok">This page is for trying unpublished training and recrawl previews. Live visitors still see the published assistant. Open the chat in the corner when it appears.</p>
+    </div>
   </main>
   <script>
     (function () {
@@ -26,8 +37,8 @@
       var key = (params.get("key") || "").trim();
       var msg = document.getElementById("msg");
       if (!key || key.indexOf("gc_stg_") !== 0) {
-        msg.className = "warn";
-        msg.textContent = "Open this page from your GhostChat dashboard with the test-widget key. The public site key will not load unpublished training here.";
+        msg.className = "ok";
+        msg.innerHTML = "<p class='empty-title'>No test key in this link</p>Open this page from the Train tab in your dashboard (the test widget button). A public site key will not load unpublished training here. <a href='/dashboard'>Go to the dashboard</a>";
         return;
       }
       var s = document.createElement("script");

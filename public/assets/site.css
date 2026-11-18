@@ -91,6 +91,7 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -.03em; line-heig
 .section-head h2 { font-size: clamp(28px, 4.6vw, 48px); margin: 14px 0 14px; }
 .section-head p { color: var(--muted); font-size: clamp(15px, 1.8vw, 18px); margin: 0; }
 .muted { color: var(--muted); }
+.lede { color: var(--muted); font-size: clamp(16px, 1.8vw, 19px); margin: 0 0 20px; max-width: 40rem; line-height: 1.55; }
 
 /* ---------- Glass cards ---------- */
 .glass { background: linear-gradient(180deg, rgba(30, 22, 56, .55), rgba(14, 10, 28, .55)); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(20px) saturate(1.2); -webkit-backdrop-filter: blur(20px) saturate(1.2); box-shadow: 0 30px 70px -30px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .06); }
@@ -106,7 +107,7 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -.03em; line-heig
 .reveal.d1 { transition-delay: .08s; } .reveal.d2 { transition-delay: .16s; } .reveal.d3 { transition-delay: .24s; }
 
 /* ---------- Footer ---------- */
-.footer { border-top: 1px solid var(--line); padding: 40px 0 calc(40px + env(safe-area-inset-bottom)); color: var(--soft); font-size: 14px; }
+.footer { border-top: 1px solid var(--line); padding: 40px 0 calc(112px + env(safe-area-inset-bottom)); color: var(--muted); font-size: 14px; }
 .footer .wrap { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: center; justify-content: space-between; }
 .footer nav { display: flex; flex-wrap: wrap; gap: 18px; }
 .footer a:hover { color: var(--ink); }
