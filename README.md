@@ -56,8 +56,9 @@ Chat is **per site**. Owners pick a provider and model in the dashboard. If that
 
 | Provider | Env key(s) | Default / example chat models | Embeddings (must be 384-d) |
 | --- | --- | --- | --- |
-| **OpenRouter** — default | `OPENROUTER_API_KEY` | `deepseek/deepseek-v4-flash` (default), plus `:free` models such as `google/gemma-4-31b-it:free`, `meta-llama/llama-3.3-70b-instruct:free`, `qwen/qwen3-8b:free` | No embeddings API. Leave `EMBEDDING_PROVIDER=local`. |
-| **Local hash embeddings** — default | none | n/a (embeddings only) | Yes — `hash/feature-384` at 384-d, runs on the server, no key, no cost, fits free-tier RAM. |
+| **OpenRouter** — default | `OPENROUTER_API_KEY` | `deepseek/deepseek-v4-flash` (default), plus `:free` models such as `google/gemma-4-31b-it:free`, `meta-llama/llama-3.3-70b-instruct:free`, `qwen/qwen3-8b:free` | No embeddings API. GhostChat uses gte-small or local hash instead. |
+| **Supabase gte-small** — default embeddings | existing `SUPABASE_SERVICE_KEY` | n/a (embeddings only) | Yes — free `gte-small` at 384-d via the `ghostchat-embed` Edge Function (included invocations). |
+| **Local hash embeddings** — fallback | none | n/a (embeddings only) | Yes — `hash/feature-384` at 384-d, no key, fits free-tier RAM. Used until gte-small has re-embedded the index, or if the function is unavailable. |
 | Grok (xAI) | `GROK_API_KEY` or `XAI_API_KEY` | `grok-4.7`, `grok-4.6`, `grok-4.5` | Optional — model `v1` with `dimensions: 384`. |
 | OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini`, `gpt-4o`, `gpt-4.1-mini` | Optional — `text-embedding-3-small` with `dimensions: 384`. |
 | Google Gemini | `GEMINI_API_KEY` or `GOOGLE_AI_API_KEY` | `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash` | Optional — `gemini-embedding-001` with `dimensions: 384`. |
@@ -92,7 +93,7 @@ See `.env.example` for the full list. Important ones:
 | `OPENAI_API_KEY` | Optional OpenAI chat (and optional 384-d embeddings) |
 | `GROK_API_KEY` / `XAI_API_KEY` | Optional Grok chat (and optional 384-d embeddings) |
 | `GEMINI_API_KEY` | Optional Gemini chat (and optional 384-d embeddings) |
-| `EMBEDDING_PROVIDER` | Default `local` (`hash/feature-384`). Set `openai`, `gemini`, or `grok` to use a paid embeddings API (must stay 384-d). |
+| `EMBEDDING_PROVIDER` | Default `gte-small` (free 384-d via the `ghostchat-embed` Edge Function). Falls back to `local` (`hash/feature-384`) if Supabase is not configured. Set `openai`, `gemini`, or `grok` only for a paid 384-d API. |
 | `EMBEDDING_MODEL` | Override the embeddings model id |
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Discord sign-in. Redirect: `{PUBLIC_URL}/api/auth/discord/callback` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google sign-in. Redirect: `{GOOGLE_REDIRECT_BASE}/api/auth/google/callback` |
@@ -132,7 +133,7 @@ Free Render web service (`render.yaml`, Frankfurt, Node 22; Node 20 crashes beca
 
 1. Confirm both `ghostchat_` migrations have been applied.
 2. Create the service from this repo / Blueprint.
-3. Set `PUBLIC_URL`, `SESSION_SECRET`, `SUPABASE_SERVICE_KEY`, and `OPENROUTER_API_KEY`. Leave `EMBEDDING_PROVIDER=local`. Add OAuth/Whop keys later if you want those features.
+3. Set `PUBLIC_URL`, `SESSION_SECRET`, `SUPABASE_SERVICE_KEY`, and `OPENROUTER_API_KEY`. Embeddings default to free gte-small (or local hash if the function is not available). Add OAuth/Whop keys later if you want those features.
 4. Deploy and check `/healthz`.
 5. Add Discord/Google redirect URIs and the Whop webhook URL if you use those.
 

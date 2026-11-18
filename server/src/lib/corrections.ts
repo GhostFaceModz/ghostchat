@@ -3,6 +3,7 @@ import { getDb } from "./supabase.js";
 import { embedTexts } from "./ai.js";
 import { resolveEmbeddingModel } from "./models.js";
 import type { RetrievedChunk } from "../types.js";
+import { currentEmbeddingModel } from "./embeddingSpace.js";
 
 export type Correction = { id: string; question: string; answer: string; similarity: number };
 
@@ -41,7 +42,7 @@ export async function saveCorrection(siteId: string, input: { question: string; 
   const answer = input.answer.trim().slice(0, 4000);
   if (!question || !answer) throw Object.assign(new Error("Add both the question and the corrected answer."), { status: 400 });
   const [embedding] = await embedTexts([question], "query");
-  const row = { site_id: siteId, question, answer, log_id: input.logId || null, embedding, updated_at: new Date().toISOString() };
+  const row = { site_id: siteId, question, answer, log_id: input.logId || null, embedding, embedding_model: currentEmbeddingModel(), updated_at: new Date().toISOString() };
   const db = getDb();
   const q = input.id
     ? db.from("ghostchat_corrections").update(row).eq("id", input.id).eq("site_id", siteId)

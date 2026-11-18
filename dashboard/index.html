@@ -702,6 +702,15 @@
         <h3>Reading your site</h3>
         <p class="muted" id="wz-crawl-msg">Crawling your pages… this usually takes under a minute.</p>
         <div class="wz-progress"><i></i></div>
+        <div id="wz-faq" hidden>
+          <p class="muted">We couldn't find readable pages. Paste a FAQ or help notes and we'll train on that instead.</p>
+          <form id="wz-faq-form" class="stack">
+            <label>FAQ / help notes <textarea name="text" rows="8" required placeholder="Q: Do you ship internationally?&#10;A: Yes — we ship worldwide."></textarea></label>
+            <label>Title <input name="title" placeholder="FAQ" /></label>
+            <p class="error" id="wz-faq-err" hidden></p>
+            <div class="row"><button class="btn primary" type="submit">Train on this FAQ</button></div>
+          </form>
+        </div>
         <div class="row"><button class="btn" type="button" data-next>Skip for now</button></div>
       </section>
       <section data-step="3" hidden>
@@ -717,7 +726,16 @@
       </section>
       <section data-step="4" hidden>
         <h3>Add it to your site</h3>
-        <p class="muted">Paste this one line just before <code>&lt;/body&gt;</code>.</p>
+        <p class="muted">Paste this one line just before <code>&lt;/body&gt;</code>, or follow the steps for your platform.</p>
+        <div class="wz-plats" id="wz-plats" role="tablist" aria-label="Platform">
+          <button type="button" role="tab" class="on" data-plat="html">HTML</button>
+          <button type="button" role="tab" data-plat="shopify">Shopify</button>
+          <button type="button" role="tab" data-plat="wix">Wix</button>
+          <button type="button" role="tab" data-plat="squarespace">Squarespace</button>
+          <button type="button" role="tab" data-plat="wordpress">WordPress</button>
+          <button type="button" role="tab" data-plat="webflow">Webflow</button>
+        </div>
+        <p class="muted tiny" id="wz-plat-help"></p>
         <textarea id="wz-snippet" rows="3" readonly></textarea>
         <div class="row"><button class="btn primary" type="button" id="wz-copy">Copy snippet</button><button class="btn" type="button" data-next>Next</button></div>
       </section>
@@ -731,6 +749,7 @@
     <button type="button" class="wz-x" id="wz-close" aria-label="Close setup">✕</button>
   </dialog>
   <div id="toast" role="status" hidden></div>
+  <script src="/widget.js?v=__WIDGET_V__" data-id="gc_demo_ghostchat_pro" data-delay="0"></script>
   <script>window.GHOSTCHAT_WIDGET_V="__WIDGET_V__";</script>
   <script src="/dashboard/app.js"></script>
   <script src="/dashboard/live.js"></script>

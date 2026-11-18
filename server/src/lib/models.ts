@@ -1,8 +1,9 @@
 import { config } from "../config.js";
 import { LOCAL_EMBEDDING_MODEL } from "./localEmbeddings.js";
+import { gteConfigured, GTE_MODEL } from "./gteEmbeddings.js";
 
 export type ProviderId = "openrouter" | "grok" | "openai" | "gemini";
-export type EmbeddingProviderId = ProviderId | "local";
+export type EmbeddingProviderId = ProviderId | "local" | "gte-small";
 
 export type ChatModelOption = {
   id: string;
@@ -44,7 +45,7 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
     embeddings: {
       supported: false,
       dimensions: 384,
-      note: "OpenRouter has no embeddings API. GhostChat uses the lightweight local hash embeddings (free, no key, free-tier friendly) by default.",
+      note: "OpenRouter has no embeddings API. GhostChat uses free Supabase gte-small embeddings (384-d) when available, and falls back to local hash embeddings.",
     },
   },
   grok: {
@@ -101,7 +102,7 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
 
 export const DEFAULT_CHAT_PROVIDER: ProviderId = "openrouter";
 export const DEFAULT_CHAT_MODEL = "deepseek/deepseek-v4-flash";
-export const DEFAULT_EMBEDDING_PROVIDER: EmbeddingProviderId = "local";
+export const DEFAULT_EMBEDDING_PROVIDER: EmbeddingProviderId = "gte-small";
 export const EMBEDDING_DIMENSIONS = 384;
 
 function firstEnv(names: string[]): string {
@@ -221,11 +222,27 @@ function localEmbedding(): ResolvedEmbedding {
   };
 }
 
+function gteEmbedding(): ResolvedEmbedding {
+  return {
+    provider: "gte-small",
+    model: GTE_MODEL,
+    baseUrl: "",
+    apiKey: "",
+    headers: {},
+    queryPrefix: "",
+    passagePrefix: "",
+  };
+}
+
 export function resolveEmbeddingModel(): ResolvedEmbedding {
   const requested = (process.env.EMBEDDING_PROVIDER || process.env.AI_EMBEDDING_PROVIDER || DEFAULT_EMBEDDING_PROVIDER).trim() || DEFAULT_EMBEDDING_PROVIDER;
   const requestedModel = process.env.EMBEDDING_MODEL || process.env.AI_EMBEDDING_MODEL || "";
 
   if (requested === "local") return localEmbedding();
+  if (requested === "gte-small" || requested === "supabase") {
+    if (gteConfigured()) return gteEmbedding();
+    return { ...localEmbedding(), fallbackFrom: { provider: requested, model: requestedModel || GTE_MODEL } };
+  }
 
   const id = requested as ProviderId;
   const def = PROVIDERS[id];
@@ -267,9 +284,11 @@ export function publicModelCatalog(): {
       dimensions: EMBEDDING_DIMENSIONS,
       supported: true,
       note:
-        resolved.provider === "local"
-          ? "Default: local hash/feature-384 (384-d, no API key, free-tier friendly)."
-          : undefined,
+        resolved.provider === "gte-small"
+          ? "Default: free Supabase gte-small (384-d, included Edge Function invocations)."
+          : resolved.provider === "local"
+            ? "Local hash/feature-384 (384-d, no API key, free-tier friendly)."
+            : undefined,
     },
     providers: (Object.keys(PROVIDERS) as ProviderId[]).map((id) => ({
       id,

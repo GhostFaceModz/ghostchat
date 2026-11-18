@@ -39,6 +39,14 @@ test("onboarding wizard has five steps: site, crawl, style, snippet, test chat",
   for (let i = 1; i <= 5; i++) assert.match(html, new RegExp(`data-step="${i}"`));
   assert.match(v2, /\/crawl", \{ method: "POST" \}/);
   assert.match(html, /id="wz-chat"/);
+  assert.match(html, /id="wz-faq"/);
+  assert.match(v2, /Train on this FAQ|\/documents", \{ method: "POST"/);
+  for (const plat of ["Shopify", "Wix", "Squarespace", "WordPress", "Webflow"]) assert.match(html, new RegExp(plat));
+  assert.match(v2, /Online Store → Themes → Edit code/);
+  assert.match(v2, /Custom Code → Add Code/);
+  assert.match(v2, /Code Injection/);
+  assert.match(v2, /footer.php/);
+  assert.match(v2, /Footer Code/);
 });
 
 test("dashboard and wizard embed snippets use https://ghostchat.pro, CNAME target stays on Render", () => {

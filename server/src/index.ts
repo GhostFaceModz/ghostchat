@@ -14,6 +14,8 @@ import { billingRouter, whopWebhookRouter } from "./routes/billing.js";
 import { modelsRouter } from "./routes/models.js";
 import { liveWidgetRouter, liveOwnerRouter, telegramWebhookRouter, discordWebhookRouter } from "./routes/live.js";
 import { resolveEmbeddingModel } from "./lib/models.js";
+import { promoteGteEmbeddings } from "./lib/embeddingSpace.js";
+import { ensureDemoSite } from "./lib/demoSite.js";
 import { shareRouter } from "./routes/share.js";
 import { warmupLocalEmbeddings } from "./lib/localEmbeddings.js";
 import { cronRouter } from "./routes/cron.js";
@@ -142,6 +144,12 @@ if (!config.supabaseServiceKey && config.nodeEnv === "production") {
 }
 
 function catchUpOnWake() {
+  promoteGteEmbeddings()
+    .then((r) => { if (!r.skipped) console.log("embedding space:", JSON.stringify(r)); else if (r.skipped && r.skipped !== "test") console.log("embedding space:", r.skipped); })
+    .catch((e) => console.error("embedding promotion failed:", (e as Error).message))
+    .then(() => ensureDemoSite())
+    .then((r) => { if (!r) return; if (r.crawled) console.log("demo site ready"); else if (r.skipped) console.log("demo site:", r.skipped); })
+    .catch((e) => console.error("demo site failed:", (e as Error).message));
   runDueRecrawls()
     .then((r) => { if ((r as { results?: unknown[] }).results?.length) console.log("wake re-crawl:", JSON.stringify(r)); })
     .catch((e) => console.error("wake re-crawl failed:", (e as Error).message));

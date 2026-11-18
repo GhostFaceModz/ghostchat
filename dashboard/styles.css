@@ -440,3 +440,9 @@ dialog.wizard { width: min(560px, calc(100vw - 20px)); max-height: calc(100dvh -
 .lowc-list .lowc-more { display: none; }
 .tk-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .tk-head .btn { flex: none; width: auto; }
+
+.wz-plats { display: flex; flex-wrap: wrap; gap: 6px; }
+.wz-plats button { border: 1px solid var(--line-2); background: transparent; color: var(--muted); border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.wz-plats button.on, .wz-plats button[aria-selected="true"] { color: var(--text); border-color: var(--primary); background: color-mix(in srgb, var(--primary) 16%, transparent); }
+#wz-faq { display: grid; gap: 10px; margin-top: 8px; }
+#wz-faq[hidden] { display: none; }

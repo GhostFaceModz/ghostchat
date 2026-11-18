@@ -31,10 +31,10 @@
 <body>
   <main>
     <h1>Widget demo</h1>
-    <p>This page loads the GhostChat bubble. Paste a <code>SITE_KEY</code> from your dashboard to talk to a trained bot, or just preview the UI.</p>
+    <p>Talk to GhostChat’s own assistant, trained on this site and the setup guide. Or paste a <code>SITE_KEY</code> from your dashboard to try your bot.</p>
     <div class="box">
       <label for="key">Site key</label>
-      <input id="key" placeholder="gc_…" />
+      <input id="key" placeholder="gc_…" value="gc_demo_ghostchat_pro" />
       <button type="button" id="go">Load widget</button>
       <p style="margin:12px 0 0;font-size:13px">Need a key? Open the <a href="/dashboard">dashboard</a>.</p>
     </div>
@@ -54,10 +54,8 @@
       document.body.appendChild(s);
     });
     var q = new URLSearchParams(location.search).get("key");
-    if (q) {
-      document.getElementById("key").value = q;
-      document.getElementById("go").click();
-    }
+    if (q) document.getElementById("key").value = q;
+    if (document.getElementById("key").value.trim()) document.getElementById("go").click();
   </script>
 </body>
 </html>
