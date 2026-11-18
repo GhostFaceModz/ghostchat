@@ -2,6 +2,7 @@ import { Router } from "express";
 import QRCode from "qrcode";
 import { getDb } from "../lib/supabase.js";
 import { effectiveBranding, effectiveDisclosure } from "../lib/usage.js";
+import { sanitizeGa4Id, sanitizePlausibleDomain } from "../lib/widgetAnalytics.js";
 import { config } from "../config.js";
 import { BOT_TEMPLATES } from "../lib/templates.js";
 import { botMode, supportSettings } from "../lib/modes.js";
@@ -41,6 +42,8 @@ widgetRouter.get("/config/:siteKey", async (req, res) => {
       soundDefault: site.sound_default,
       showBranding: effectiveBranding(site),
       aiDisclosure: effectiveDisclosure(site),
+      plausibleDomain: sanitizePlausibleDomain(site.plausible_domain || ""),
+      ga4Id: sanitizeGa4Id(site.ga4_id || ""),
       bookingUrl: site.booking_url || null,
       bookingProvider: site.booking_provider || null,
       // Voice mode is a Pro feature (browser speech APIs; the widget falls back gracefully).

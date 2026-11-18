@@ -53,6 +53,8 @@ export type Site = {
   sound_default: boolean;
   show_branding: boolean;
   ai_disclosure?: string;
+  plausible_domain?: string | null;
+  ga4_id?: string | null;
   plan: Plan;
   messages_this_period: number;
   leads_this_period: number;

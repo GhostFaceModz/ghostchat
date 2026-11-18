@@ -42,6 +42,9 @@
     starters: [],
     showBranding: true,
     aiDisclosure: "This chat uses AI.",
+    plausibleDomain: "",
+    ga4Id: "",
+    trackedHandoff: false,
     openSiteLinks: "same_tab",
     siteHosts: [],
     sessionId: null,
@@ -543,6 +546,46 @@
     if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
     else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
   }
+  function trackEvent(name) {
+    var ev = String(name || "").trim();
+    if (!ev) return;
+    var page = "";
+    try { page = String(window.location.href || "").slice(0, 500); } catch (e) {}
+    if (state.plausibleDomain) {
+      try {
+        if (typeof window.plausible === "function") window.plausible(ev);
+        else if (typeof navigator.sendBeacon === "function") {
+          navigator.sendBeacon("https://plausible.io/api/event", new Blob([JSON.stringify({ name: ev, domain: state.plausibleDomain, url: page, n: 1 })], { type: "application/json" }));
+        } else {
+          fetch("https://plausible.io/api/event", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: ev, domain: state.plausibleDomain, url: page, n: 1 }), keepalive: true, mode: "cors" }).catch(function () {});
+        }
+      } catch (e) {}
+    }
+    if (state.ga4Id) {
+      try {
+        if (typeof window.gtag === "function") {
+          window.gtag("event", ev, { send_to: state.ga4Id });
+        } else if (typeof navigator.sendBeacon === "function") {
+          var qs = "v=2&tid=" + encodeURIComponent(state.ga4Id) + "&cid=ghostchat&en=" + encodeURIComponent(ev) + "&dl=" + encodeURIComponent(page);
+          navigator.sendBeacon("https://www.google-analytics.com/g/collect?" + qs, "");
+        }
+      } catch (e2) {}
+    }
+  }
+  function ensureGa4() {
+    if (!state.ga4Id || typeof window.gtag === "function") return;
+    try {
+      if (document.querySelector('script[src*="googletagmanager.com/gtag/js"]')) return;
+      window.dataLayer = window.dataLayer || [];
+      window.gtag = function () { window.dataLayer.push(arguments); };
+      window.gtag("js", new Date());
+      window.gtag("config", state.ga4Id, { send_page_view: false });
+      var s = document.createElement("script");
+      s.async = true;
+      s.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(state.ga4Id);
+      document.head.appendChild(s);
+    } catch (e) {}
+  }
   function setOpen(open) {
     if (open && !state.open) {
       try {
@@ -560,6 +603,7 @@
       loadFont();
       input.focus();
       maybeGreet();
+      if (!state._openedOnce) { state._openedOnce = true; trackEvent("ghostchat_open"); }
     } else {
       var back = lastFocus && typeof lastFocus.focus === "function" ? lastFocus : launcher;
       lastFocus = null;
@@ -757,6 +801,7 @@
           form.innerHTML = "";
           var done = kind === "support" ? t("ticket") + (res.j.ticket && res.j.ticket.number ? " (#" + res.j.ticket.number + ")" : "") : t("thanks");
           form.appendChild(el("div", { class: "gc-lead-t gc-lead-done", html: ICONS.check + "<span>" + escapeHtml(done) + "</span>" }));
+          if (kind !== "support") trackEvent("ghostchat_lead_captured");
           if (kind === "support") maybeCsat(true);
         })
         .catch(function () { btn.disabled = false; err.textContent = t("sendErr"); err.hidden = false; });
@@ -1367,6 +1412,10 @@
     var was = live.status;
     showSupportTab();
     live.status = ev.status === "human" ? "human" : ev.status === "closed" ? "closed" : "waiting";
+    if ((live.status === "waiting" || live.status === "human") && was !== "waiting" && was !== "human" && !state.trackedHandoff) {
+      state.trackedHandoff = true;
+      trackEvent("ghostchat_handoff");
+    }
     if (ev.agentName) live.agent = ev.agentName;
     if (ev.note && ev.note !== t("backAi") && !ev.ended && !ev.reviewPending) addSystem(ev.note);
     setLiveUi();
@@ -1423,6 +1472,7 @@
     ]));
     pane.appendChild(typing);
     scrollDown(pane);
+    trackEvent("ghostchat_message_sent");
 
     var row = null;
     var bubble = null;
@@ -1628,6 +1678,9 @@
     }
     if (typeof cfg.showBranding === "boolean") state.showBranding = cfg.showBranding;
     if (typeof cfg.aiDisclosure === "string") state.aiDisclosure = cfg.aiDisclosure;
+    if (typeof cfg.plausibleDomain === "string") state.plausibleDomain = cfg.plausibleDomain || "";
+    if (typeof cfg.ga4Id === "string") state.ga4Id = cfg.ga4Id || "";
+    if (state.ga4Id) ensureGa4();
     if (typeof cfg.voiceEnabled === "boolean") state.voice = cfg.voiceEnabled;
     if (typeof cfg.readAloudEnabled === "boolean") state.readAloud = cfg.readAloudEnabled;
     if (cfg.bookingUrl) state.bookingUrl = cfg.bookingUrl;
