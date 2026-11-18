@@ -42,10 +42,12 @@ export const PAUSED_REPLY = "This assistant is taking a short break right now. P
 
 export type SendDecision = { ok: boolean; reason: "allowance" | "credits" | "grace" | "paused" };
 /** Allowance first, then the account's top-up credits, then 10% grace, then paused. */
-export function decideSend(used: number, limit: number, credits: number): SendDecision {
-  if (used < limit) return { ok: true, reason: "allowance" };
-  if (credits > 0) return { ok: true, reason: "credits" };
-  if (used < Math.floor(limit * (1 + GRACE_RATIO))) return { ok: true, reason: "grace" };
+export function decideSend(used: number, limit: number, credits: number, cost = 1): SendDecision {
+  const c = Math.max(1, Math.floor(Number(cost)) || 1);
+  if (used + c <= limit) return { ok: true, reason: "allowance" };
+  const fromCredits = used >= limit ? c : used + c - limit;
+  if (credits >= fromCredits) return { ok: true, reason: "credits" };
+  if (used + c <= Math.floor(limit * (1 + GRACE_RATIO))) return { ok: true, reason: "grace" };
   return { ok: false, reason: "paused" };
 }
 export function alertLevel(used: number, limit: number): 0 | 80 | 100 {
@@ -59,11 +61,12 @@ export async function ownerCredits(ownerId: string): Promise<number> {
   return Number(data?.message_credits ?? 0);
 }
 
-export async function assertCanSend(site: Site): Promise<Site> {
+export async function assertCanSend(site: Site, cost = 1): Promise<Site> {
   const fresh = await refreshPeriod(site);
   const limit = messageLimit(fresh);
-  const credits = fresh.messages_this_period >= limit ? await ownerCredits(fresh.owner_id) : 0;
-  if (!decideSend(fresh.messages_this_period, limit, credits).ok) {
+  const remaining = Math.max(0, limit - fresh.messages_this_period);
+  const credits = remaining < Math.max(1, cost) ? await ownerCredits(fresh.owner_id) : 0;
+  if (!decideSend(fresh.messages_this_period, limit, credits, cost).ok) {
     const err = new Error(PAUSED_REPLY);
     (err as Error & { status: number }).status = 402;
     throw err;
@@ -71,8 +74,9 @@ export async function assertCanSend(site: Site): Promise<Site> {
   return fresh;
 }
 
-export async function incrementMessages(siteId: string): Promise<void> {
+export async function incrementMessages(siteId: string, cost = 1): Promise<void> {
   const db = getDb();
+  const delta = Math.max(1, Math.floor(Number(cost)) || 1);
   const { data, error } = await db
     .from("ghostchat_sites")
     .select("owner_id, plan, messages_this_period")
@@ -80,12 +84,32 @@ export async function incrementMessages(siteId: string): Promise<void> {
     .single();
   if (error) throw error;
   const limit = messageLimit(data as unknown as Site);
-  const { data: usedRaw, error: incErr } = await db.rpc("ghostchat_increment_messages", { p_site: siteId, p_limit: limit });
-  if (incErr) throw incErr;
-  const used = Number(usedRaw ?? (data?.messages_this_period ?? 0) + 1);
-  // Past the allowance, each message uses one top-up credit (if any; otherwise it's within the grace).
-  if (used > limit && data?.owner_id) {
-    await db.rpc("ghostchat_use_credit", { p_owner: data.owner_id });
+  let usedRaw: unknown;
+  let incErr: { message?: string } | null = null;
+  const by = await db.rpc("ghostchat_increment_messages_by", { p_site: siteId, p_limit: limit, p_delta: delta });
+  usedRaw = by.data;
+  incErr = by.error;
+  if (incErr) {
+    const one = await db.rpc("ghostchat_increment_messages", { p_site: siteId, p_limit: limit });
+    if (one.error) throw one.error;
+    usedRaw = (Number(data?.messages_this_period ?? 0) + delta);
+    for (let i = 1; i < delta; i++) {
+      const more = await db.rpc("ghostchat_increment_messages", { p_site: siteId, p_limit: limit });
+      if (more.error) throw more.error;
+      usedRaw = more.data;
+    }
+    if (delta === 1) usedRaw = one.data;
+  }
+  const used = Number(usedRaw ?? (data?.messages_this_period ?? 0) + delta);
+  const usedBefore = used - delta;
+  const fromCredits = Math.max(0, used - limit) - Math.max(0, usedBefore - limit);
+  if (fromCredits > 0 && data?.owner_id) {
+    const usedMany = await db.rpc("ghostchat_use_credits", { p_owner: data.owner_id, p_n: fromCredits });
+    if (usedMany.error) {
+      for (let i = 0; i < fromCredits; i++) {
+        await db.rpc("ghostchat_use_credit", { p_owner: data.owner_id });
+      }
+    }
   }
 }
 

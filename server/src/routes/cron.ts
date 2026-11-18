@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { cronSecretOk, runDueRecrawls, recrawlRunning } from "../lib/recrawl.js";
+import { promptDueRecharges } from "../lib/autoRecharge.js";
 import { sweepIdleLiveChats } from "../lib/discordInbox.js";
 
 export const cronRouter = Router();
@@ -24,4 +25,13 @@ cronRouter.post("/live-idle", (req, res) => {
     .then((r) => console.log("cron live-idle:", JSON.stringify(r)))
     .catch((e) => console.error("cron live-idle failed:", (e as Error).message));
   res.status(202).json({ ok: true, status: "started" });
+});
+
+cronRouter.post("/auto-recharge", (req, res) => {
+  if (!process.env.CRON_SECRET) return res.status(503).json({ error: "Cron is not configured." });
+  const auth = String(req.headers.authorization || "");
+  const given = String(req.headers["x-cron-secret"] || (auth.startsWith("Bearer ") ? auth.slice(7) : ""));
+  if (!cronSecretOk(given)) return res.status(401).json({ error: "Unauthorized" });
+  res.json({ ok: true, started: true });
+  promptDueRecharges().then((r) => console.log("cron auto-recharge:", JSON.stringify(r))).catch((e) => console.error("cron auto-recharge failed:", (e as Error).message));
 });

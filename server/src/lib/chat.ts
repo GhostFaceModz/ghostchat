@@ -1,5 +1,5 @@
 import { getDb } from "./supabase.js";
-import { embedTexts, completeChat, streamChat } from "./ai.js";
+import { embedTexts, completeChat, streamChat, type ChatUsage } from "./ai.js";
 
 export const AI_FALLBACK_REPLY = "Sorry, I'm having trouble replying right now. Please try again in a minute.";
 import { liveOnline, liveSettings } from "./live.js";
@@ -7,6 +7,8 @@ import { detectInjection, hitsBannedTopic, sanitizeContext, UNSURE_REPLY, HUMAN_
 import { resolveChatModel } from "./models.js";
 import { redactPii } from "./pii.js";
 import { incrementMessages } from "./usage.js";
+import { looksHardQuestion } from "./autoRoute.js";
+import { modelCreditCost } from "./credits.js";
 import { selectCards } from "./cards.js";
 import { resolveEmbeddingModel } from "./models.js";
 import type { ChatSource, ConversionCard, RetrievedChunk, Site } from "../types.js";
@@ -437,20 +439,22 @@ export async function answerQuestion(opts: {
   }
 
   let answer = "";
+  const usage: ChatUsage = { provider: "", model: "", credits: modelCreditCost(site.chat_provider, site.chat_model) };
+  const hard = looksHardQuestion(message, chunks, { lookedUp });
   try {
     answer = await completeChat(
       [
         { role: "system", content: buildSystemPrompt(site, chunks, ctx) },
         { role: "user", content: message },
       ],
-      { site, primary: true },
+      { site, primary: true, hard, usage },
     );
     if (isUnsureAnswer(answer) && !lookedUp) {
       lookedUp = true;
       lookup = await runLookup(site, sessionId, message);
       if (lookup) {
         chunks = [...lookup, ...chunks];
-        answer = await completeChat([{ role: "system", content: buildSystemPrompt(site, chunks, ctx) }, { role: "user", content: message }], { site, primary: true });
+        answer = await completeChat([{ role: "system", content: buildSystemPrompt(site, chunks, ctx) }, { role: "user", content: message }], { site, primary: true, hard: true, usage });
       }
     }
   } catch (err) {
@@ -470,7 +474,7 @@ export async function answerQuestion(opts: {
     sources,
     was_unsure: unsure,
   });
-  await incrementMessages(site.id);
+  await incrementMessages(site.id, usage.credits || 1);
   return { answer: finalAnswer, unsure, sources, suggestions, cards: await pickCards(site, sessionId, message, finalAnswer, unsure), userLogId, assistantLogId };
 }
 
@@ -488,7 +492,8 @@ export async function streamAnswer(opts: {
   const userLogId = await insertLog({ site_id: site.id, session_id: sessionId, role: "user", message, page_url: pageUrl, lang: opts.ctx?.lang ?? null });
   onEvent({ type: "meta", userLogId });
 
-  const finish = async (partial: Omit<ChatOutcome, "userLogId" | "assistantLogId" | "cards"> & { cards?: ChatOutcome["cards"] }, opt: { charge?: boolean } = {}) => {
+  const usage: ChatUsage = { provider: "", model: "", credits: modelCreditCost(site.chat_provider, site.chat_model) };
+  const finish = async (partial: Omit<ChatOutcome, "userLogId" | "assistantLogId" | "cards"> & { cards?: ChatOutcome["cards"] }, opt: { charge?: boolean; credits?: number } = {}) => {
     const assistantLogId = await insertLog({
       site_id: site.id,
       session_id: sessionId,
@@ -497,7 +502,7 @@ export async function streamAnswer(opts: {
       sources: partial.sources,
       was_unsure: partial.unsure,
     });
-    if (opt.charge !== false) await incrementMessages(site.id);
+    if (opt.charge !== false) await incrementMessages(site.id, opt.credits ?? 1);
     const cards = partial.cards ?? await pickCards(site, sessionId, message, partial.answer, partial.unsure);
     const outcome: ChatOutcome = { ...partial, cards, userLogId, assistantLogId };
     onEvent({
@@ -549,12 +554,13 @@ export async function streamAnswer(opts: {
   let answer = "";
   const generate = async () => {
     answer = "";
+    const hard = looksHardQuestion(message, chunks, { lookedUp });
     for await (const token of streamChat(
       [
         { role: "system", content: buildSystemPrompt(site, chunks, ctx) },
         { role: "user", content: message },
       ],
-      { site, primary: true },
+      { site, primary: true, hard, usage },
     )) {
       answer += token;
       onEvent({ type: "token", text: token });
@@ -587,5 +593,5 @@ export async function streamAnswer(opts: {
   }
   const sources = withLookupSource(site, unsure || !citesContext(finalAnswer, chunks) ? [] : pickSources(site, chunks, finalAnswer), lookup, unsure);
   const suggestions = await maybeSuggestions(site, message, finalAnswer, unsure);
-  return finish({ answer: finalAnswer, unsure, sources, suggestions });
+  return finish({ answer: finalAnswer, unsure, sources, suggestions }, { credits: usage.credits || 1 });
 }

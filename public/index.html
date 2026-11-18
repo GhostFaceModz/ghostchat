@@ -108,8 +108,9 @@
     .example .foot { margin-top: auto; color: var(--soft); font-size: 13px; }
 
     /* Plans */
-    .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: stretch; }
-    .plan { padding: 28px 24px; display: flex; flex-direction: column; }
+    .plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+    .plan { padding: 28px 24px; display: flex; flex-direction: column; min-width: 0; overflow: visible; }
+    #plans .plan.reveal { opacity: 1; transform: none; }
     .plan h3 { font-size: 22px; margin: 6px 0 4px; }
     .plan .big { font-family: var(--font-display); font-size: 30px; margin: 14px 0 2px; }
     .plan ul { list-style: none; padding: 0; margin: 18px 0 24px; display: grid; gap: 10px; color: #ddd6f5; font-size: 14.5px; }
@@ -133,12 +134,27 @@
     .final .cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
     .final::after { content: ""; position: absolute; inset: auto -20% -60% -20%; height: 120%; background: radial-gradient(ellipse at 50% 100%, #8f6cff55, transparent 60%); z-index: -1; }
 
+    .bill-switch { display: flex; justify-content: center; gap: 8px; margin: 0 0 22px; }
+    .bill-switch input { position: absolute; opacity: 0; pointer-events: none; }
+    .bill-switch label { cursor: pointer; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); font-size: 14px; }
+    .bill-switch input#bill-mo:checked + label[for="bill-mo"],
+    .bill-switch input#bill-yr:checked + label[for="bill-yr"] { background: rgba(143, 108, 255, .22); border-color: #b9a6ff88; }
+    .price-yr, .annual-note { display: none; }
+    body:has(#bill-yr:checked) .price-mo { display: none; }
+    body:has(#bill-yr:checked) .price-yr, body:has(#bill-yr:checked) .annual-note { display: inline; }
+    body:has(#bill-yr:checked) .annual-note-block { display: block; }
+    .annual-note-block { display: none; color: var(--soft); font-size: 13px; margin: 0 0 8px; }
+    .bill-switch .save { color: var(--violet-2); font-weight: 600; margin-left: 6px; }
+
     @media (max-width: 960px) {
       .hero .wrap { grid-template-columns: 1fr; }
       .visual { max-width: 640px; margin: 20px auto 30px; width: 100%; }
       .steps { grid-template-columns: repeat(2, 1fr); }
       .examples, .mini { grid-template-columns: 1fr 1fr; }
       .plans { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 900px) {
+      .plans { grid-template-columns: 1fr; max-width: 420px; margin-inline: auto; width: 100%; }
     }
     @media (max-width: 720px) {
       .feature { grid-template-columns: 1fr; }
@@ -314,26 +330,40 @@
         <div class="section-head reveal">
           <span class="tag">Plans</span>
           <h2>Start free, <span class="grad">upgrade when you grow</span></h2>
-          <p>Prices in GBP, billed monthly through Whop. Cancel any time from My account; you keep your plan until the end of the period you paid for.</p>
+          <p>Prices in GBP, billed monthly or yearly through Whop. Yearly is two months free. Cancel any time from My account; you keep your plan until the end of the period you paid for.</p>
+        </div>
+        <div class="bill-switch" role="radiogroup" aria-label="Billing period">
+          <input type="radio" name="bill" id="bill-mo" checked>
+          <label for="bill-mo">Monthly</label>
+          <input type="radio" name="bill" id="bill-yr">
+          <label for="bill-yr">Yearly <span class="save">2 months free</span></label>
         </div>
         <div class="plans">
           <div class="plan glass reveal">
             <span class="tag">Free</span><h3>Starter</h3><p class="price"><b>£0</b> forever</p><p class="muted">Try it on your site.</p>
-            <ul><li>200 messages / month</li><li>2 sites, 30 trained pages, 5 uploads</li><li>15 leads / month, basic analytics</li><li>"Powered by GhostChat" badge</li></ul>
+            <ul><li>200 message credits / month</li><li>2 sites, 30 trained pages, 5 uploads</li><li>15 leads / month, basic analytics</li><li>Model picker with a cheap/free Recommended default</li><li>"Powered by GhostChat" badge</li></ul>
             <a class="btn" href="/signup">Start free</a>
           </div>
           <div class="plan glass hot reveal d1">
-            <span class="tag">Most popular</span><h3>Pro</h3><p class="price"><b>£9</b> / month <small class="vat">+ VAT</small></p><p class="muted">For growing sites and shops.</p>
-            <ul><li>5,000 messages / month</li><li>10 sites, 150 trained pages</li><li>1,000 leads / month, full analytics</li><li>50 uploads, 20 conversion cards</li><li>Live human handoff (Discord or dashboard inbox)</li><li>Remove the badge</li></ul>
+            <span class="tag">Most popular</span><h3>Pro</h3>
+            <p class="price price-mo"><b>£9</b> / month <small class="vat">+ VAT</small></p>
+            <p class="price price-yr"><b>£90</b> / year <small class="vat">+ VAT</small></p>
+            <p class="muted annual-note-block">Two months free versus paying monthly.</p>
+            <p class="muted">For growing sites and shops.</p>
+            <ul><li>5,000 message credits / month</li><li>10 sites, 150 trained pages</li><li>1,000 leads / month, full analytics</li><li>50 uploads, 20 conversion cards</li><li>Live human handoff (Discord, Telegram or dashboard inbox)</li><li>Bring your own API key, Auto model route, optional auto-recharge</li><li>Remove the badge</li></ul>
             <a class="btn primary" href="/signup">Get started</a>
           </div>
           <div class="plan glass reveal d2">
-            <span class="tag">Business</span><h3>Business</h3><p class="price"><b>£29</b> / month <small class="vat">+ VAT</small></p><p class="muted">For teams and agencies.</p>
-            <ul><li>25,000 messages / month</li><li>50 sites, 400 trained pages</li><li>10,000 leads / month, full analytics</li><li>200 uploads, 50 conversion cards</li><li>Live human handoff (Discord or dashboard inbox)</li><li>Remove the badge</li></ul>
+            <span class="tag">Business</span><h3>Business</h3>
+            <p class="price price-mo"><b>£29</b> / month <small class="vat">+ VAT</small></p>
+            <p class="price price-yr"><b>£290</b> / year <small class="vat">+ VAT</small></p>
+            <p class="muted annual-note-block">Two months free versus paying monthly.</p>
+            <p class="muted">For teams and agencies.</p>
+            <ul><li>25,000 message credits / month</li><li>50 sites, 400 trained pages</li><li>10,000 leads / month, full analytics</li><li>200 uploads, 50 conversion cards</li><li>Live human handoff (Discord, Telegram or dashboard inbox)</li><li>Bring your own API key, Auto model route, optional auto-recharge</li><li>Remove the badge</li></ul>
             <a class="btn" href="/signup">Get started</a>
           </div>
         </div>
-          <p class="muted" style="margin:22px 0 0;text-align:center">Need more messages later? Top up from My account — <b>£5</b> for 1,000 messages or <b>£15</b> for 5,000. Credits sit on your account until you use them.</p>
+          <p class="muted" style="margin:22px 0 0;text-align:center">Need more credits later? Top up from My account — <b>£5</b> for 1,000 credits or <b>£15</b> for 5,000. Credits sit on your account until you use them. Dearer models can use 2, 3 or 5 credits per reply; the recommended default uses 1.</p>
       </div>
     </section>
 
@@ -344,7 +374,7 @@
           <details class="glass reveal"><summary>Do I need to code?</summary><p>No. You copy one line from your dashboard and paste it into your site's HTML, or into the "custom code" box on Shopify, Wix, Squarespace, WordPress or Webflow.</p></details>
           <details class="glass reveal"><summary>Where does it get its answers?</summary><p>Site-specific facts (prices, policies, how your product works) always come from the content you give it: crawled pages, uploaded files and pasted notes. Answers can link back to the page they came from. In the default <b>Helpful</b> mode it may also use general knowledge for small talk or explanations, and will say when something isn’t from your site. Switch a bot to <b>Strict</b> in the dashboard if it should only ever answer from your content.</p></details>
           <details class="glass reveal"><summary>What happens when it doesn't know?</summary><p>It tells the visitor it isn't sure and can offer to take their email so you can follow up, so nobody gets a made-up answer.</p></details>
-          <details class="glass reveal"><summary>How do I upgrade?</summary><p>Open My account in your dashboard and pick Pro (£9/month) or Business (£29/month), plus VAT where it applies (20% in the UK). Checkout is handled by Whop, which shows the full total before you pay, and your new limits apply automatically. You can cancel from the same page at any time.</p></details>
+          <details class="glass reveal"><summary>How do I upgrade?</summary><p>Open My account in your dashboard and pick Pro (£9/month or £90/year) or Business (£29/month or £290/year), plus VAT where it applies (20% in the UK). Yearly billing is two months free. Checkout is handled by Whop, which shows the full total before you pay, and your new limits apply automatically. You can cancel from the same page at any time.</p></details>
         </div>
       </div>
     </section>

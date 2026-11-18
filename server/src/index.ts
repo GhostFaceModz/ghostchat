@@ -23,6 +23,7 @@ import { metaWebhookRouter } from "./routes/meta.js";
 import { ticketsRouter } from "./routes/tickets.js";
 import { startIdleSweep, sweepIdleLiveChats, sweepClosedDiscordCards } from "./lib/discordInbox.js";
 import { startRecrawlScheduler, runDueRecrawls } from "./lib/recrawl.js";
+import { promptDueRecharges } from "./lib/autoRecharge.js";
 import { canonicalRedirect, HSTS_VALUE, PUBLIC_ERROR } from "./lib/httpSecurity.js";
 import { widgetFile, widgetVersion, widgetCacheControl } from "./lib/widgetAsset.js";
 
@@ -159,6 +160,9 @@ function catchUpOnWake() {
   sweepClosedDiscordCards()
     .then((r) => { if (r.cleared || r.failed) console.log("wake discord clear:", JSON.stringify(r)); })
     .catch((e) => console.error("wake discord clear failed:", (e as Error).message));
+  promptDueRecharges()
+    .then((r) => { if (r.prompted) console.log("wake auto-recharge:", JSON.stringify(r)); })
+    .catch((e) => console.error("wake auto-recharge failed:", (e as Error).message));
 }
 
 app.listen(config.port, () => {

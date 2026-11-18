@@ -1,4 +1,6 @@
 import { config } from "../config.js";
+import { modelCreditCost, type CreditCost } from "./credits.js";
+import { AUTO_MODEL_ID } from "./autoRoute.js";
 import { LOCAL_EMBEDDING_MODEL } from "./localEmbeddings.js";
 import { gteConfigured, GTE_MODEL } from "./gteEmbeddings.js";
 
@@ -9,6 +11,8 @@ export type ChatModelOption = {
   id: string;
   label: string;
   free?: boolean;
+  credits?: CreditCost;
+  recommended?: boolean;
 };
 
 export type ProviderDef = {
@@ -114,7 +118,9 @@ function firstEnv(names: string[]): string {
   return "";
 }
 
-export function providerKey(id: ProviderId): string {
+export function providerKey(id: ProviderId, overrides?: Partial<Record<ProviderId, string>>): string {
+  const over = overrides?.[id]?.trim();
+  if (over) return over;
   switch (id) {
     case "openrouter":
       return firstEnv(["OPENROUTER_API_KEY"]);
@@ -127,12 +133,12 @@ export function providerKey(id: ProviderId): string {
   }
 }
 
-export function isProviderEnabled(id: ProviderId): boolean {
-  return Boolean(providerKey(id));
+export function isProviderEnabled(id: ProviderId, overrides?: Partial<Record<ProviderId, string>>): boolean {
+  return Boolean(providerKey(id, overrides));
 }
 
 export function enabledProviders(): ProviderId[] {
-  return (Object.keys(PROVIDERS) as ProviderId[]).filter(isProviderEnabled);
+  return (Object.keys(PROVIDERS) as ProviderId[]).filter((id) => isProviderEnabled(id));
 }
 
 export function extraHeaders(id: ProviderId): Record<string, string> {
@@ -154,7 +160,7 @@ export type ResolvedModel = {
   fallbackFrom?: { provider: string; model: string };
 };
 
-export function resolveChatModel(choice?: { chat_provider?: string | null; chat_model?: string | null }): ResolvedModel {
+export function resolveChatModel(choice?: { chat_provider?: string | null; chat_model?: string | null }, overrides?: Partial<Record<ProviderId, string>>): ResolvedModel {
   const requestedProvider = (choice?.chat_provider || process.env.AI_PROVIDER || DEFAULT_CHAT_PROVIDER) as ProviderId;
   const requestedModel =
     choice?.chat_model ||
@@ -164,7 +170,7 @@ export function resolveChatModel(choice?: { chat_provider?: string | null; chat_
 
   const tryResolve = (provider: ProviderId, model: string): ResolvedModel | null => {
     const def = PROVIDERS[provider];
-    const apiKey = providerKey(provider);
+    const apiKey = providerKey(provider, overrides);
     if (!def || !apiKey) return null;
     return {
       provider,
@@ -295,7 +301,14 @@ export function publicModelCatalog(): {
       id,
       name: PROVIDERS[id].name,
       enabled: isProviderEnabled(id),
-      models: PROVIDERS[id].chatModels,
+      models: (id === "openrouter"
+      ? [{ id: AUTO_MODEL_ID, label: "Auto — Recommended: cheap default, stronger only when needed", credits: 1 as CreditCost, recommended: true as const, free: true }, ...PROVIDERS[id].chatModels]
+      : PROVIDERS[id].chatModels
+    ).map((m) => ({
+      ...m,
+      credits: m.credits ?? modelCreditCost(id, m.id),
+      recommended: m.recommended ?? (m.id === DEFAULT_CHAT_MODEL || Boolean(m.free)),
+    })),
       embeddings: PROVIDERS[id].embeddings,
     })),
   };

@@ -42,6 +42,7 @@ const state = {
   templates: [],
   catalog: null,
   billing: null,
+  billInterval: "monthly",
   view: "sites"
 };
 
@@ -784,13 +785,21 @@ async function fillModelForm() {
   const providerSel = $("#chat-provider");
   const modelSel = $("#chat-model");
   if (!providerSel || !modelSel) return;
+  let byokProviders = [];
+  try {
+    if (!state.billing) state.billing = (await req("/api/billing")).billing;
+    byokProviders = ((state.billing && state.billing.byok && state.billing.byok.keys) || []).map((k) => k.provider);
+  } catch { /* catalog still works on platform keys */ }
   const currentProvider = (state.site && state.site.chat_provider) || catalog.defaultProvider;
+  const currentModel = (state.site && state.site.chat_model) || "auto";
   providerSel.innerHTML = "";
   (catalog.providers || []).forEach((p) => {
     const opt = document.createElement("option");
+    const own = byokProviders.includes(p.id);
+    const on = p.enabled || own;
     opt.value = p.id;
-    opt.textContent = p.name + (p.enabled ? "" : " (key not configured)");
-    opt.disabled = !p.enabled;
+    opt.textContent = p.name + (on ? (own ? " (your key)" : "") : " (key not configured)");
+    opt.disabled = !on;
     if (p.id === currentProvider) opt.selected = true;
     providerSel.appendChild(opt);
   });
@@ -800,8 +809,10 @@ async function fillModelForm() {
     (prov ? prov.models : []).forEach((m) => {
       const opt = document.createElement("option");
       opt.value = m.id;
-      opt.textContent = m.label;
-      if (state.site && state.site.chat_model === m.id) opt.selected = true;
+      const creds = m.credits ? (m.credits === 1 ? "1 credit" : m.credits + " credits") : "";
+      const rec = m.recommended ? " · Recommended" : "";
+      opt.textContent = m.label + (creds ? " (" + creds + rec + ")" : rec);
+      if (currentModel === m.id || (!state.site?.chat_model && m.id === "auto")) opt.selected = true;
       modelSel.appendChild(opt);
     });
   }
@@ -809,10 +820,10 @@ async function fillModelForm() {
   providerSel.onchange = fillModels;
   const note = $("#model-note");
   if (note) {
-    const enabled = (catalog.providers || []).filter((p) => p.enabled).map((p) => p.name);
+    const enabled = (catalog.providers || []).filter((p) => p.enabled || byokProviders.includes(p.id)).map((p) => p.name);
     note.textContent = enabled.length
-      ? "Enabled now: " + enabled.join(", ") + ". Missing keys fall back to OpenRouter (DeepSeek V4 Flash)."
-      : "No provider keys are set yet. Add OPENROUTER_API_KEY so DeepSeek V4 Flash can run by default.";
+      ? "Enabled now: " + enabled.join(", ") + ". Auto and the cheap default use 1 credit. Paid OpenRouter models fall back to a free model if platform credits run out."
+      : "No provider keys are set yet. Add OPENROUTER_API_KEY, or a Pro/Business bring-your-own key, so the recommended default can run.";
   }
   const emb = $("#embedding-note");
   if (emb && catalog.embedding) {
@@ -838,7 +849,7 @@ async function showBilling() {
     const plans = [
       ...planCatalog(b)
     ];
-    box.innerHTML = "<div class='plan-grid'>" + plans.map((p) => {
+    box.innerHTML = billingIntervalToggle() + "<div class='plan-grid'>" + plans.map((p) => {
       const isCurrent = p.id === current;
       let action = "";
       if (isCurrent) action = "<span class='btn ghost' aria-disabled='true'>Current plan</span>";
@@ -851,8 +862,13 @@ async function showBilling() {
     }).join("") + "</div>" +
       "<p class='muted tiny' style='margin-top:16px'>Already paid? Your plan updates within a minute. Make sure the email on your Whop purchase matches <b>" +
       escapeHtml((state.owner && state.owner.email) || "your account email") + "</b>.</p>" +
-      (b.membership && current !== "free" ? "<p class='tiny'><a href='/account#billing' id='billing-manage-link'>Manage or cancel your subscription</a></p>" : "") + "<div class='topups'>" + topupsHtml(b) + "</div>";
+      (state.billInterval === "yearly" && !(b.checkout && b.checkout.proYearly && b.checkout.businessYearly) ? "<p class='muted tiny'>Yearly checkout links appear here once the £90 Pro and £290 Business Whop plans are added.</p>" : "") +
+      (b.membership && current !== "free" ? "<p class='tiny'><a href='/account#billing' id='billing-manage-link'>Manage or cancel your subscription</a></p>" : "") +
+      "<div class='topups'>" + topupsHtml(b) + "</div>" + autoRechargeHtml(b) + byokHtml(b);
     $("#billing-manage-link")?.addEventListener("click", (ev) => { ev.preventDefault(); showAccount(); });
+    bindBillingInterval(box, showBilling);
+    bindAutoRecharge(box);
+    bindByok(box);
   } catch (e) {
     box.innerHTML = "<p class='error'>" + escapeHtml(e.message) + "</p>";
   }
@@ -914,6 +930,73 @@ document.getElementById("model-form")?.addEventListener("submit", async (ev) => 
 
 
 // ---- Plans (prices and limits shown everywhere in the dashboard) ----
+
+function autoRechargeHtml(b) {
+  if (!b || (b.plan !== "pro" && b.plan !== "business")) {
+    return "<div class='auto-recharge muted tiny' style='margin-top:16px'>Optional auto-recharge of the £5 / £15 packs is available on Pro and Business, with a monthly cap you set.</div>";
+  }
+  const s = b.autoRecharge || { enabled: false, pack: 1000, capGbp: 15, spentGbp: 0 };
+  const prompt = b.autoRechargePrompt;
+  return "<form id='auto-recharge-form' class='stack tight' style='margin-top:18px'><h4>Auto-recharge</h4>" +
+    "<p class='muted tiny'>When credits run low, we surface the pack checkout so the bot does not go quiet. Whop one-time packs cannot be charged in the background without a saved card, so you confirm the purchase. Spend counts toward your monthly cap.</p>" +
+    "<label class='row tight'><input type='checkbox' name='enabled'" + (s.enabled ? " checked" : "") + "> Turn on auto-recharge</label>" +
+    "<label>Pack <select name='pack'><option value='1000'" + (s.pack === 1000 ? " selected" : "") + ">£5 / 1,000 credits</option><option value='5000'" + (s.pack === 5000 ? " selected" : "") + ">£15 / 5,000 credits</option></select></label>" +
+    "<label>Monthly cap (£) <input type='number' name='capGbp' min='5' max='150' step='5' value='" + Number(s.capGbp || 15) + "'></label>" +
+    "<p class='muted tiny'>Used this month: £" + Number(s.spentGbp || 0) + " of £" + Number(s.capGbp || 15) + ".</p>" +
+    (prompt && prompt.checkoutUrl ? "<p><a class='btn small primary' href='" + escapeHtml(checkoutUrl(prompt.checkoutUrl)) + "' target='_blank' rel='noopener'>Credits are low — buy the £" + prompt.priceGbp + " pack</a></p>" : "") +
+    "<button type='submit' class='btn small'>Save auto-recharge</button></form>";
+}
+function bindAutoRecharge(root) {
+  const f = root?.querySelector("#auto-recharge-form");
+  if (!f || f.dataset.bound) return;
+  f.dataset.bound = "1";
+  f.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try {
+      const r = await req("/api/billing/auto-recharge", { method: "POST", body: { enabled: f.enabled.checked, pack: Number(f.pack.value), capGbp: Number(f.capGbp.value) } });
+      if (state.billing) state.billing.autoRecharge = r.settings;
+      toast("Auto-recharge saved");
+    } catch (e) { toast(e.message || "Could not save auto-recharge."); }
+  });
+}
+function byokHtml(b) {
+  const allowed = b && b.byok && b.byok.allowed;
+  if (!allowed) return "<div class='byok muted tiny' style='margin-top:16px'>On Pro and Business you can paste your own OpenRouter or OpenAI key and use premium models on your own bill.</div>";
+  const keys = (b.byok.keys || []);
+  const list = keys.length ? keys.map((k) => "<li><span>" + escapeHtml(k.provider) + " · " + escapeHtml(k.hint) + "</span> <button type='button' class='btn tiny ghost' data-del-key='" + escapeHtml(k.provider) + "'>Remove</button></li>").join("") : "<li class='muted'>No keys saved.</li>";
+  const ready = b.byok.configured;
+  return "<div class='byok' style='margin-top:18px'><h4>Your API keys</h4>" +
+    (ready ? "<p class='muted tiny'>Keys are encrypted at rest and never shown again or written to logs.</p>" : "<p class='error'>Key encryption is not configured on the server yet.</p>") +
+    "<ul class='list' id='byok-list'>" + list + "</ul>" +
+    "<form id='byok-form' class='stack tight'><label>Provider <select name='provider'><option value='openrouter'>OpenRouter</option><option value='openai'>OpenAI</option><option value='gemini'>Google Gemini</option><option value='grok'>Grok (xAI)</option></select></label>" +
+    "<label>API key <input type='password' name='key' required autocomplete='off' spellcheck='false'></label>" +
+    "<button type='submit' class='btn small'" + (ready ? "" : " disabled") + ">Save key</button></form></div>";
+}
+function bindByok(root) {
+  const f = root?.querySelector("#byok-form");
+  if (f && !f.dataset.bound) {
+    f.dataset.bound = "1";
+    f.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      try {
+        await req("/api/billing/keys", { method: "PUT", body: { provider: f.provider.value, key: f.key.value } });
+        f.key.value = "";
+        toast("Key saved");
+        renderAccountBilling().catch(() => {});
+      } catch (e) { toast(e.message || "Could not save that key."); }
+    });
+  }
+  root?.querySelectorAll("[data-del-key]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      try {
+        await req("/api/billing/keys/" + btn.getAttribute("data-del-key"), { method: "DELETE" });
+        toast("Key removed");
+        renderAccountBilling().catch(() => {});
+      } catch (e) { toast(e.message || "Could not remove that key."); }
+    });
+  });
+}
+
 function fmt(n) { return Number(n).toLocaleString("en-GB"); }
 function planCatalog(b) {
   const L = (b && b.plans) || {};
@@ -922,11 +1005,27 @@ function planCatalog(b) {
     msgs: fmt((L[id] && L[id].monthlyMessages) || 0),
     extra: L[id] ? [fmt(L[id].maxSites) + " sites", fmt(L[id].monthlyLeads) + " leads / month"].concat(extra) : extra
   });
+  const yearly = (state.billInterval || "monthly") === "yearly";
+  const proPrice = yearly ? "£90/year + VAT" : "£9/mo + VAT";
+  const bizPrice = yearly ? "£290/year + VAT" : "£29/mo + VAT";
+  const proUrl = yearly ? (b && b.checkout && (b.checkout.proYearly || null)) : (b && b.checkout && b.checkout.pro);
+  const bizUrl = yearly ? (b && b.checkout && (b.checkout.businessYearly || null)) : (b && b.checkout && b.checkout.business);
   return [
-    row("free", "Free", "£0", ["“Powered by GhostChat” badge"]),
-    row("pro", "Pro", "£9/mo + VAT", ["Remove the badge", "Full analytics"], b && b.checkout && b.checkout.pro),
-    row("business", "Business", "£29/mo + VAT", ["Remove the badge", "50 conversion cards"], b && b.checkout && b.checkout.business)
+    row("free", "Free", "£0", ["“Powered by GhostChat” badge", "Cheap/free Recommended model"]),
+    row("pro", "Pro", proPrice, ["Remove the badge", "Full analytics", "BYOK and auto-recharge"], proUrl),
+    row("business", "Business", bizPrice, ["Remove the badge", "50 conversion cards", "BYOK and auto-recharge"], bizUrl)
   ];
+}
+function billingIntervalToggle() {
+  const yearly = (state.billInterval || "monthly") === "yearly";
+  return "<div class='bill-switch row tight' style='margin:0 0 14px'>" +
+    "<button type='button' class='btn tiny" + (yearly ? " ghost" : "") + "' data-interval='monthly'>Monthly</button>" +
+    "<button type='button' class='btn tiny" + (yearly ? "" : " ghost") + "' data-interval='yearly'>Yearly <span class='muted'>2 months free</span></button></div>";
+}
+function bindBillingInterval(root, redraw) {
+  root?.querySelectorAll("[data-interval]").forEach((btn) => {
+    btn.addEventListener("click", () => { state.billInterval = btn.getAttribute("data-interval"); redraw(); });
+  });
 }
 // Prefill and lock the account email in Whop checkout so the purchase maps to this account.
 function checkoutUrl(url) {
@@ -993,6 +1092,11 @@ async function renderAccountBilling() {
     if (state.owner && state.owner.is_admin) status = "Owner account: Business features are included free.";
     else if (m && m.cancel_at_period_end && m.renewal_period_end) status = "Cancelled. You keep " + me.name + " until " + fmtDate(m.renewal_period_end) + ".";
     else if (m && m.renewal_period_end) status = "Renews on " + fmtDate(m.renewal_period_end) + ".";
+    grid.parentElement?.querySelector(".bill-switch")?.remove();
+    const toggle = document.createElement("div");
+    toggle.innerHTML = billingIntervalToggle();
+    grid.parentElement?.insertBefore(toggle.firstChild, grid);
+    bindBillingInterval($("#acct-billing"), renderAccountBilling);
     planBox.innerHTML = "<div class='plan-card current'><span class='pill'>Your plan</span><h4>" + me.name + " <small class='price'>" + me.price + "</small></h4>" +
       "<p class='muted tiny'>" + me.msgs + " messages / month · " + me.extra.join(" · ") + "</p>" + (status ? "<p class='tiny'>" + escapeHtml(status) + "</p>" : "") +
       (b.manageUrl && m ? "<a class='btn ghost small' href='" + escapeHtml(b.manageUrl) + "' target='_blank' rel='noopener'>Manage billing on Whop</a>" : "") + "</div>";
@@ -1002,6 +1106,8 @@ async function renderAccountBilling() {
       (p.url ? "<a class='btn primary' href='" + escapeHtml(checkoutUrl(p.url)) + "' target='_blank' rel='noopener'>Upgrade to " + p.name + "</a>" : "<span class='btn ghost' aria-disabled='true'>Coming soon</span>") +
       (current === "pro" && m ? "<p class='muted tiny'>Your account moves to Business as soon as it's paid. Then cancel the Pro order on Whop so you're not billed twice.</p>" : "") + "</div>").join("");
     $("#acct-topups").innerHTML = topupsHtml(b);
+    const ar = $("#acct-auto-recharge"); if (ar) { ar.innerHTML = autoRechargeHtml(b); bindAutoRecharge(ar); }
+    const bk = $("#acct-byok"); if (bk) { bk.innerHTML = byokHtml(b); bindByok(bk); }
     const paid = current !== "free" && m && !m.cancel_at_period_end && !(state.owner && state.owner.is_admin);
     $("#acct-cancel-line").hidden = !paid;
     $("#acct-cancel-note").hidden = true;

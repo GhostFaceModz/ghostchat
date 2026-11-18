@@ -8,6 +8,9 @@ import {
   whopApiConfigured, getMembership, cancelMembershipAtPeriodEnd, applyRetentionPromo, scheduleDowngradeToPro,
   WHOP_MANAGE_URL, type MembershipInfo,
 } from "../lib/whop.js";
+import { loadAutoRecharge, saveAutoRecharge, recordAutoRechargeSpend, latestRechargePrompt, packCheckoutUrl } from "../lib/autoRecharge.js";
+import { deleteOwnerKey, isByokPlan, listOwnerKeys, upsertOwnerKey, byokConfigured } from "../lib/byok.js";
+import type { ProviderId } from "../lib/models.js";
 
 export const billingRouter = Router();
 
@@ -30,6 +33,9 @@ export async function grantTopup(ownerId: string, paymentId: string, planId: str
   }
   const { error: e2 } = await db.rpc("ghostchat_add_credits", { p_owner: ownerId, p_delta: messages });
   if (e2) throw e2;
+  const price = messages >= 5000 ? 15 : 5;
+  await recordAutoRechargeSpend(ownerId, price).catch(() => {});
+  await db.from("ghostchat_auto_recharge_events").update({ status: "granted" }).eq("owner_id", ownerId).in("status", ["needed", "prompted"]).eq("pack", messages);
   return true;
 }
 export const whopWebhookRouter = Router();
@@ -66,9 +72,25 @@ billingRouter.get("/", requireAuth, async (req, res) => {
       checkout: {
         pro: config.whopCheckoutProUrl || null,
         business: config.whopCheckoutBusinessUrl || null,
+        proYearly: config.whopCheckoutProYearlyUrl || null,
+        businessYearly: config.whopCheckoutBusinessYearlyUrl || null,
+      },
+      prices: {
+        proMonthly: 9,
+        businessMonthly: 29,
+        proYearly: 90,
+        businessYearly: 290,
+        yearlySaving: "two months free",
       },
       credits: Number((await getDb().from("ghostchat_owners").select("message_credits").eq("id", owner.id).maybeSingle()).data?.message_credits ?? 0),
       topups: TOPUPS.map((t) => ({ id: t.id, messages: t.messages, price: t.price, url: `https://whop.com/checkout/${t.id}` })),
+      autoRecharge: await loadAutoRecharge(owner.id).catch(() => null),
+      autoRechargePrompt: plan !== "free" ? await latestRechargePrompt(owner.id).catch(() => null) : null,
+      byok: {
+        allowed: isByokPlan(plan),
+        configured: byokConfigured(),
+        keys: isByokPlan(plan) ? await listOwnerKeys(owner.id).catch(() => []) : [],
+      },
       plans: {
         free: PLAN_LIMITS.free,
         pro: PLAN_LIMITS.pro,
@@ -234,3 +256,60 @@ billingRouter.post("/retention", requireAuth, async (req, res) => {
     return res.status(502).json({ error: "Whop couldn't apply that just now: " + (e as Error).message });
   }
 });
+
+billingRouter.post("/auto-recharge", requireAuth, async (req, res) => {
+  const owner = (req as AuthedRequest).owner;
+  const plan = await getOwnerPlan(owner.id);
+  if (!isByokPlan(plan)) return res.status(403).json({ error: "Auto-recharge is available on Pro and Business." });
+  try {
+    const body = req.body || {};
+    const settings = await saveAutoRecharge(owner.id, {
+      enabled: body.enabled === undefined ? undefined : body.enabled === true || body.enabled === "true" || body.enabled === "on",
+      pack: body.pack === undefined ? undefined : (Number(body.pack) === 5000 ? 5000 : 1000),
+      capGbp: body.capGbp === undefined && body.cap === undefined ? undefined : Number(body.capGbp ?? body.cap),
+    });
+    res.json({ settings, checkoutUrl: packCheckoutUrl(settings.pack) });
+  } catch {
+    res.status(500).json({ error: "Could not save auto-recharge settings." });
+  }
+});
+
+billingRouter.get("/keys", requireAuth, async (req, res) => {
+  const owner = (req as AuthedRequest).owner;
+  const plan = await getOwnerPlan(owner.id);
+  if (!isByokPlan(plan)) return res.status(403).json({ error: "Bring-your-own-key is available on Pro and Business." });
+  try {
+    res.json({ keys: await listOwnerKeys(owner.id), configured: byokConfigured() });
+  } catch {
+    res.status(500).json({ error: "Could not load keys." });
+  }
+});
+
+billingRouter.put("/keys", requireAuth, async (req, res) => {
+  const owner = (req as AuthedRequest).owner;
+  const plan = await getOwnerPlan(owner.id);
+  if (!isByokPlan(plan)) return res.status(403).json({ error: "Bring-your-own-key is available on Pro and Business." });
+  const provider = String(req.body?.provider || "") as ProviderId;
+  const key = String(req.body?.key || req.body?.apiKey || "");
+  try {
+    const saved = await upsertOwnerKey(owner.id, provider, key);
+    // Never echo the key back.
+    res.json({ key: saved });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status ?? 400;
+    res.status(status).json({ error: (err as Error).message || "Could not save that key." });
+  }
+});
+
+billingRouter.delete("/keys/:provider", requireAuth, async (req, res) => {
+  const owner = (req as AuthedRequest).owner;
+  const plan = await getOwnerPlan(owner.id);
+  if (!isByokPlan(plan)) return res.status(403).json({ error: "Bring-your-own-key is available on Pro and Business." });
+  try {
+    await deleteOwnerKey(owner.id, String(req.params.provider) as ProviderId);
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Could not remove that key." });
+  }
+});
+

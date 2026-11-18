@@ -3,6 +3,8 @@ import { getDb } from "../lib/supabase.js";
 import { answerQuestion, streamAnswer } from "../lib/chat.js";
 import { clientIp, rateLimitAsync, peekRateLimitAsync } from "../lib/rateLimit.js";
 import { assertCanSend, dailyCapCheckAsync } from "../lib/usage.js";
+import { modelCreditCost } from "../lib/credits.js";
+import { isAutoModel } from "../lib/autoRoute.js";
 import { addLog, countUnsure, getConversation, shouldStartLive, liveOnline, liveSettings, handoffTimedOut } from "../lib/live.js";
 import { applyTimeout } from "../lib/discordClaim.js";
 import { agentNameFor, clearReviewPending, startHandoff, visitorLiveMessage } from "../lib/handoff.js";
@@ -121,7 +123,7 @@ chatRouter.post("/", async (req, res) => {
   }
 
   try {
-    await assertCanSend(site);
+    await assertCanSend(site, isAutoModel(site.chat_model) ? 1 : modelCreditCost(site.chat_provider, site.chat_model));
   } catch (err) {
     const status = (err as Error & { status?: number }).status ?? 400;
     return res.status(status).json({ error: (err as Error).message });

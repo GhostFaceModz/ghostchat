@@ -89,12 +89,23 @@ export function extractWhopBilling(event: WhopEvent): {
   };
 }
 
-export function planFromWhopIds(planId?: string | null, productId?: string | null): Plan | null {
+export function planFromKnownIds(
+  planId: string | null | undefined,
+  productId: string | null | undefined,
+  known: { business?: Array<string | undefined | null>; pro?: Array<string | undefined | null> },
+): Plan | null {
   const ids = [planId, productId].filter(Boolean) as string[];
   if (!ids.length) return null;
-  if (config.whopPlanBusinessId && ids.includes(config.whopPlanBusinessId)) return "business";
-  if (config.whopPlanProId && ids.includes(config.whopPlanProId)) return "pro";
+  if ((known.business || []).some((id) => id && ids.includes(id))) return "business";
+  if ((known.pro || []).some((id) => id && ids.includes(id))) return "pro";
   return null;
+}
+
+export function planFromWhopIds(planId?: string | null, productId?: string | null): Plan | null {
+  return planFromKnownIds(planId, productId, {
+    business: [config.whopPlanBusinessId, config.whopPlanBusinessYearlyId],
+    pro: [config.whopPlanProId, config.whopPlanProYearlyId],
+  });
 }
 
 export function isUpgradeEvent(type: string): boolean {
