@@ -495,3 +495,7 @@ body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-ne
 .eval-box h4 { margin: 0 0 6px; font-size: 14px; }
 .eval-box .item.pass { border-left: 3px solid #16a34a; padding-left: 8px; }
 .eval-box .item.fail { border-left: 3px solid #dc2626; padding-left: 8px; }
+
+.cluster-list .cluster { display:flex; gap:0.75rem; justify-content:space-between; align-items:flex-start; }
+#log-search { margin: 0 0 0.5rem; }
+#log-search input[type="search"] { flex: 1; min-width: 12rem; }
