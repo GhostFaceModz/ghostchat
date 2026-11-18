@@ -431,6 +431,48 @@ export function preferUsefulAnswer(answer: string): string {
   return text.replace(/^[^.!?\n]+[.!?…]+\s*/, "").trim() || text;
 }
 
+
+/** Last resort when every chat model fails: a useful extract from retrieved chunks, with links. */
+export function retrievalOnlyAnswer(chunks: RetrievedChunk[]): { answer: string; sources: ChatSource[] } | null {
+  const picked: RetrievedChunk[] = [];
+  const seen = new Set<string>();
+  for (const chunk of chunks || []) {
+    const text = (chunk.content || "").replace(/\s+/g, " ").trim();
+    if (text.length < 40) continue;
+    const key = `${normUrl(chunk.url || "")}|${(chunk.heading || chunk.title || "").toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    picked.push({ ...chunk, content: text });
+    if (picked.length >= 4) break;
+  }
+  if (!picked.length) return null;
+
+  const blocks = picked.map((chunk) => {
+    let text = chunk.content;
+    if (text.length > 320) {
+      const cut = text.slice(0, 320);
+      const stop = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("? "), cut.lastIndexOf("! "));
+      text = (stop > 80 ? cut.slice(0, stop + 1) : cut).trim();
+      if (!/[.!?]$/.test(text)) text += "…";
+    }
+    const label = cleanSourceTitle(chunk.heading || chunk.title, chunk.url);
+    if (chunk.url) return `${text}\n${label}: ${chunk.url}`;
+    return label ? `${text}\n${label}` : text;
+  });
+
+  const sources: ChatSource[] = [];
+  const seenUrl = new Set<string>();
+  for (const chunk of picked) {
+    if (!chunk.url) continue;
+    const key = normUrl(chunk.url);
+    if (seenUrl.has(key)) continue;
+    seenUrl.add(key);
+    sources.push({ title: cleanSourceTitle(chunk.title, chunk.url), url: chunk.url });
+  }
+  return { answer: `Here's what I found:\n\n${blocks.join("\n\n")}`, sources };
+}
+
+
 export async function answerQuestion(opts: {
   site: Site;
   message: string;
@@ -531,6 +573,11 @@ export async function answerQuestion(opts: {
     }
   } catch (err) {
     console.error("chat failed:", (err as Error).message);
+    const retrieved = retrievalOnlyAnswer(chunks);
+    if (retrieved) {
+      const assistantLogId = await insertLog({ site_id: site.id, session_id: sessionId, role: "assistant", message: retrieved.answer, sources: retrieved.sources });
+      return { answer: retrieved.answer, unsure: false, sources: retrieved.sources, suggestions: [], cards: [], userLogId, assistantLogId };
+    }
     const assistantLogId = await insertLog({ site_id: site.id, session_id: sessionId, role: "assistant", message: AI_FALLBACK_REPLY });
     return { answer: AI_FALLBACK_REPLY, unsure: false, sources: [], suggestions: [], cards: [], userLogId, assistantLogId };
   }
@@ -663,6 +710,11 @@ export async function streamAnswer(opts: {
   } catch (err) {
     console.error("chat stream failed:", (err as Error).message);
     if (!answer.trim()) {
+      const retrieved = retrievalOnlyAnswer(chunks);
+      if (retrieved) {
+        onEvent({ type: "token", text: retrieved.answer });
+        return finish({ answer: retrieved.answer, unsure: false, sources: retrieved.sources, suggestions: [] }, { charge: false });
+      }
       onEvent({ type: "token", text: AI_FALLBACK_REPLY });
       return finish({ answer: AI_FALLBACK_REPLY, unsure: false, sources: [], suggestions: [] }, { charge: false });
     }
