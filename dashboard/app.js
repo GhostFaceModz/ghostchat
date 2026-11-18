@@ -387,6 +387,8 @@ function renderSite() {
   theme.show_branding.disabled = s.plan === "free";
   theme.ai_disclosure.value = s.ai_disclosure != null ? s.ai_disclosure : "This chat uses AI.";
   theme.ai_disclosure.placeholder = "This chat uses AI.";
+  if (theme.plausible_domain) theme.plausible_domain.value = s.plausible_domain || "";
+  if (theme.ga4_id) theme.ga4_id.value = s.ga4_id || "";
   $("#branding-note").textContent = s.plan === "free"
     ? "Free plan always shows the badge. Pro and Business can remove it."
     : "Pro and Business can hide the badge.";
@@ -613,7 +615,9 @@ $("#theme-form").addEventListener("submit", async (ev) => {
       show_branding: $("#theme-form").show_branding.checked,
       voice_enabled: $("#theme-form").voice_enabled ? $("#theme-form").voice_enabled.checked : false,
       read_aloud_enabled: $("#theme-form").read_aloud_enabled ? $("#theme-form").read_aloud_enabled.checked : true,
-      ai_disclosure: $("#theme-form").ai_disclosure ? $("#theme-form").ai_disclosure.value : "This chat uses AI."
+      ai_disclosure: $("#theme-form").ai_disclosure ? $("#theme-form").ai_disclosure.value : "This chat uses AI.",
+      plausible_domain: $("#theme-form").plausible_domain ? $("#theme-form").plausible_domain.value : "",
+      ga4_id: $("#theme-form").ga4_id ? $("#theme-form").ga4_id.value : ""
     }
   });
   state.site = site;

@@ -561,6 +561,13 @@
               <input name="ai_disclosure" maxlength="120" placeholder="This chat uses AI." />
             </label>
             <p class="muted tiny" data-i18n="appearance.disclosureNote">Shown at the bottom of the chat. On the Free plan it can’t be hidden — Pro and Business can clear the field to hide it.</p>
+            <label><span data-i18n="analytics.plausible">Plausible domain</span>
+              <input name="plausible_domain" maxlength="253" placeholder="yoursite.com" autocomplete="off" />
+            </label>
+            <label><span data-i18n="analytics.ga4">GA4 measurement ID</span>
+              <input name="ga4_id" maxlength="16" placeholder="G-XXXXXXXX" autocomplete="off" />
+            </label>
+            <p class="muted tiny" data-i18n="analytics.eventsNote">The widget fires events for chat open, message sent, lead captured and handoff. If the host page already has Plausible or gtag, those are used; otherwise the widget sends the events itself.</p>
             <button type="submit" class="btn primary">Save appearance</button>
           </form>
         </section>

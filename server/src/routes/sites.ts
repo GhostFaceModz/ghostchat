@@ -13,6 +13,7 @@ import { storeChunks, refreshCounts } from "../lib/indexer.js";
 import { assertPublicHttpUrl } from "../lib/ssrf.js";
 import { clientIp, rateLimitAsync } from "../lib/rateLimit.js";
 import { countOwnerSites, countUploads, messageLimit, refreshPeriod, effectiveBranding, sanitizeDisclosure } from "../lib/usage.js";
+import { sanitizeGa4Id, sanitizePlausibleDomain } from "../lib/widgetAnalytics.js";
 import { getTemplate } from "../lib/templates.js";
 import { extractPdfText, isPdfFile } from "../lib/pdf.js";
 import { importNotionPage } from "../lib/notion.js";
@@ -166,6 +167,18 @@ sitesRouter.patch("/:id", async (req, res) => {
     patch.show_branding = limits.brandingRequired ? true : body.show_branding;
   }
   if (typeof body.ai_disclosure === "string") patch.ai_disclosure = sanitizeDisclosure(body.ai_disclosure, site.plan);
+  if (typeof body.plausible_domain === "string") {
+    if (body.plausible_domain.trim() && !sanitizePlausibleDomain(body.plausible_domain)) {
+      return res.status(400).json({ error: "That Plausible domain doesn’t look right. Use a hostname like yoursite.com." });
+    }
+    patch.plausible_domain = sanitizePlausibleDomain(body.plausible_domain);
+  }
+  if (typeof body.ga4_id === "string") {
+    if (body.ga4_id.trim() && !sanitizeGa4Id(body.ga4_id)) {
+      return res.status(400).json({ error: "That GA4 measurement ID doesn’t look right. Use a G- ID, for example G-XXXXXXXX." });
+    }
+    patch.ga4_id = sanitizeGa4Id(body.ga4_id);
+  }
   if (typeof body.voice_enabled === "boolean") patch.voice_enabled = body.voice_enabled;
   if (typeof body.read_aloud_enabled === "boolean") patch.read_aloud_enabled = body.read_aloud_enabled;
   if (typeof body.booking_url === "string") {
