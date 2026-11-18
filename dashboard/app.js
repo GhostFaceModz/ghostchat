@@ -652,15 +652,19 @@ $("#crawl-btn").addEventListener("click", async () => {
   try {
     const data = await req("/api/sites/" + state.site.id + "/crawl", { method: "POST" });
     state.site = data.site || state.site;
+    const issues = data.issues || {};
+    const issueNote = ((issues.broken && issues.broken.length) || (issues.redirects && issues.redirects.length))
+      ? " · " + ((issues.broken && issues.broken.length) || 0) + " broken links, " + ((issues.redirects && issues.redirects.length) || 0) + " redirects"
+      : "";
     if (data.mode === "preview") {
       const d = data.changes || {};
-      status.textContent = "Preview ready: +" + (d.added || 0) + " added, ~" + (d.updated || 0) + " changed, -" + (d.removed || 0) + " removed — review below";
+      status.textContent = "Preview ready: +" + (d.added || 0) + " added, ~" + (d.updated || 0) + " changed, -" + (d.removed || 0) + " removed" + issueNote + " — review below";
       toast("Recrawl preview ready — approve it to update live answers");
     } else if (data.mode === "unchanged") {
-      status.textContent = "Recrawl found no changes";
-      toast("No changes in this recrawl");
+      status.textContent = "Recrawl found no changes" + issueNote;
+      toast(issueNote ? "No content changes, but some links need a look" : "No changes in this recrawl");
     } else {
-      status.textContent = "Indexed " + data.pages + " pages · " + data.chunks + " chunks";
+      status.textContent = "Indexed " + data.pages + " pages · " + data.chunks + " chunks" + issueNote;
       toast("Crawl complete");
     }
     renderSite();
@@ -732,6 +736,26 @@ async function loadCoverageMap() {
   }
 }
 
+
+function previewIssueList(items, kind) {
+  return (items || []).slice(0, 12).map((e) => {
+    const status = e.status ? e.status + " " : "";
+    const extra = e.finalUrl && e.finalUrl !== e.url ? " → " + e.finalUrl : "";
+    const reason = e.reason && e.reason !== "http" ? " (" + e.reason.replace(/_/g, " ") + ")" : "";
+    return "<li>" + escapeHtml(status + (e.url || "") + extra + reason) + "</li>";
+  }).join("") || "";
+}
+
+function previewIssuesHtml(d) {
+  if (!d) return "";
+  const broken = previewIssueList(d.broken, "broken");
+  const redirects = previewIssueList(d.redirects, "redirect");
+  let html = "";
+  if (broken) html += "<p class='tiny'><b>Broken links</b></p><ul>" + broken + "</ul>";
+  if (redirects) html += "<p class='tiny'><b>Redirects</b></p><ul>" + redirects + "</ul>";
+  return html;
+}
+
 function previewUrlList(items, limit) {
   return (items || []).slice(0, limit || 12).map((e) => "<li>" + escapeHtml((e.title || e.url || "") + (e.title && e.url ? " — " + e.url : "")) + "</li>").join("");
 }
@@ -752,6 +776,7 @@ async function loadPreviewAndStaging() {
         + (d.added && d.added.length ? "<p class='tiny'><b>Added</b></p><ul>" + previewUrlList(d.added) + "</ul>" : "")
         + (d.updated && d.updated.length ? "<p class='tiny'><b>Changed</b></p><ul>" + previewUrlList(d.updated) + "</ul>" : "")
         + (d.removed && d.removed.length ? "<p class='tiny'><b>Removed</b></p><ul>" + previewUrlList(d.removed) + "</ul>" : "")
+        + previewIssuesHtml(d)
         + "<div class='row'><button type='button' class='btn primary' id='preview-approve'>Approve and publish</button>"
         + "<button type='button' class='btn ghost' id='preview-reject'>Discard preview</button></div>";
       $("#preview-approve")?.addEventListener("click", async () => {
@@ -766,7 +791,8 @@ async function loadPreviewAndStaging() {
       });
     } else if (preview.status === "unchanged") {
       box.className = "preview-box unchanged";
-      box.innerHTML = "<h4>Last recrawl found no changes</h4><p class='muted tiny'>The published training already matches the site.</p>";
+      const d = preview.diff || {};
+      box.innerHTML = "<h4>Last recrawl found no changes</h4><p class='muted tiny'>The published training already matches the site.</p>" + previewIssuesHtml(d);
     } else {
       box.className = "preview-box hidden";
       box.innerHTML = "";

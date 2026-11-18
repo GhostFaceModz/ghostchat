@@ -1,7 +1,7 @@
 /** Recrawl preview and diff: scheduled and later manual recrawls wait for owner approval. */
 import { getDb } from "./supabase.js";
 import { contentHash, indexPages, pageChunks, planIncremental, refreshCounts } from "./indexer.js";
-import type { CrawledPage, CrawlScope } from "./crawl.js";
+import type { CrawledPage, CrawlIssue, CrawlScope } from "./crawl.js";
 import { faqCandidatesFromPages, saveFaqDrafts, type FaqCandidate } from "./faqDrafts.js";
 import { addStagingDocument, promoteStagingDocument, refreshStagingCount } from "./staging.js";
 import type { Site } from "../types.js";
@@ -13,7 +13,16 @@ export type PreviewDiff = {
   removed: DiffEntry[];
   unchanged: number;
   pages: number;
+  broken?: CrawlIssue[];
+  redirects?: CrawlIssue[];
 };
+
+export function attachCrawlIssues(diff: PreviewDiff, issues: CrawlIssue[] | undefined): PreviewDiff {
+  const list = issues || [];
+  const redirects = list.filter((i) => i.reason === "redirect" || i.reason === "redirect_offsite").slice(0, 40);
+  const broken = list.filter((i) => i.reason !== "redirect" && i.reason !== "redirect_offsite").slice(0, 40);
+  return { ...diff, broken, redirects };
+}
 
 type ExistingDoc = { id: string; source_url: string | null; content_hash: string | null; source_type: string; filename?: string | null };
 
@@ -82,13 +91,14 @@ export type IngestResult = {
   summary: { added: number; updated: number; unchanged: number; removed: number; chunks: number };
   faqDrafts: number;
   preview: Record<string, unknown> | null;
+  issues: { broken: CrawlIssue[]; redirects: CrawlIssue[] };
 };
 
 /** First crawl applies immediately. A recrawl writes a preview unless nothing changed. */
 export async function ingestCrawl(
   site: Site,
   pages: CrawledPage[],
-  opts: { trigger: "manual" | "scheduled"; scope?: CrawlScope },
+  opts: { trigger: "manual" | "scheduled"; scope?: CrawlScope; issues?: CrawlIssue[] },
 ): Promise<IngestResult> {
   if (!pages.length) throw new Error("No usable text was found on the site.");
   const existingLive = await hasCrawlDocuments(site.id);
@@ -99,15 +109,18 @@ export async function ingestCrawl(
       return 0;
     });
     await markCrawlReady(site.id, { previewStatus: null });
-    return { mode: "applied", summary, faqDrafts, preview: null };
+    const split = attachCrawlIssues({ added: [], updated: [], removed: [], unchanged: 0, pages: pages.length }, opts.issues);
+    return { mode: "applied", summary, faqDrafts, preview: null, issues: { broken: split.broken || [], redirects: split.redirects || [] } };
   }
   const preview = await buildCrawlPreview(site, pages, opts);
   const summary = { added: preview.added, updated: preview.updated, unchanged: preview.unchanged, removed: preview.removed, chunks: preview.chunks };
+  const previewDiff = (preview?.diff || {}) as PreviewDiff;
   return {
     mode: preview.status === "unchanged" ? "unchanged" : "preview",
     summary,
     faqDrafts: 0,
     preview,
+    issues: { broken: previewDiff.broken || [], redirects: previewDiff.redirects || [] },
   };
 }
 
@@ -134,10 +147,10 @@ async function loadExistingDocs(siteId: string): Promise<ExistingDoc[]> {
   return (data ?? []) as ExistingDoc[];
 }
 
-export async function buildCrawlPreview(site: Site, pages: CrawledPage[], opts: { trigger: "manual" | "scheduled"; scope?: CrawlScope }) {
+export async function buildCrawlPreview(site: Site, pages: CrawledPage[], opts: { trigger: "manual" | "scheduled"; scope?: CrawlScope; issues?: CrawlIssue[] }) {
   const existing = await loadExistingDocs(site.id);
   const plan = planIncremental(existing, pages, { removeMissing: true });
-  const diff = diffFromPlan(plan, existing);
+  const diff = attachCrawlIssues(diffFromPlan(plan, existing), opts.issues);
   const faqs = faqCandidatesFromPages(pages);
   const now = new Date().toISOString();
 
