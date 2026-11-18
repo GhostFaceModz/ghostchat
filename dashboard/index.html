@@ -410,6 +410,15 @@
             <p class="muted tiny" id="eval-status"></p>
             <div id="eval-list" class="list"></div>
           </div>
+          <div id="faq-import-box" class="faq-import-box">
+            <h4>Import FAQs from CSV</h4>
+            <p class="muted tiny">A header row of <code>question,answer</code> is best. Each row becomes a training source. This also fixes FAQ drafts, which now save as the <code>faq</code> source type.</p>
+            <form id="faq-import-form" class="stack">
+              <input type="file" id="faq-import-file" accept=".csv,text/csv,text/plain" />
+              <button type="submit" class="btn">Import CSV</button>
+            </form>
+            <p class="muted tiny" id="faq-import-status"></p>
+          </div>
           <div id="coverage-box" class="coverage-box">
             <h4>Knowledge coverage</h4>
             <p class="muted tiny">Pages in your training compared with pages visitors ask from, and sources the bot actually cites (last 30 days).</p>
