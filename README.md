@@ -194,6 +194,7 @@ Still to build:
 - [x] **Widget accessibility pass** (focus trap, Escape, aria-modal, restore focus, reduced motion)
 - [x] **WordPress plugin and Shopify snippet** (dashboard download only — no app-store listings)
 - [x] **Mobile PWA inbox** (Add to Home Screen, standalone display, safer mobile thread view)
+- [x] **Training eval set** (must-get-right questions checked against retrieved sources, no model credits)
 - [ ] Server-side TTS / STT beyond the browser voice mode
 
 ## License

@@ -490,3 +490,8 @@ body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-ne
 }
 #inbox-back { display: none; }
 .inbox-head { flex-wrap: wrap; align-items: center; }
+
+.eval-box { margin: 14px 0; padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, currentColor 6%, transparent); }
+.eval-box h4 { margin: 0 0 6px; font-size: 14px; }
+.eval-box .item.pass { border-left: 3px solid #16a34a; padding-left: 8px; }
+.eval-box .item.fail { border-left: 3px solid #dc2626; padding-left: 8px; }
