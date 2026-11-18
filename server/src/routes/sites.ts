@@ -2,7 +2,7 @@ import { Router, type Request } from "express";
 import multer from "multer";
 import { PLAN_LIMITS, type Plan } from "../config.js";
 import { getDb } from "../lib/supabase.js";
-import { newSiteKey, type AuthedRequest } from "../lib/auth.js";
+import { newSiteKey, workspaceId, denyIfNotOwner, type AuthedRequest } from "../lib/auth.js";
 import { crawlSite, type CrawlScope } from "../lib/crawl.js";
 import { normalizeTools, runTool, fillTemplate } from "../lib/siteTools.js";
 import { classifyIntent } from "../lib/intent.js";
@@ -35,7 +35,7 @@ const upload = multer({
 const DEFAULT_THEME: Theme = { mode: "dark", primary: "#a78bfa" };
 
 function ownerId(req: Request): string {
-  return (req as unknown as AuthedRequest).owner.id;
+  return workspaceId(req);
 }
 
 async function loadOwnedSite(req: Request, id: string): Promise<Site | null> {
@@ -68,6 +68,7 @@ sitesRouter.get("/", async (req, res) => {
 });
 
 sitesRouter.post("/", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const owner = (req as unknown as AuthedRequest).owner;
   const { count } = await getDb()
     .from("ghostchat_sites")
@@ -124,6 +125,7 @@ sitesRouter.get("/:id", async (req, res) => {
 });
 
 sitesRouter.patch("/:id", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
 
@@ -232,6 +234,7 @@ sitesRouter.patch("/:id", async (req, res) => {
 
 /** Try a search tool from the builder before saving it: returns the first mapped results. */
 sitesRouter.post("/:id/tools/test", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const rl = await rateLimitAsync(`tooltest:${site.id}`, 20, 60_000);
@@ -261,6 +264,7 @@ async function normalizeScope(raw: Record<string, unknown>, siteUrl: string): Pr
 }
 
 sitesRouter.post("/:id/crawl", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const rl = await rateLimitAsync(`crawl:${site.id}`, 5, 60 * 60 * 1000);
@@ -327,6 +331,7 @@ sitesRouter.get("/:id/documents", async (req, res) => {
 });
 
 sitesRouter.post("/:id/documents", upload.array("files", 5), async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const ip = clientIp(req);
@@ -387,6 +392,7 @@ sitesRouter.post("/:id/documents", upload.array("files", 5), async (req, res) =>
 
 
 sitesRouter.post("/:id/documents/notion", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const existing = await countUploads(site.id);
@@ -421,6 +427,7 @@ sitesRouter.post("/:id/documents/notion", async (req, res) => {
 });
 
 sitesRouter.delete("/:id/documents/:docId", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const { error } = await getDb()
@@ -508,6 +515,7 @@ sitesRouter.get("/:id/corrections", async (req, res) => {
 });
 
 sitesRouter.post("/:id/corrections", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const rl = await rateLimitAsync(`fix:${site.id}`, 60, 60 * 60 * 1000);
@@ -532,6 +540,7 @@ sitesRouter.post("/:id/corrections", async (req, res) => {
 });
 
 sitesRouter.delete("/:id/corrections/:cid", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const { error } = await getDb().from("ghostchat_corrections").delete().eq("id", req.params.cid).eq("site_id", site.id);
@@ -552,6 +561,7 @@ sitesRouter.get("/:id/faq-drafts", async (req, res) => {
 });
 
 sitesRouter.post("/:id/faq-drafts/:did/:action", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const action = req.params.action;
@@ -567,6 +577,7 @@ sitesRouter.post("/:id/faq-drafts/:did/:action", async (req, res) => {
 
 /** Teach the bot an answer to an unanswered visitor question (stores a correction that is used as a source). */
 sitesRouter.post("/:id/unanswered/:logId/teach", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const rl = await rateLimitAsync(`fix:${site.id}`, 60, 60 * 60 * 1000);

@@ -43,7 +43,12 @@ const state = {
   catalog: null,
   billing: null,
   billInterval: "monthly",
-  view: "sites"
+  view: "sites",
+  workspaceId: "",
+  workspaces: [],
+  role: "owner",
+  mailer: false,
+  limits: null
 };
 
 function toast(msg) {
@@ -57,6 +62,7 @@ function toast(msg) {
 async function req(path, opts = {}) {
   const headers = Object.assign({ "content-type": "application/json" }, opts.headers || {});
   if (state.token) headers.authorization = "Bearer " + state.token;
+  if (state.workspaceId) headers["x-ghostchat-workspace"] = state.workspaceId;
   const body = opts.body instanceof FormData ? opts.body : opts.body ? JSON.stringify(opts.body) : undefined;
   if (opts.body instanceof FormData) delete headers["content-type"];
   const res = await fetch(api + path, { method: opts.method || "GET", headers, body });
@@ -95,8 +101,65 @@ function setAuthMode(mode) {
   if (!$("#auth").classList.contains("hidden")) showAuth(true);
 }
 
+function workspacePlan() {
+  const w = (state.workspaces || []).find((x) => x.id === state.workspaceId);
+  return (w && w.plan) || (state.owner && state.owner.plan) || "free";
+}
+
+function applyWorkspaceRole() {
+  const w = (state.workspaces || []).find((x) => x.id === state.workspaceId);
+  state.role = w ? w.role : "owner";
+  document.body.dataset.role = state.role;
+  fillWorkspaceSwitch();
+}
+
+function fillWorkspaceSwitch() {
+  const wrap = $("#workspace-switch");
+  const sel = $("#workspace-select");
+  if (!wrap || !sel) return;
+  const list = state.workspaces || [];
+  wrap.classList.toggle("hidden", list.length < 2);
+  sel.innerHTML = list.map((w) => {
+    const label = (w.self ? "Your workspace" : (w.name || w.email)) + " · " + w.role;
+    return `<option value="${escapeHtml(w.id)}"${w.id === state.workspaceId ? " selected" : ""}>${escapeHtml(label)}</option>`;
+  }).join("");
+}
+
+async function applyMe(me) {
+  state.owner = me.owner;
+  state.workspaces = me.workspaces || [{ id: me.owner.id, name: me.owner.name, email: me.owner.email, plan: me.owner.plan, role: "owner", self: true }];
+  state.mailer = Boolean(me.mailer);
+  state.limits = me.limits || null;
+  const saved = (() => { try { return localStorage.getItem("gc_workspace"); } catch { return ""; } })();
+  if (saved && state.workspaces.some((w) => w.id === saved)) state.workspaceId = saved;
+  else state.workspaceId = me.workspaceId || me.owner.id;
+  applyWorkspaceRole();
+  showOwner(me.owner);
+}
+
+async function acceptPendingInvite() {
+  const token = new URLSearchParams(location.search).get("invite");
+  if (!token || !state.token) return;
+  try {
+    const r = await req("/api/team/invites/" + encodeURIComponent(token) + "/accept", { method: "POST" });
+    if (r.workspaceId) {
+      state.workspaceId = r.workspaceId;
+      try { localStorage.setItem("gc_workspace", r.workspaceId); } catch {}
+    }
+    const qs = new URLSearchParams(location.search);
+    qs.delete("invite");
+    history.replaceState({}, "", location.pathname + (qs.toString() ? "?" + qs : "") + location.hash);
+    toast("Invite accepted");
+    const me = await req("/api/auth/me");
+    await applyMe(me);
+  } catch (e) {
+    toast(e.message || "Could not accept that invite");
+  }
+}
+
 function showOwner(owner) {
-  $("#owner-email").textContent = owner.email + (owner.plan ? " · " + owner.plan : "");
+  const role = state.role && state.role !== "owner" ? " · " + state.role : "";
+  $("#owner-email").textContent = owner.email + (owner.plan ? " · " + owner.plan : "") + role;
   const av = $("#owner-avatar");
   if (owner.avatar_url) {
     const img = document.createElement("img");
@@ -139,12 +202,23 @@ async function boot() {
     err.hidden = false;
     return;
   }
-  if (!state.token) { showAuth(true); return; }
+  if (!state.token) {
+    showAuth(true);
+    const inviteTok = params.get("invite");
+    if (inviteTok) {
+      fetch("/api/team/invites/" + encodeURIComponent(inviteTok)).then((r) => r.json()).then((d) => {
+        if (!d.invite) return;
+        if (d.invite.email) $("#auth-form").email.value = d.invite.email;
+        $("#auth-sub").textContent = "Accept your invite to " + (d.invite.workspaceName || "a GhostChat workspace") + " as a " + d.invite.role + ".";
+      }).catch(() => {});
+    }
+    return;
+  }
   try {
-    const { owner } = await req("/api/auth/me");
-    state.owner = owner;
+    const me = await req("/api/auth/me");
+    await applyMe(me);
     showAuth(false);
-    showOwner(owner);
+    await acceptPendingInvite();
     await refreshSites();
   } catch {
     state.token = "";
@@ -365,11 +439,12 @@ $("#auth-form").addEventListener("submit", async (ev) => {
       body: { email, password, name: fd.get("name"), remember: fd.get("remember") === "on" }
     });
     state.token = data.token;
-    state.owner = data.owner;
     tokenStore.set(data.token, fd.get("remember") === "on");
+    const me = await req("/api/auth/me");
+    await applyMe(me);
     showAuth(false);
-    showOwner(data.owner);
     if (mode === "signup") toast("Welcome to GhostChat! Add your first site to begin.");
+    await acceptPendingInvite();
     await refreshSites();
   } catch (e) {
     err.textContent = e.message;
@@ -1053,6 +1128,78 @@ function fmtDate(iso) {
   try { return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }); } catch { return iso; }
 }
 
+
+async function renderTeam() {
+  const box = $("#acct-team");
+  if (!box) return;
+  const intro = $("#acct-team-intro");
+  try {
+    const t = await req("/api/team");
+    const seats = t.seats || { used: 1, cap: 1 };
+    intro.textContent = "This workspace has " + seats.used + " of " + seats.cap + " seats. Pro includes 2, Business includes 5.";
+    const rows = (t.members || []).map((m) => {
+      const st = m.status === "pending" ? "Pending" : "Active";
+      const del = t.role === "owner" ? "<button type='button' class='btn tiny ghost' data-remove-member='" + escapeHtml(m.id) + "'>Remove</button>" : "";
+      return "<div class='team-row'><div><b>" + escapeHtml(m.email) + "</b><div class='muted tiny'>" + escapeHtml(m.role) + " · " + st + "</div></div>" + del + "</div>";
+    }).join("") || "<p class='muted tiny'>No teammates yet.</p>";
+    const form = t.role === "owner" && seats.cap > 1
+      ? "<form id='team-invite-form' class='row' style='margin-top:10px'><input name='email' type='email' required placeholder='teammate@email.com' /><select name='role'><option value='agent'>Agent</option><option value='viewer'>Viewer</option></select><button class='btn primary' type='submit'>Invite</button></form><p class='muted tiny' id='team-invite-url' hidden></p>"
+      : (seats.cap <= 1 ? "<p class='muted tiny'>Upgrade to Pro to invite a teammate.</p>" : "");
+    box.innerHTML = rows + form;
+    box.querySelectorAll("[data-remove-member]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("Remove this teammate?")) return;
+        try { await req("/api/team/" + btn.getAttribute("data-remove-member"), { method: "DELETE" }); toast("Removed"); renderTeam(); }
+        catch (e) { toast(e.message); }
+      });
+    });
+    const inviteForm = $("#team-invite-form");
+    if (inviteForm) inviteForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      try {
+        const r = await req("/api/team/invites", { method: "POST", body: { email: inviteForm.email.value, role: inviteForm.role.value } });
+        toast(r.emailed ? "Invite emailed" : "Invite created");
+        const note = $("#team-invite-url");
+        if (note && r.inviteUrl) { note.hidden = false; note.textContent = "Share this link: " + r.inviteUrl; }
+        renderTeam();
+      } catch (e) { toast(e.message); }
+    });
+  } catch (e) {
+    box.innerHTML = "<p class='muted'>" + escapeHtml(e.message) + "</p>";
+  }
+}
+
+async function renderDigest() {
+  const box = $("#acct-digest");
+  if (!box) return;
+  try {
+    const d = await req("/api/digest");
+    if (!d.allowed) {
+      box.innerHTML = "<p class='muted tiny'>Weekly digests are on Pro and Business.</p>";
+      return;
+    }
+    const cur = d.current || {};
+    const stats = cur.messages != null
+      ? "<p><b>" + cur.messages + "</b> messages this week · <b>" + cur.leads + "</b> leads · CSAT " + (cur.csat && cur.csat.average != null ? cur.csat.average + "/5" : "n/a") + "</p>"
+        + (cur.unanswered && cur.unanswered.length ? "<p class='muted tiny'>Unanswered: " + escapeHtml(cur.unanswered.slice(0, 3).map((q) => q.question).join(" · ")) + "</p>" : "<p class='muted tiny'>No unanswered questions in the last 7 days.</p>")
+      : "<p class='muted tiny'>No digest data yet.</p>";
+    const mailNote = d.mailer
+      ? "When this is on, we'll email the summary once a week."
+      : "The summary appears here. To email it, add a free Resend or AgentMail key on the server (no paid signup needed).";
+    const toggle = state.role === "owner"
+      ? "<label class='check'><input id='digest-opt' type='checkbox' " + (d.optIn ? "checked" : "") + " /> Email me the weekly digest</label><p class='muted tiny'>" + mailNote + "</p>"
+      : "<p class='muted tiny'>" + (d.optIn ? "Digest email is on for the owner." : "The owner hasn't opted into digest email.") + "</p>";
+    box.innerHTML = stats + toggle;
+    const opt = $("#digest-opt");
+    if (opt) opt.addEventListener("change", async () => {
+      try { await req("/api/digest/opt-in", { method: "POST", body: { optIn: opt.checked } }); toast(opt.checked ? "Digest email on" : "Digest email off"); }
+      catch (e) { toast(e.message); opt.checked = !opt.checked; }
+    });
+  } catch (e) {
+    box.innerHTML = "<p class='muted'>" + escapeHtml(e.message) + "</p>";
+  }
+}
+
 async function showAccount() {
   state.view = "account";
   ["#site-view", "#empty-state", "#billing-view"].forEach((s) => $(s)?.classList.add("hidden"));
@@ -1077,6 +1224,8 @@ async function showAccount() {
   $("#acct-delete").disabled = Boolean(owner.is_admin);
   $("#acct-delete-sub").textContent = owner.is_admin ? " The owner (admin) account can't be deleted here." : " If you pay through Whop, cancel the subscription first.";
   renderAccountBilling();
+  renderTeam();
+  renderDigest();
 }
 
 async function renderAccountBilling() {
@@ -1217,6 +1366,14 @@ $("#cancel-confirm").addEventListener("click", async () => {
     renderAccountBilling().then(show);
   } catch (e) { err.textContent = e.message; err.hidden = false; }
   finally { btn.disabled = false; }
+});
+
+$("#workspace-select")?.addEventListener("change", async (ev) => {
+  state.workspaceId = ev.target.value;
+  try { localStorage.setItem("gc_workspace", state.workspaceId); } catch {}
+  applyWorkspaceRole();
+  state.site = null;
+  try { await refreshSites(); toast("Switched workspace"); } catch (e) { toast(e.message); }
 });
 
 boot();

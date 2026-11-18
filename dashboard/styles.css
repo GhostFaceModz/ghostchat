@@ -446,3 +446,16 @@ dialog.wizard { width: min(560px, calc(100vw - 20px)); max-height: calc(100dvh -
 .wz-plats button.on, .wz-plats button[aria-selected="true"] { color: var(--text); border-color: var(--primary); background: color-mix(in srgb, var(--primary) 16%, transparent); }
 #wz-faq { display: grid; gap: 10px; margin-top: 8px; }
 #wz-faq[hidden] { display: none; }
+
+.workspace-switch { margin: 8px 12px 4px; }
+.workspace-switch select { width: 100%; margin-top: 4px; }
+.email-channel { margin-top: 22px; }
+.team-row, .digest-card { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+.copilot-box { margin: 8px 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, currentColor 6%, transparent); }
+.copilot-box p { margin: 0 0 6px; }
+body[data-role="agent"] #new-site, body[data-role="viewer"] #new-site,
+body[data-role="agent"] #empty-new, body[data-role="viewer"] #empty-new,
+body[data-role="viewer"] #inbox-form, body[data-role="agent"] #acct-billing .plan-grid,
+body[data-role="viewer"] #acct-billing, body[data-role="agent"] #acct-byok { }
+body[data-role="viewer"] .ip-reply, body[data-role="viewer"] #inbox-take { display: none !important; }
+body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-new { display: none !important; }

@@ -90,6 +90,9 @@ export type Site = {
   bot_mode?: "assistant" | "support" | "sales" | "recommendations";
   support?: Record<string, unknown> | null;
   updated_at?: string;
+  email_channel?: boolean;
+  email_inbound_token?: string | null;
+  email_from_name?: string | null;
 };
 
 export type RetrievedChunk = {

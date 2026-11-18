@@ -79,6 +79,10 @@
         <a class="brand" href="/"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V10a7 7 0 0 1 14 0v11l-3.5-2-3.5 2-3.5-2Z"/><path d="M9.5 10v1.5m5-1.5v1.5"/></svg></span>GhostChat</a>
         <button type="button" class="btn primary small" id="new-site">+ New site</button>
       </div>
+      <div id="workspace-switch" class="workspace-switch hidden">
+        <label class="rail-label" for="workspace-select">Workspace</label>
+        <select id="workspace-select"></select>
+      </div>
       <div class="rail-label">Your sites</div>
       <nav id="site-list" class="site-list" aria-label="Your sites"></nav>
       <div class="rail-foot">
@@ -167,6 +171,18 @@
           <div id="acct-byok"></div>
           <p class="cancel-line" id="acct-cancel-line" hidden><button type="button" class="linklike" id="acct-cancel">Cancel subscription</button></p>
           <p class="muted tiny" id="acct-cancel-note" hidden></p>
+        </section>
+
+        <section class="panel glass acct" id="acct-team-wrap">
+          <h3>Team</h3>
+          <p class="muted tiny" id="acct-team-intro">Invite teammates to this workspace. Pro includes 2 seats, Business includes 5, with agent or viewer roles.</p>
+          <div id="acct-team"></div>
+        </section>
+
+        <section class="panel glass acct" id="acct-digest-wrap">
+          <h3>Weekly digest</h3>
+          <p class="muted tiny">A once-a-week summary of unanswered questions, leads, CSAT and usage. Nothing is emailed until you opt in, and only if a free mail provider is configured.</p>
+          <div id="acct-digest"></div>
         </section>
 
         <section class="panel glass acct">
@@ -535,6 +551,7 @@
           <h3 class="live-ch-title">Where you get chats</h3>
           <p class="muted tiny">Channels are shared by all your bots. Each chat only ever goes to your own channels.</p>
           <div class="live-channels" id="live-channels"></div>
+          <div id="email-channel" class="email-channel"></div>
         </section>
 
 

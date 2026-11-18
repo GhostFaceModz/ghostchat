@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { getDb } from "../lib/supabase.js";
-import { hashPassword, verifyPassword, signToken, sessionTtl, isValidEmail, requireAuth, signOAuthState, verifyOAuthState, readOAuthState } from "../lib/auth.js";
+import { hashPassword, verifyPassword, signToken, sessionTtl, isValidEmail, requireAuth, signOAuthState, verifyOAuthState, readOAuthState, type AuthedRequest } from "../lib/auth.js";
+import { listWorkspaces } from "../lib/team.js";
+import { mailerConfigured } from "../lib/mailer.js";
 import { clientIp, rateLimitAsync } from "../lib/rateLimit.js";
 import { issueAuthTicket, mintSessionFromTicket, sessionLandingUrl } from "../lib/authTickets.js";
 import { config, oauthConfigured, oauthMode, supabaseAuthorizeUrl, PLAN_LIMITS, type Plan } from "../config.js";
@@ -14,8 +16,6 @@ import {
   redeemGoogleHandoff,
   safeReturnPath,
 } from "../lib/googleHandoff.js";
-import type { AuthedRequest } from "../lib/auth.js";
-
 export const authRouter = Router();
 
 // Which sign-in methods are live and where each button should go. Direct OAuth (own client
@@ -222,14 +222,16 @@ authRouter.get("/google/finish", async (req, res) => {
 });
 
 authRouter.get("/me", requireAuth, async (req, res) => {
-  const session = (req as AuthedRequest).owner;
+  const actor = (req as AuthedRequest).owner;
   const { data, error } = await getDb()
     .from("ghostchat_owners")
     .select("id, email, name, plan, avatar_url, discord_id, google_id, whop_membership_id, is_admin, password_hash, created_at, agent_display_name")
-    .eq("id", session.id)
+    .eq("id", actor.id)
     .maybeSingle();
   if (error || !data) return res.status(401).json({ error: "Please sign in" });
   const plan = (data.plan as Plan) || "free";
+  const session = req as AuthedRequest;
+  const workspaces = await listWorkspaces(data.id, { email: data.email, name: data.name, plan }).catch(() => []);
   res.json({
     owner: {
       id: data.id,
@@ -245,6 +247,10 @@ authRouter.get("/me", requireAuth, async (req, res) => {
       created_at: data.created_at,
     },
     limits: PLAN_LIMITS[plan],
+    workspaceId: session.workspaceId || data.id,
+    role: session.role || "owner",
+    workspaces,
+    mailer: mailerConfigured(),
     billing: {
       configured: Boolean(config.whopWebhookSecret || config.whopCheckoutProUrl),
       membership: Boolean(data.whop_membership_id),

@@ -1,6 +1,6 @@
 import { Router, type Request } from "express";
 import { getDb } from "../lib/supabase.js";
-import type { AuthedRequest } from "../lib/auth.js";
+import { workspaceId, denyIfViewer, type AuthedRequest } from "../lib/auth.js";
 import { replyToTicket, TICKET_PRIORITIES, TICKET_STATUSES, type Ticket } from "../lib/tickets.js";
 import { agentNameFor, rememberOwnerAgentName } from "../lib/handoff.js";
 import { resolveAgentName } from "../lib/live.js";
@@ -10,8 +10,7 @@ import type { Site } from "../types.js";
 export const ticketsRouter = Router();
 
 async function ownedSite(req: Request): Promise<Site | null> {
-  const owner = (req as unknown as AuthedRequest).owner;
-  const { data } = await getDb().from("ghostchat_sites").select("*").eq("id", req.params.id).eq("owner_id", owner.id).maybeSingle();
+  const { data } = await getDb().from("ghostchat_sites").select("*").eq("id", req.params.id).eq("owner_id", workspaceId(req)).maybeSingle();
   return (data as Site) ?? null;
 }
 
@@ -35,6 +34,7 @@ ticketsRouter.get("/:id/tickets/:tid", async (req, res) => {
 });
 
 ticketsRouter.post("/:id/tickets/:tid/reply", async (req, res) => {
+  if (denyIfViewer(req, res)) return;
   const site = await ownedSite(req);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const text = String(req.body?.text || "").trim();
@@ -56,6 +56,7 @@ ticketsRouter.post("/:id/tickets/:tid/reply", async (req, res) => {
 });
 
 ticketsRouter.patch("/:id/tickets/:tid", async (req, res) => {
+  if (denyIfViewer(req, res)) return;
   const site = await ownedSite(req);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };

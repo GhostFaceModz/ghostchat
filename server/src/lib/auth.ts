@@ -4,6 +4,7 @@ import type { Request, Response, NextFunction } from "express";
 import { config } from "../config.js";
 import { getDb } from "./supabase.js";
 import type { Owner } from "../types.js";
+import { resolveWorkspace, type TeamRole } from "./team.js";
 
 const scrypt = promisify(scryptCb);
 const SCRYPT_KEYLEN = 32;
@@ -74,7 +75,29 @@ export function newSiteKey(): string {
   return `gc_${randomBytes(18).toString("base64url")}`;
 }
 
-export type AuthedRequest = Request & { owner: Owner };
+export type AuthedRequest = Request & { owner: Owner; workspaceId: string; role: TeamRole };
+
+export function workspaceId(req: Request): string {
+  const a = req as AuthedRequest;
+  return a.workspaceId || a.owner.id;
+}
+
+export function teamRole(req: Request): TeamRole {
+  return (req as AuthedRequest).role || "owner";
+}
+
+export function denyIfNotOwner(req: Request, res: Response): boolean {
+  if (teamRole(req) === "owner") return false;
+  res.status(403).json({ error: "You need to be the account owner to change this." });
+  return true;
+}
+
+export function denyIfViewer(req: Request, res: Response): boolean {
+  if (teamRole(req) !== "viewer") return false;
+  res.status(403).json({ error: "Viewers can look, but can't send or edit." });
+  return true;
+}
+
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const header = req.header("authorization") || "";
@@ -94,8 +117,17 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
       if (error) return res.status(503).json({ error: "Please try again in a moment." });
       const cutoff = data?.sessions_valid_after ? Math.floor(new Date(data.sessions_valid_after).getTime() / 1000) : 0;
       if (!data || (payload.iat ?? 0) < cutoff) return res.status(401).json({ error: "Please sign in" });
-      (req as AuthedRequest).owner = { id: data.id, email: data.email, name: data.name, discord_id: data.discord_id, agent_display_name: data.agent_display_name };
-      next();
+      const owner = { id: data.id, email: data.email, name: data.name, discord_id: data.discord_id, agent_display_name: data.agent_display_name };
+      const requested = req.header("x-ghostchat-workspace") || "";
+      resolveWorkspace(data.id, requested).then((ws) => {
+        (req as AuthedRequest).owner = owner;
+        (req as AuthedRequest).workspaceId = ws.workspaceId;
+        (req as AuthedRequest).role = ws.role;
+        next();
+      }, (err: Error & { status?: number }) => {
+        const status = err.status === 403 ? 403 : 503;
+        res.status(status).json({ error: status === 403 ? err.message : "Please try again in a moment." });
+      });
     }, () => res.status(503).json({ error: "Please try again in a moment." }));
 }
 
