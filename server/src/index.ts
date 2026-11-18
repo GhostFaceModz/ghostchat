@@ -7,6 +7,7 @@ import { config } from "./config.js";
 import { requireAuth } from "./lib/auth.js";
 import { authRouter } from "./routes/auth.js";
 import { sitesRouter } from "./routes/sites.js";
+import { v1Router } from "./routes/v1.js";
 import { chatRouter } from "./routes/chat.js";
 import { leadsRouter } from "./routes/leads.js";
 import { widgetRouter } from "./routes/widget.js";
@@ -92,6 +93,7 @@ app.use("/api/models", requireAuth, modelsRouter);
 app.use("/api/webhooks/telegram", telegramWebhookRouter);
 app.use("/api/live/owner", requireAuth, liveOwnerRouter);
 app.use("/api/live", widgetCors, liveWidgetRouter);
+app.use("/api/v1", widgetCors, v1Router);
 // Alias for /api/widget/templates.
 app.get("/api/templates", widgetCors, (req, res, next) => {
   req.url = "/templates";

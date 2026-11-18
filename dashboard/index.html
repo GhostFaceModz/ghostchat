@@ -840,6 +840,13 @@
           <h4>Link preview</h4>
           <p class="muted tiny">This card shows when you paste the link into WhatsApp, Discord, X, Slack or iMessage. It uses your bot's name, greeting and brand colour.</p>
           <img id="share-og" class="og-preview" alt="Link preview card for your chat link" width="600" height="315" loading="lazy" />
+          <h4 data-i18n="api.title">Search API</h4>
+          <p class="muted tiny" data-i18n="api.note">Generate a key to search this site’s knowledge from your own apps. The full key is shown once. Send it as <code>Authorization: Bearer</code> to <code>POST /api/v1/search</code>. A minimal MCP endpoint is at <code>POST /api/v1/mcp</code>. Details are in the setup guide.</p>
+          <div id="api-keys" class="list"></div>
+          <div class="row">
+            <button type="button" class="btn" id="api-key-new" data-i18n="api.generate">Generate API key</button>
+          </div>
+          <p class="muted tiny" id="api-key-once" hidden></p>
         </section>
       </div>
     </main>
