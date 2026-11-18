@@ -173,8 +173,8 @@ export async function loadAgentReviews(workspaceId: string): Promise<{ agents: A
   const { data: owners } = ids.size
     ? await db.from("ghostchat_owners").select("id, name, email, avatar_url").in("id", [...ids])
     : { data: [] as MemberHint[] };
-  const members: MemberHint[] = (owners || []).map((o: { id: string; name: string | null; email: string | null; avatar_url: string | null }) => ({
-    id: o.id, name: o.name, email: o.email, avatar_url: o.avatar_url,
+  const members: MemberHint[] = (owners || []).map((o) => ({
+    id: o.id ?? null, name: o.name ?? null, email: o.email ?? null, avatar_url: o.avatar_url ?? null,
   }));
 
   const agents = buildAgentReviewBoard((reviewRows || []) as ReviewRow[], chats, members);
