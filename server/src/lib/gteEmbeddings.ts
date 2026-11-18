@@ -5,7 +5,7 @@ const EMBEDDING_DIMENSIONS = 384;
 
 export const GTE_FUNCTION = "ghostchat-embed";
 export const GTE_MODEL = "gte-small";
-const BATCH = 32;
+const BATCH = 1;
 
 export function gteConfigured(): boolean {
   return Boolean(config.supabaseUrl && config.supabaseServiceKey);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { backoffMs, isRetryable, _test, AiUnavailableError, FREE_OPENROUTER_FALLBACK } from "../server/src/lib/ai.ts";
+import { backoffMs, isRetryable, _test, AiUnavailableError, FREE_OPENROUTER_FALLBACK, FREE_OPENROUTER_FALLBACKS } from "../server/src/lib/ai.ts";
 import { chatRateLimit } from "../server/src/routes/chat.ts";
 import { dailyCapCheck, dailyCap } from "../server/src/lib/usage.ts";
 import { HUMAN_REQUEST } from "../server/src/lib/guardrails.ts";
@@ -80,9 +80,33 @@ test("retries a 402 from a paid OpenRouter model on a free model", async () => {
   assert.equal(calls[1].body.model, FREE_OPENROUTER_FALLBACK);
 });
 
-test("does not loop a 402 from a free OpenRouter model", async () => {
-  let calls = 0;
-  const fake = (async () => { calls++; return new Response("limited", { status: 402 }); }) as typeof fetch;
-  await assert.rejects(_test.aiFetch({ ...resolved, model: FREE_OPENROUTER_FALLBACK }, "/chat/completions", { model: FREE_OPENROUTER_FALLBACK }, false, fake));
-  assert.equal(calls, 1);
+test("does not loop after every free OpenRouter model returns 402", async () => {
+  const models: string[] = [];
+  const fake = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    models.push(body.model);
+    return new Response("limited", { status: 402 });
+  }) as typeof fetch;
+  await assert.rejects(_test.aiFetch({ ...resolved, model: "deepseek/deepseek-v4-flash" }, "/chat/completions", { model: "deepseek/deepseek-v4-flash" }, false, fake));
+  assert.deepEqual(models, ["deepseek/deepseek-v4-flash", ...FREE_OPENROUTER_FALLBACKS]);
+});
+
+test("a rate-limited free model falls through to the next free model", async () => {
+  const models: string[] = [];
+  const fake = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    models.push(body.model);
+    if (body.model === FREE_OPENROUTER_FALLBACKS[0]) return new Response("rate", { status: 429, headers: { "retry-after": "0.01" } });
+    return new Response("{}", { status: 200 });
+  }) as typeof fetch;
+  const res = await _test.aiFetch(
+    { ...resolved, model: FREE_OPENROUTER_FALLBACKS[0] },
+    "/chat/completions",
+    { model: FREE_OPENROUTER_FALLBACKS[0] },
+    false,
+    fake,
+  );
+  assert.equal(res.status, 200);
+  assert.ok(models.includes(FREE_OPENROUTER_FALLBACKS[0]));
+  assert.equal(models.at(-1), FREE_OPENROUTER_FALLBACKS[1]);
 });

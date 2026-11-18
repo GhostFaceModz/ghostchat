@@ -1,7 +1,12 @@
 import { EMBEDDING_DIMENSIONS, planChatChoice, resolveChatModel, resolveEmbeddingModel, type ResolvedModel } from "./models.js";
 
-/** Used when the default OpenRouter model returns 402 (no credits). These do not cost money. */
-export const FREE_OPENROUTER_FALLBACK = "google/gemma-4-31b-it:free";
+/** Used when the default OpenRouter model returns 402 (no credits) or a free model is rate-limited. These do not cost money. */
+export const FREE_OPENROUTER_FALLBACKS = [
+  "google/gemma-4-31b-it:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "qwen/qwen3-8b:free",
+];
+export const FREE_OPENROUTER_FALLBACK = FREE_OPENROUTER_FALLBACKS[0];
 import { embedInActiveSpace } from "./embeddingSpace.js";
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
@@ -25,7 +30,17 @@ export function isRetryable(status: number): boolean {
   return status === 429 || status === 408 || status >= 500;
 }
 
-async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, stream = false, fetchImpl: typeof fetch = fetch): Promise<Response> {
+function nextFreeOpenRouter(current: string, used: string[]): string | undefined {
+  const skip = new Set([...used, current]);
+  return FREE_OPENROUTER_FALLBACKS.find((m) => !skip.has(m));
+}
+
+function withModel(body: unknown, model: string): unknown {
+  if (body && typeof body === "object" && !Array.isArray(body)) return { ...(body as Record<string, unknown>), model };
+  return body;
+}
+
+async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, stream = false, fetchImpl: typeof fetch = fetch, usedFree: string[] = []): Promise<Response> {
   if (!resolved.apiKey) {
     throw new Error(`No API key is configured for ${resolved.provider}.`);
   }
@@ -55,16 +70,16 @@ async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, str
     }
     lastStatus = res.status;
     const text = await res.text().catch(() => "");
+    const canSwitchFree = resolved.provider === "openrouter" && (res.status === 402 || (res.status === 429 && String(resolved.model).endsWith(":free") && attempt >= AI_MAX_RETRIES));
+    if (canSwitchFree) {
+      const next = nextFreeOpenRouter(String(resolved.model), usedFree);
+      if (next) {
+        console.warn(`openrouter ${res.status} on ${resolved.model}; retrying with ${next}`);
+        return aiFetch({ ...resolved, model: next }, path, withModel(body, next), stream, fetchImpl, [...usedFree, String(resolved.model)]);
+      }
+    }
     if (isRetryable(res.status) && attempt < AI_MAX_RETRIES) { await sleep(backoffMs(attempt, res.headers.get("retry-after"))); continue; }
     if (isRetryable(res.status)) throw new AiUnavailableError(`${resolved.provider} request failed (${res.status}): ${text.slice(0, 200)}`, res.status);
-    // Paid OpenRouter credit exhaustion: retry once on a :free model (no spend).
-    if (res.status === 402 && resolved.provider === "openrouter" && !String(resolved.model).endsWith(":free")) {
-      const freeBody = body && typeof body === "object" && !Array.isArray(body)
-        ? { ...(body as Record<string, unknown>), model: FREE_OPENROUTER_FALLBACK }
-        : body;
-      console.warn(`openrouter 402 on ${resolved.model}; retrying with ${FREE_OPENROUTER_FALLBACK}`);
-      return aiFetch({ ...resolved, model: FREE_OPENROUTER_FALLBACK }, path, freeBody, stream, fetchImpl);
-    }
     throw new Error(`${resolved.provider} request failed (${res.status}): ${text.slice(0, 400)}`);
   }
   throw new AiUnavailableError(`${resolved.provider} request failed`, lastStatus);

@@ -56,7 +56,7 @@ async function reembedTable(
     const { data, error } = await db.from(table)
       .select("*")
       .or("embedding_model.is.null,embedding_model.neq.gte-small")
-      .limit(32);
+      .limit(1);
     if (error) throw error;
     const rows = (data ?? []) as unknown as EmbedRow[];
     if (!rows.length) break;
@@ -67,6 +67,7 @@ async function reembedTable(
       if (up) throw up;
     }
     updated += rows.length;
+    await new Promise((r) => setTimeout(r, 250));
   }
   return updated;
 }
@@ -91,11 +92,14 @@ export async function promoteGteEmbeddings(): Promise<PromoteResult> {
   } catch (err) {
     return { active: currentEmbeddingModel(), skipped: `gte-small probe failed: ${(err as Error).message}` };
   }
-  const chunks = await reembedTable("ghostchat_chunks", (r) => String(r.content || ""));
-  const corrections = await reembedTable("ghostchat_corrections", (r) => `${r.question || ""}
-${r.answer || ""}`.trim());
-  await setEmbeddingSpace(GTE);
-  return { active: GTE, chunks, corrections };
+  try {
+    const chunks = await reembedTable("ghostchat_chunks", (r) => String(r.content || ""));
+    const corrections = await reembedTable("ghostchat_corrections", (r) => `${r.question || ""}\n${r.answer || ""}`.trim());
+    await setEmbeddingSpace(GTE);
+    return { active: GTE, chunks, corrections };
+  } catch (err) {
+    return { active: currentEmbeddingModel(), skipped: `re-embed failed: ${(err as Error).message}` };
+  }
 }
 
 /** Encode texts in the live space (hash until promotion finishes, then gte-small). */
