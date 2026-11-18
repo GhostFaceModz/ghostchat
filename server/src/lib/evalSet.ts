@@ -85,3 +85,125 @@ export async function runEvalSet(site: Site, opts: { staging?: boolean } = {}) {
   const passed = results.filter((r) => r.pass).length;
   return { total: results.length, passed, failed: results.length - passed, results };
 }
+
+export type EvalRunResult = {
+  id?: string | null;
+  question: string;
+  pass: boolean;
+  matched?: string[];
+  missing?: string[];
+  sources?: Array<{ title?: string | null; url?: string | null }>;
+};
+
+export type EvalRunRecord = {
+  id: string;
+  site_id: string;
+  staging: boolean;
+  total: number;
+  passed: number;
+  failed: number;
+  results: EvalRunResult[];
+  created_at: string;
+};
+
+function resultKey(r: Pick<EvalRunResult, "id" | "question">) {
+  return String(r.id || "").trim() || String(r.question || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+export function diffEvalRuns(previous: EvalRunResult[] | null | undefined, current: EvalRunResult[]) {
+  const prevMap = new Map<string, EvalRunResult>();
+  for (const r of previous || []) prevMap.set(resultKey(r), r);
+  const better: Array<{ question: string }> = [];
+  const worse: Array<{ question: string }> = [];
+  const added: Array<{ question: string; pass: boolean }> = [];
+  const removed: Array<{ question: string; pass: boolean }> = [];
+  const seen = new Set<string>();
+  for (const r of current) {
+    const key = resultKey(r);
+    if (!key) continue;
+    seen.add(key);
+    const prev = prevMap.get(key);
+    if (!prev) {
+      added.push({ question: r.question, pass: Boolean(r.pass) });
+      continue;
+    }
+    if (!prev.pass && r.pass) better.push({ question: r.question });
+    else if (prev.pass && !r.pass) worse.push({ question: r.question });
+  }
+  for (const [key, prev] of prevMap) {
+    if (!seen.has(key)) removed.push({ question: prev.question, pass: Boolean(prev.pass) });
+  }
+  return {
+    better,
+    worse,
+    added,
+    removed,
+    previousPassed: previous ? previous.filter((r) => r.pass).length : null,
+    previousTotal: previous ? previous.length : null,
+  };
+}
+
+const KEEP_RUNS = 50;
+
+export async function saveEvalRun(siteId: string, report: { total: number; passed: number; failed: number; results: EvalRunResult[] }, opts: { staging?: boolean } = {}): Promise<EvalRunRecord> {
+  const staging = Boolean(opts.staging);
+  const { data, error } = await getDb()
+    .from("ghostchat_eval_runs")
+    .insert({
+      site_id: siteId,
+      staging,
+      total: report.total,
+      passed: report.passed,
+      failed: report.failed,
+      results: report.results,
+    })
+    .select("id, site_id, staging, total, passed, failed, results, created_at")
+    .single();
+  if (error) throw error;
+  const { data: extra } = await getDb()
+    .from("ghostchat_eval_runs")
+    .select("id")
+    .eq("site_id", siteId)
+    .eq("staging", staging)
+    .order("created_at", { ascending: false })
+    .range(KEEP_RUNS, KEEP_RUNS + 50);
+  const drop = (extra ?? []).map((r: { id: string }) => r.id);
+  if (drop.length) await getDb().from("ghostchat_eval_runs").delete().in("id", drop);
+  return data as EvalRunRecord;
+}
+
+export async function listEvalRuns(siteId: string, opts: { staging?: boolean; limit?: number } = {}): Promise<EvalRunRecord[]> {
+  const limit = Math.min(50, Math.max(1, opts.limit ?? 20));
+  let q = getDb()
+    .from("ghostchat_eval_runs")
+    .select("id, site_id, staging, total, passed, failed, results, created_at")
+    .eq("site_id", siteId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (typeof opts.staging === "boolean") q = q.eq("staging", opts.staging);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as EvalRunRecord[];
+}
+
+export async function previousEvalRun(siteId: string, opts: { staging?: boolean; before?: string } = {}): Promise<EvalRunRecord | null> {
+  let q = getDb()
+    .from("ghostchat_eval_runs")
+    .select("id, site_id, staging, total, passed, failed, results, created_at")
+    .eq("site_id", siteId)
+    .eq("staging", Boolean(opts.staging))
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (opts.before) q = q.lt("created_at", opts.before);
+  const { data, error } = await q.maybeSingle();
+  if (error) throw error;
+  return (data as EvalRunRecord) || null;
+}
+
+export async function runAndStoreEvalSet(site: Site, opts: { staging?: boolean } = {}) {
+  const report = await runEvalSet(site, opts);
+  const previous = await previousEvalRun(site.id, { staging: Boolean(opts.staging) });
+  const run = await saveEvalRun(site.id, report, opts);
+  const diff = diffEvalRuns(previous?.results, report.results);
+  return { ...report, runId: run.id, created_at: run.created_at, previous: previous ? { id: previous.id, passed: previous.passed, total: previous.total, created_at: previous.created_at } : null, diff };
+}
