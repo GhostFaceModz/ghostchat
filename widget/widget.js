@@ -1688,7 +1688,9 @@
   }
 
   if (SITE_KEY) {
-    fetch(API_BASE + "/api/widget/config/" + encodeURIComponent(SITE_KEY))
+    fetch(API_BASE + "/api/widget/config/" + encodeURIComponent(SITE_KEY) + (function () {
+      try { return "?page=" + encodeURIComponent(String(location.href || "").slice(0, 500)); } catch (e) { return ""; }
+    })())
       .then(function (r) { return r.json(); })
       .then(function (j) { applyConfig(j.config); if (state.open) maybeGreet(); })
       .catch(function () {})

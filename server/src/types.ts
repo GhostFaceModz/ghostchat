@@ -93,6 +93,11 @@ export type Site = {
   email_channel?: boolean;
   email_inbound_token?: string | null;
   email_from_name?: string | null;
+  last_widget_seen_at?: string | null;
+  last_widget_page?: string | null;
+  last_install_check_at?: string | null;
+  last_install_check?: Record<string, unknown> | null;
+  knowledge_rev?: number;
 };
 
 export type RetrievedChunk = {

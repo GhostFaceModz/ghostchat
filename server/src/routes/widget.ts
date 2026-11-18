@@ -8,6 +8,7 @@ import { botMode, supportSettings } from "../lib/modes.js";
 import { suggestionLimit } from "../lib/chat.js";
 import type { Site } from "../types.js";
 import { siteHostsFrom, openSiteLinksMode } from "../lib/siteLinks.js";
+import { clipPageUrl, recordWidgetSeen } from "../lib/widgetHealth.js";
 
 export const widgetRouter = Router();
 
@@ -20,13 +21,15 @@ widgetRouter.get("/config/:siteKey", async (req, res) => {
   const { data, error } = await getDb()
     .from("ghostchat_sites")
     .select(
-      "name, url, theme, greeting, starter_questions, proactive_delay_ms, sound_default, show_branding, plan, site_key, booking_url, booking_provider, voice_enabled, read_aloud_enabled, greetings, memory_enabled, multilingual, bot_mode, support, live_lookup, max_suggestions, open_site_links, custom_domain",
+      "id, name, url, theme, greeting, starter_questions, proactive_delay_ms, sound_default, show_branding, plan, site_key, booking_url, booking_provider, voice_enabled, read_aloud_enabled, greetings, memory_enabled, multilingual, bot_mode, support, live_lookup, max_suggestions, open_site_links, custom_domain, last_widget_seen_at, last_widget_page",
     )
     .eq("site_key", siteKey)
     .maybeSingle();
   if (error) return res.status(500).json({ error: "Could not load widget config." });
   if (!data) return res.status(404).json({ error: "Unknown site key." });
   const site = data as Site;
+  const page = clipPageUrl(String(req.query.page || req.get("referer") || ""));
+  recordWidgetSeen(site.id, page, { last_widget_seen_at: site.last_widget_seen_at, last_widget_page: site.last_widget_page }).catch(() => {});
   res.json({
     config: {
       name: site.name,

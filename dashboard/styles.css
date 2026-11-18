@@ -459,3 +459,8 @@ body[data-role="viewer"] #inbox-form, body[data-role="agent"] #acct-billing .pla
 body[data-role="viewer"] #acct-billing, body[data-role="agent"] #acct-byok { }
 body[data-role="viewer"] .ip-reply, body[data-role="viewer"] #inbox-take { display: none !important; }
 body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-new { display: none !important; }
+
+.install-health { margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, currentColor 6%, transparent); }
+.install-health.ok { background: color-mix(in srgb, #16a34a 14%, transparent); }
+.install-health.warn { background: color-mix(in srgb, #dc2626 12%, transparent); }
+.install-health p { margin: 0 0 8px; }

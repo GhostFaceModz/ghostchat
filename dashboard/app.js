@@ -322,6 +322,25 @@ async function renderUsageBanner(s) {
   box.innerHTML = "<p>" + msg + "</p>" + topupsHtml(b);
 }
 
+
+async function loadInstallHealth(refresh) {
+  const box = $("#install-health");
+  if (!box || !state.site) return;
+  box.innerHTML = "<p class='muted tiny'>Checking whether the widget is on your site…</p>";
+  try {
+    const r = await req("/api/sites/" + state.site.id + "/install-health" + (refresh ? "?refresh=1" : ""));
+    const h = r.health || {};
+    const tone = h.status === "active" ? "ok" : h.status === "installed" ? "note" : h.status === "missing" ? "warn" : "note";
+    const seen = h.lastSeenAt ? " Last seen " + new Date(h.lastSeenAt).toLocaleString("en-GB") + "." : "";
+    box.className = "install-health " + tone;
+    box.innerHTML = "<p><b>" + escapeHtml(h.label || "Install status") + "</b> " + escapeHtml(h.detail || "") + escapeHtml(seen) + "</p><button type='button' class='btn tiny ghost' id='install-recheck'>Check again</button>";
+    $("#install-recheck")?.addEventListener("click", () => loadInstallHealth(true));
+  } catch (e) {
+    box.className = "install-health note";
+    box.innerHTML = "<p class='muted tiny'>" + escapeHtml(e.message || "Could not check the install.") + "</p>";
+  }
+}
+
 function renderSite() {
   const s = state.site;
   $("#site-title").textContent = s.name;
@@ -335,6 +354,7 @@ function renderSite() {
   const snippet = `<script src="${widgetScriptUrl(PUBLIC_ORIGIN)}" data-id="${s.site_key}"></script>`;
   $("#embed").value = snippet;
   $("#open-demo").href = "/demo?key=" + encodeURIComponent(s.site_key);
+  loadInstallHealth();
   const share = PUBLIC_ORIGIN + "/c/" + encodeURIComponent(s.site_key);
   $("#share-link").value = share;
   $("#open-share").href = share;
