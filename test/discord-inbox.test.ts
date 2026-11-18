@@ -7,10 +7,10 @@ const claim = await import("../server/src/lib/discordClaim.ts");
 const handoff = await import("../server/src/lib/handoff.ts");
 const ID = "6f982c08-efec-45f2-be5d-3f82aa6fd084";
 
-test("inbox cards: Claim, View transcript, Close ticket; Claim disables after take", () => {
+test("inbox cards: Claim, End chat, View transcript, Close ticket; Claim disables after take", () => {
   const open = inbox.inboxComponents(ID, "open");
   const actions = open.flatMap((r) => r.components.map((c: { custom_id: string }) => c.custom_id.split(":")[1]));
-  assert.deepEqual(actions, ["claim", "transcript", "closethread"]);
+  assert.deepEqual(actions, ["claim", "close", "transcript", "closethread"]);
   const claimed = inbox.inboxComponents(ID, "claimed", { claimedByName: "Zane" });
   const claimBtn = claimed[0].components.find((c: { custom_id: string }) => c.custom_id.includes(":claim:")) as { label: string; disabled: boolean };
   assert.equal(claimBtn.disabled, true);

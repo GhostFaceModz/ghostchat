@@ -19,8 +19,10 @@ import { warmupLocalEmbeddings } from "./lib/localEmbeddings.js";
 import { cronRouter } from "./routes/cron.js";
 import { metaWebhookRouter } from "./routes/meta.js";
 import { ticketsRouter } from "./routes/tickets.js";
-import { startIdleSweep } from "./lib/discordInbox.js";
-import { startRecrawlScheduler } from "./lib/recrawl.js";
+import { startIdleSweep, sweepIdleLiveChats, sweepClosedDiscordCards } from "./lib/discordInbox.js";
+import { startRecrawlScheduler, runDueRecrawls } from "./lib/recrawl.js";
+import { canonicalRedirect, HSTS_VALUE, PUBLIC_ERROR } from "./lib/httpSecurity.js";
+import { widgetFile, widgetVersion, widgetCacheControl } from "./lib/widgetAsset.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -43,14 +45,19 @@ const repoRoot = findRepoRoot(here);
 const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
-app.use((_req, res, next) => {
+app.use((req, res, next) => {
   res.setHeader("x-content-type-options", "nosniff");
   res.setHeader("referrer-policy", "strict-origin-when-cross-origin");
   res.setHeader("x-frame-options", "SAMEORIGIN");
+  const https = req.secure || req.headers["x-forwarded-proto"] === "https";
+  if (https) res.setHeader("strict-transport-security", HSTS_VALUE);
+  const to = canonicalRedirect(req.hostname, req.originalUrl);
+  if (to) return res.redirect(301, to);
   next();
 });
-// Reflect any Origin so the widget works on customer sites. widget.js may be loaded from ghostchat.pro or the legacy ghostchat-nfoc.onrender.com host.
-app.use(cors({ origin: true }));
+// CORS is only enabled on widget-facing API routes so customer sites can call them.
+// Marketing pages and the owner dashboard stay same-origin.
+const widgetCors = cors({ origin: true });
 app.use("/api/webhooks/whop", express.raw({ type: "application/json" }), whopWebhookRouter);
 app.use("/api/webhooks/discord", express.raw({ type: "application/json" }), discordWebhookRouter);
 app.use("/api/webhooks/meta", express.raw({ type: "*/*", limit: "1mb" }), metaWebhookRouter);
@@ -65,41 +72,50 @@ app.use("/api/auth", authRouter);
 app.use("/api/sites", requireAuth, ticketsRouter);
 app.use("/api/sites", requireAuth, sitesRouter);
 app.use("/api/cron", cronRouter);
-app.use("/api/chat", chatRouter);
-app.use("/api/leads", leadsRouter);
-app.use("/api/widget", widgetRouter);
+app.use("/api/chat", widgetCors, chatRouter);
+app.use("/api/leads", widgetCors, leadsRouter);
+app.use("/api/widget", widgetCors, widgetRouter);
 app.use("/api/billing", requireAuth, billingRouter);
 app.use("/api/models", requireAuth, modelsRouter);
 app.use("/api/webhooks/telegram", telegramWebhookRouter);
 app.use("/api/live/owner", requireAuth, liveOwnerRouter);
-app.use("/api/live", liveWidgetRouter);
+app.use("/api/live", widgetCors, liveWidgetRouter);
 // Alias for /api/widget/templates.
-app.get("/api/templates", (req, res, next) => {
+app.get("/api/templates", widgetCors, (req, res, next) => {
   req.url = "/templates";
   widgetRouter(req, res, next);
 });
 
-app.use("/widget", express.static(path.join(repoRoot, "widget"), { maxAge: "1h" }));
-app.get("/widget.js", (_req, res) => {
+function sendWidget(req: express.Request, res: express.Response) {
   res.setHeader("content-type", "application/javascript; charset=utf-8");
-  res.setHeader("cache-control", "public, max-age=300");
-  res.sendFile(path.join(repoRoot, "widget", "widget.js"));
-});
-app.use("/dashboard", express.static(path.join(repoRoot, "dashboard"), { maxAge: "5m", index: "index.html" }));
+  res.setHeader("cache-control", widgetCacheControl(String(req.query.v || "")));
+  res.setHeader("x-ghostchat-widget", widgetVersion());
+  res.sendFile(widgetFile(repoRoot));
+}
+app.get(["/widget.js", "/widget/widget.js"], sendWidget);
+app.use("/widget", express.static(path.join(repoRoot, "widget"), { maxAge: "1d", index: false }));
+app.use("/dashboard", express.static(path.join(repoRoot, "dashboard"), { maxAge: "5m", index: false }));
 app.use("/demo", express.static(path.join(repoRoot, "widget"), { index: "index.html" }));
 // Marketing site: Krea-generated images are versioned by filename, so cache them longer.
 app.use(shareRouter(repoRoot)); // /og/<siteKey>.png, /c/<siteKey>, /pricing (with its own preview text)
 app.use("/img", express.static(path.join(repoRoot, "public", "img"), { maxAge: "7d" }));
-app.use(express.static(path.join(repoRoot, "public"), { maxAge: "5m" }));
+function sendHtml(file: string, res: express.Response, maxAge = "5m") {
+  let html = fs.readFileSync(file, "utf8").replaceAll("__WIDGET_V__", widgetVersion());
+  res.setHeader("content-type", "text/html; charset=utf-8");
+  res.setHeader("cache-control", `public, max-age=${maxAge === "5m" ? 300 : 300}`);
+  res.send(html);
+}
+app.get(["/", "/index.html"], (_req, res) => sendHtml(path.join(repoRoot, "public", "index.html"), res));
+app.use(express.static(path.join(repoRoot, "public"), { maxAge: "5m", index: false }));
 app.get(["/privacy", "/privacy-policy"], (_req, res) => {
-  res.sendFile(path.join(repoRoot, "public", "privacy.html"));
+  sendHtml(path.join(repoRoot, "public", "privacy.html"), res);
 });
 app.get(["/terms", "/tos"], (_req, res) => {
-  res.sendFile(path.join(repoRoot, "public", "terms.html"));
+  sendHtml(path.join(repoRoot, "public", "terms.html"), res);
 });
 
 app.get(["/guide", "/getting-started", "/setup"], (_req, res) => {
-  res.sendFile(path.join(repoRoot, "public", "guide.html"));
+  sendHtml(path.join(repoRoot, "public", "guide.html"), res);
 });
 // Supabase Auth returns here after Discord/Google sign-in.
 app.get("/auth/callback", (_req, res) => {
@@ -107,29 +123,41 @@ app.get("/auth/callback", (_req, res) => {
   res.sendFile(path.join(repoRoot, "public", "auth-callback.html"));
 });
 // Sign-in and sign-up are views of the dashboard app (it reads the path to pick the mode).
-app.get(["/login", "/signup", "/account"], (_req, res) => {
-  res.sendFile(path.join(repoRoot, "dashboard", "index.html"));
+app.get(["/login", "/signup", "/account", "/dashboard", "/dashboard/"], (_req, res) => {
+  sendHtml(path.join(repoRoot, "dashboard", "index.html"), res);
 });
 
 app.get("/dashboard/*", (_req, res) => {
-  res.sendFile(path.join(repoRoot, "dashboard", "index.html"));
+  sendHtml(path.join(repoRoot, "dashboard", "index.html"), res);
 });
 
 app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
   void next;
-  const message = err instanceof Error ? err.message : "Unexpected error";
   console.error(err);
-  if (!res.headersSent) res.status(500).json({ error: message });
+  if (!res.headersSent) res.status(500).json({ error: PUBLIC_ERROR });
 });
 
 if (!config.supabaseServiceKey && config.nodeEnv === "production") {
   console.warn("SUPABASE_SERVICE_KEY is not set — API routes that need the database will fail.");
 }
 
+function catchUpOnWake() {
+  runDueRecrawls()
+    .then((r) => { if ((r as { results?: unknown[] }).results?.length) console.log("wake re-crawl:", JSON.stringify(r)); })
+    .catch((e) => console.error("wake re-crawl failed:", (e as Error).message));
+  sweepIdleLiveChats()
+    .then((r) => { if (r.warned || r.closed) console.log("wake idle sweep:", JSON.stringify(r)); })
+    .catch((e) => console.error("wake idle sweep failed:", (e as Error).message));
+  sweepClosedDiscordCards()
+    .then((r) => { if (r.cleared || r.failed) console.log("wake discord clear:", JSON.stringify(r)); })
+    .catch((e) => console.error("wake discord clear failed:", (e as Error).message));
+}
+
 app.listen(config.port, () => {
   console.log(`GhostChat listening on ${config.publicUrl} (port ${config.port})`);
   startRecrawlScheduler();
   startIdleSweep();
+  catchUpOnWake();
   if (resolveEmbeddingModel().provider === "local") {
     warmupLocalEmbeddings().then(
       () => console.log("Local embeddings model ready (hash/feature-384, 384-d)"),

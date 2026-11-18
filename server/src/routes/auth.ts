@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { getDb } from "../lib/supabase.js";
 import { hashPassword, verifyPassword, signToken, sessionTtl, isValidEmail, requireAuth, signOAuthState, verifyOAuthState, readOAuthState } from "../lib/auth.js";
-import { clientIp, rateLimit } from "../lib/rateLimit.js";
+import { clientIp, rateLimitAsync } from "../lib/rateLimit.js";
+import { issueAuthTicket, mintSessionFromTicket, sessionLandingUrl } from "../lib/authTickets.js";
 import { config, oauthConfigured, oauthMode, supabaseAuthorizeUrl, PLAN_LIMITS, type Plan } from "../config.js";
 import { exchangeDiscordCode, exchangeGoogleCode, profileFromSupabaseUser, upsertOwnerFromOAuth } from "../lib/oauth.js";
 import {
@@ -36,9 +37,23 @@ authRouter.get("/providers", (_req, res) => {
 });
 
 // Exchange a Supabase Auth access token (from /auth/callback) for a GhostChat session.
+
+// Exchange a short-lived one-time auth code (from the URL fragment after OAuth) for a session token.
+authRouter.post("/exchange", async (req, res) => {
+  const ip = clientIp(req);
+  const rl = await rateLimitAsync(`auth-exchange:${ip}`, 30, 15 * 60 * 1000);
+  if (!rl.ok) return res.status(429).json({ error: "Too many sign-in attempts. Try again shortly." });
+  const code = String(req.body?.code || req.body?.auth_code || "").trim();
+  const minted = await mintSessionFromTicket(code);
+  if (!minted) return res.status(401).json({ error: "That sign-in has expired. Please try again." });
+  const { data } = await getDb().from("ghostchat_owners").select("id, email, name, plan, avatar_url").eq("id", minted.ownerId).maybeSingle();
+  res.setHeader("cache-control", "no-store");
+  res.json({ token: minted.token, remember: minted.remember, returnPath: minted.returnPath, owner: data || null });
+});
+
 authRouter.post("/supabase", async (req, res) => {
   const ip = clientIp(req);
-  const rl = rateLimit(`supabase-auth:${ip}`, 20, 15 * 60 * 1000);
+  const rl = await rateLimitAsync(`supabase-auth:${ip}`, 20, 15 * 60 * 1000);
   if (!rl.ok) return res.status(429).json({ error: "Too many sign-in attempts. Try again shortly." });
   const accessToken = String(req.body?.access_token || "").trim();
   if (!accessToken || accessToken.length > 8192 || accessToken.split(".").length !== 3) {
@@ -53,13 +68,14 @@ authRouter.post("/supabase", async (req, res) => {
     const { owner, token } = await upsertOwnerFromOAuth(profile);
     res.json({ token, owner });
   } catch (e) {
-    res.status(400).json({ error: (e as Error).message || "Sign-in failed." });
+    console.error("supabase auth:", (e as Error).message);
+    res.status(400).json({ error: "Sign-in failed. Please try again." });
   }
 });
 
 authRouter.post("/signup", async (req, res) => {
   const ip = clientIp(req);
-  const rl = rateLimit(`signup:${ip}`, 8, 15 * 60 * 1000);
+  const rl = await rateLimitAsync(`signup:${ip}`, 8, 15 * 60 * 1000);
   if (!rl.ok) return res.status(429).json({ error: "Too many sign-up attempts. Try again shortly." });
 
   const email = String(req.body?.email || "").trim().toLowerCase();
@@ -86,7 +102,7 @@ authRouter.post("/signup", async (req, res) => {
 
 authRouter.post("/login", async (req, res) => {
   const ip = clientIp(req);
-  const rl = rateLimit(`login:${ip}`, 12, 15 * 60 * 1000);
+  const rl = await rateLimitAsync(`login:${ip}`, 12, 15 * 60 * 1000);
   if (!rl.ok) return res.status(429).json({ error: "Too many sign-in attempts. Try again shortly." });
 
   const email = String(req.body?.email || "").trim().toLowerCase();
@@ -110,12 +126,13 @@ authRouter.post("/login", async (req, res) => {
 });
 
 function oauthRedirect(provider: "discord" | "google", error: string) {
-  return `${config.publicUrl}/dashboard?auth_error=${encodeURIComponent(error)}&provider=${provider}`;
+  // Only pre-approved, user-safe messages are passed through the query string.
+  const safe = error.replace(/[^\w .,'’-]/g, " ").trim().slice(0, 160) || "Sign-in failed. Please try again.";
+  return `${config.publicUrl}/dashboard?auth_error=${encodeURIComponent(safe)}&provider=${provider}`;
 }
-function oauthSuccess(token: string, returnPath = "/dashboard") {
-  const url = new URL(safeReturnPath(returnPath), config.publicUrl.endsWith("/") ? config.publicUrl : `${config.publicUrl}/`);
-  url.searchParams.set("token", token);
-  return url.toString();
+async function oauthSuccess(owner: { id: string }, returnPath = "/dashboard", remember = true) {
+  const code = await issueAuthTicket(owner, { remember, returnPath: safeReturnPath(returnPath) });
+  return sessionLandingUrl(code, safeReturnPath(returnPath), config.publicUrl);
 }
 
 authRouter.get("/discord", (_req, res) => {
@@ -143,10 +160,11 @@ authRouter.get("/discord/callback", async (req, res) => {
   }
   try {
     const profile = await exchangeDiscordCode(code, `${config.publicUrl}/api/auth/discord/callback`);
-    const { token } = await upsertOwnerFromOAuth(profile);
-    res.redirect(oauthSuccess(token));
+    const { owner } = await upsertOwnerFromOAuth(profile);
+    res.redirect(await oauthSuccess(owner));
   } catch (e) {
-    res.redirect(oauthRedirect("discord", (e as Error).message || "Discord sign-in failed."));
+    console.error("discord oauth:", (e as Error).message);
+    res.redirect(oauthRedirect("discord", "Discord sign-in failed. Please try again."));
   }
 });
 
@@ -173,28 +191,34 @@ authRouter.get("/google/callback", async (req, res) => {
   try {
     const redirectUri = googleCallbackUrl();
     const profile = await exchangeGoogleCode(code, redirectUri);
-    const { token } = await upsertOwnerFromOAuth(profile);
+    const { owner, token } = await upsertOwnerFromOAuth(profile);
     const returnPath = safeReturnPath(statePayload.returnPath);
     if (needsGoogleHandoff()) {
       const ticket = createGoogleHandoff(token, returnPath);
       return res.redirect(googleFinishUrl(ticket));
     }
-    res.redirect(oauthSuccess(token, returnPath));
+    res.redirect(await oauthSuccess(owner, returnPath));
   } catch (e) {
-    res.redirect(oauthRedirect("google", (e as Error).message || "Google sign-in failed."));
+    console.error("google oauth:", (e as Error).message);
+    res.redirect(oauthRedirect("google", "Google sign-in failed. Please try again."));
   }
 });
 
-authRouter.get("/google/finish", (req, res) => {
+authRouter.get("/google/finish", async (req, res) => {
   const ip = clientIp(req);
-  const rl = rateLimit(`google-finish:${ip}`, 30, 15 * 60 * 1000);
+  const rl = await rateLimitAsync(`google-finish:${ip}`, 30, 15 * 60 * 1000);
   if (!rl.ok) return res.redirect(oauthRedirect("google", "Too many sign-in attempts. Try again shortly."));
   const ticket = String(req.query.t || "");
   const handoff = redeemGoogleHandoff(ticket);
   if (!handoff) {
     return res.redirect(oauthRedirect("google", "Google sign-in expired. Please try again."));
   }
-  res.redirect(oauthSuccess(handoff.sessionToken, safeReturnPath(handoff.returnPath)));
+  // Exchange the in-memory handoff for a short-lived auth code in the URL fragment (not the session token).
+  const minted = await mintSessionFromHandoffToken(handoff.sessionToken, safeReturnPath(handoff.returnPath));
+  if (!minted) {
+    return res.redirect(oauthRedirect("google", "Google sign-in expired. Please try again."));
+  }
+  res.redirect(minted);
 });
 
 authRouter.get("/me", requireAuth, async (req, res) => {
@@ -240,7 +264,7 @@ authRouter.patch("/me", requireAuth, async (req, res) => {
 
 authRouter.post("/password", requireAuth, async (req, res) => {
   const { id } = (req as AuthedRequest).owner;
-  const rl = rateLimit(`pw:${id}`, 8, 15 * 60 * 1000);
+  const rl = await rateLimitAsync(`pw:${id}`, 8, 15 * 60 * 1000);
   if (!rl.ok) return res.status(429).json({ error: "Too many attempts. Try again shortly." });
   const current = String(req.body?.current_password || "");
   const next = String(req.body?.new_password || "");
@@ -283,3 +307,13 @@ authRouter.delete("/me", requireAuth, async (req, res) => {
   if (error) return res.status(500).json({ error: "Could not delete the account." });
   res.json({ ok: true });
 });
+
+
+async function mintSessionFromHandoffToken(sessionToken: string, returnPath: string): Promise<string | null> {
+  const { verifyToken } = await import("../lib/auth.js");
+  const payload = verifyToken(sessionToken);
+  if (!payload) return null;
+  const code = await issueAuthTicket({ id: payload.sub }, { remember: true, returnPath });
+  return sessionLandingUrl(code, returnPath, config.publicUrl);
+}
+

@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { getDb } from "../lib/supabase.js";
 import { answerQuestion, streamAnswer } from "../lib/chat.js";
-import { clientIp, rateLimit, peekRateLimit } from "../lib/rateLimit.js";
-import { assertCanSend, dailyCapCheck } from "../lib/usage.js";
+import { clientIp, rateLimitAsync, peekRateLimitAsync } from "../lib/rateLimit.js";
+import { assertCanSend, dailyCapCheckAsync } from "../lib/usage.js";
 import { addLog, countUnsure, getConversation, shouldStartLive, liveOnline, liveSettings, handoffTimedOut } from "../lib/live.js";
 import { applyTimeout } from "../lib/discordClaim.js";
 import { agentNameFor, clearReviewPending, startHandoff, visitorLiveMessage } from "../lib/handoff.js";
@@ -26,7 +26,7 @@ async function loadSiteByKey(siteKey: string): Promise<Site | null> {
 }
 
 /** Per visitor (session) and per IP: 6 messages a minute and 60 an hour. In memory. */
-export function chatRateLimit(ip: string, siteKey: string, sessionId: string): { message: string; retryAfterSec: number } | null {
+export async function chatRateLimit(ip: string, siteKey: string, sessionId: string): Promise<{ message: string; retryAfterSec: number } | null> {
   const checks: Array<[string, number, number]> = [
     [`chat:ip:m:${ip}`, 6, 60_000],
     [`chat:ip:h:${ip}`, 60, 3_600_000],
@@ -34,14 +34,14 @@ export function chatRateLimit(ip: string, siteKey: string, sessionId: string): {
     [`chat:sid:h:${siteKey}:${sessionId}`, 60, 3_600_000],
   ];
   for (const [key, limit, windowMs] of checks) {
-    const rl = peekRateLimit(key, limit, windowMs);
+    const rl = await peekRateLimitAsync(key, limit, windowMs);
     if (!rl.ok) {
       const sec = Math.max(1, Math.ceil(rl.retryAfterMs / 1000));
       const wait = sec >= 120 ? `${Math.ceil(sec / 60)} minutes` : `${sec} seconds`;
       return { message: `Whoa, that's a lot of messages! Please slow down a little and try again in ${wait}.`, retryAfterSec: sec };
     }
   }
-  for (const [key, limit, windowMs] of checks) rateLimit(key, limit, windowMs);
+  for (const [key, limit, windowMs] of checks) await rateLimitAsync(key, limit, windowMs);
   return null;
 }
 
@@ -57,7 +57,7 @@ chatRouter.post("/", async (req, res) => {
   if (sessionId.length > 80) return res.status(400).json({ error: "Invalid session." });
 
   const ip = clientIp(req);
-  const limited = chatRateLimit(ip, siteKey, sessionId);
+  const limited = await chatRateLimit(ip, siteKey, sessionId);
   if (limited) {
     res.setHeader("retry-after", String(limited.retryAfterSec));
     return res.status(429).json({ error: limited.message, retryAfter: limited.retryAfterSec });
@@ -115,7 +115,7 @@ chatRouter.post("/", async (req, res) => {
     return res.end();
   }
 
-  const daily = dailyCapCheck(site);
+  const daily = await dailyCapCheckAsync(site);
   if (!daily.ok) {
     return res.status(429).json({ error: "This assistant has had a very busy day and is taking a break. Please try again tomorrow." });
   }
@@ -201,7 +201,7 @@ chatRouter.post("/csat", async (req, res) => {
   const raw = req.body?.rating;
   const rating = raw === "up" ? 5 : raw === "down" ? 1 : Number(raw);
   if (!sessionId || sessionId.length > 80 || !Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: "Rating must be 1 to 5." });
-  if (!rateLimit(`csat:${clientIp(req)}`, 20, 3_600_000).ok) return res.status(429).json({ error: "Too many ratings." });
+  if (!(await rateLimitAsync(`csat:${clientIp(req)}`, 20, 3_600_000)).ok) return res.status(429).json({ error: "Too many ratings." });
   const comment = typeof req.body?.comment === "string" ? req.body.comment.trim().slice(0, 500) || null : null;
   const db = getDb();
   const { data: ticket } = await db.from("ghostchat_tickets").select("id").eq("site_id", site.id).eq("session_id", sessionId).order("created_at", { ascending: false }).limit(1).maybeSingle();

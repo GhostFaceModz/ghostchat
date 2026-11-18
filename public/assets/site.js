@@ -81,7 +81,7 @@
       })
       .catch((status) => { if (status === 401) clearToken(); });
   }
-  if (location.pathname === "/pricing") document.getElementById("plans")?.scrollIntoView();
+  if (location.pathname === "/pricing" && location.hash !== "#plans") location.replace("/#plans");
 
   document.querySelectorAll("[data-year]").forEach((el) => { el.textContent = String(new Date().getFullYear()); });
 

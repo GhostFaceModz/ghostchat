@@ -1,7 +1,8 @@
-# Keeps the free Render instance warm: Render sleeps free web services after
-# ~15 minutes without traffic, so ping the health check every 10 minutes.
-# Note: GitHub may delay scheduled runs by a few minutes and pauses schedules
-# on repos with no activity for 60 days (re-enable from the Actions tab).
+# Backup keep-warm ping. GitHub often delays scheduled workflows by hours, so
+# the primary keep-warm is the Supabase pg_cron job `ghostchat_keepwarm`
+# (every 5 minutes, no new account). This workflow is a second line of defence.
+# GitHub pauses schedules on repos with no activity for 60 days (re-enable
+# from the Actions tab).
 name: Keep Render awake
 
 on:
@@ -27,8 +28,9 @@ jobs:
           curl --fail --silent --show-error --location \
             --retry 5 --retry-delay 15 --retry-all-errors --max-time 90 \
             https://ghostchat.pro/healthz
-      - name: Trigger due re-crawls (optional)
-        # Only runs when the CRON_SECRET repo secret is set; the server also re-crawls on its own every hour.
+      - name: Trigger due re-crawls and idle-chat close
+        # Only runs when the CRON_SECRET repo secret is set; the server also
+        # catches up on due work when it wakes.
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         if: ${{ env.CRON_SECRET != '' }}
@@ -36,3 +38,6 @@ jobs:
           curl --silent --show-error --max-time 30 -X POST \
             -H "x-cron-secret: $CRON_SECRET" \
             https://ghostchat.pro/api/cron/recrawl || true
+          curl --silent --show-error --max-time 30 -X POST \
+            -H "x-cron-secret: $CRON_SECRET" \
+            https://ghostchat.pro/api/cron/live-idle || true

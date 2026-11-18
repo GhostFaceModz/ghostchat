@@ -64,3 +64,5 @@ services:
         sync: false
       - key: NOTION_API_KEY
         sync: false
+      - key: CRON_SECRET
+        sync: false

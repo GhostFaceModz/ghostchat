@@ -10,11 +10,12 @@
   },
   "scripts": {
     "dev": "tsx watch server/src/index.ts",
-    "build": "tsc",
+    "build": "npm run build:widget && tsc",
     "prefetch:embeddings": "node scripts/prefetch-embeddings.mjs",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test test/*.test.ts"
+    "test": "node --import tsx --test test/*.test.ts",
+    "build:widget": "node scripts/build-widget.mjs"
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
@@ -35,6 +36,7 @@
     "typescript": "^5.9.3"
   },
   "devDependencies": {
+    "esbuild": "^0.25.12",
     "tsx": "^4.20.6"
   }
 }

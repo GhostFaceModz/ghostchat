@@ -14,3 +14,7 @@ tmp/
 .supabase/
 
 .cache/
+
+# Built widget (generated on npm run build)
+widget/widget.min.js
+widget/version.txt

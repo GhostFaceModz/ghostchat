@@ -2,7 +2,7 @@
 
 A premium, embeddable AI chatbot any website owner can add with one script tag. It answers questions about **their own site** using retrieval over content crawled or uploaded by the owner — and says “I’m not sure” instead of making things up.
 
-GhostChat is a GhostApps project. The default chat model is **DeepSeek V4 Flash** via OpenRouter. Embeddings default to a **local, key-free MiniLM model** so retrieval works with only an OpenRouter key.
+GhostChat is a GhostApps project. The default chat model is **DeepSeek V4 Flash** via OpenRouter. Embeddings default to a **local, key-free 384-d hash embedder** that fits Render's free RAM (a neural model such as MiniLM is too large for the free instance). Site owners can switch to a paid 384-d embeddings API. Stage B may add a free Supabase `gte-small` path when it is safe to enable.
 
 ## One-line embed
 
@@ -44,7 +44,7 @@ The widget also picks up theme, greeting, starter questions, branding, booking, 
 
 ### Backend
 - Multi-model chat over an OpenAI-compatible adapter: OpenRouter (default: `deepseek/deepseek-v4-flash`), plus Grok, OpenAI, and Gemini when their keys exist. The picker also lists OpenRouter `:free` models for a $0 chat option. DeepSeek V4 Flash is extremely cheap, but not strictly free — OpenRouter has no truly-free DeepSeek variant.
-- Retrieval over `pgvector` (384-d). Default embeddings: local `Xenova/all-MiniLM-L6-v2` (no API key, no cost). OpenRouter does not provide embeddings.
+- Retrieval over `pgvector` (384-d). Default embeddings: local `hash/feature-384` (no API key, no cost, small enough for Render free). OpenRouter does not provide embeddings.
 - Prompt-injection guards, rate limits, SSRF-safe crawler, PII-redacted logs
 - Per-site isolation and Whop-driven Free / Pro / Business limits
 
@@ -57,12 +57,12 @@ Chat is **per site**. Owners pick a provider and model in the dashboard. If that
 | Provider | Env key(s) | Default / example chat models | Embeddings (must be 384-d) |
 | --- | --- | --- | --- |
 | **OpenRouter** — default | `OPENROUTER_API_KEY` | `deepseek/deepseek-v4-flash` (default), plus `:free` models such as `google/gemma-4-31b-it:free`, `meta-llama/llama-3.3-70b-instruct:free`, `qwen/qwen3-8b:free` | No embeddings API. Leave `EMBEDDING_PROVIDER=local`. |
-| **Local MiniLM** — default embeddings | none | n/a (embeddings only) | Yes — `Xenova/all-MiniLM-L6-v2` at 384-d, runs on the server, no key, no cost. |
+| **Local hash embeddings** — default | none | n/a (embeddings only) | Yes — `hash/feature-384` at 384-d, runs on the server, no key, no cost, fits free-tier RAM. |
 | Grok (xAI) | `GROK_API_KEY` or `XAI_API_KEY` | `grok-4.7`, `grok-4.6`, `grok-4.5` | Optional — model `v1` with `dimensions: 384`. |
 | OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini`, `gpt-4o`, `gpt-4.1-mini` | Optional — `text-embedding-3-small` with `dimensions: 384`. |
 | Google Gemini | `GEMINI_API_KEY` or `GOOGLE_AI_API_KEY` | `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash` | Optional — `gemini-embedding-001` with `dimensions: 384`. |
 
-Embeddings are **global** (not per-site) so every bot shares the same vector index. Local MiniLM is the default so a site works with only an OpenRouter chat key.
+Embeddings are **global** (not per-site) so every bot shares the same vector index. The local hash embedder is the default so a site works with only an OpenRouter chat key and stays within free-tier RAM.
 
 ## Local development
 
@@ -92,7 +92,7 @@ See `.env.example` for the full list. Important ones:
 | `OPENAI_API_KEY` | Optional OpenAI chat (and optional 384-d embeddings) |
 | `GROK_API_KEY` / `XAI_API_KEY` | Optional Grok chat (and optional 384-d embeddings) |
 | `GEMINI_API_KEY` | Optional Gemini chat (and optional 384-d embeddings) |
-| `EMBEDDING_PROVIDER` | Default `local`. Set `openai`, `gemini`, or `grok` to use a paid embeddings API (must stay 384-d). |
+| `EMBEDDING_PROVIDER` | Default `local` (`hash/feature-384`). Set `openai`, `gemini`, or `grok` to use a paid embeddings API (must stay 384-d). |
 | `EMBEDDING_MODEL` | Override the embeddings model id |
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Discord sign-in. Redirect: `{PUBLIC_URL}/api/auth/discord/callback` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google sign-in. Redirect: `{GOOGLE_REDIRECT_BASE}/api/auth/google/callback` |
@@ -136,7 +136,7 @@ Free Render web service (`render.yaml`, Frankfurt, Node 22; Node 20 crashes beca
 4. Deploy and check `/healthz`.
 5. Add Discord/Google redirect URIs and the Whop webhook URL if you use those.
 
-Live service: `https://ghostchat.pro`. Set `PUBLIC_URL` to exactly that. The Render hostname `https://ghostchat-nfoc.onrender.com` still serves the app (and remains the CNAME target for white-label domains).
+Live service: `https://ghostchat.pro`. Set `PUBLIC_URL` to exactly that. Requests to the Render hostname `https://ghostchat-nfoc.onrender.com` 301 to `https://ghostchat.pro`, except `GET /api/auth/google/callback` which must keep working there until the Google Cloud OAuth client adds `https://ghostchat.pro/api/auth/google/callback`. White-label CNAMEs should still point at the Render hostname (the visitor's `Host` header is their own domain, so they are not redirected).
 
 ### Discord / Google sign-in
 
@@ -154,7 +154,7 @@ Fallback: if `DISCORD_CLIENT_ID`/`DISCORD_CLIENT_SECRET` (or the Google pair) ar
 
 ### Keep-awake ping
 
-Render's free plan sleeps after ~15 minutes idle. `.github/workflows/keepalive.yml` curls `/healthz` every 10 minutes (and can be run by hand from the Actions tab). GitHub pauses scheduled workflows after 60 days without repo activity; re-enable it from the Actions tab if that happens.
+Render's free plan sleeps after ~15 minutes idle. A `ghostchat_keepwarm` job in the existing Supabase project's `pg_cron` pings `/healthz` every 5 minutes (no new account). `.github/workflows/keepalive.yml` is a backup ping every 10 minutes — GitHub often delays scheduled runs, so do not rely on it alone. GitHub pauses scheduled workflows after 60 days without repo activity; re-enable it from the Actions tab if that happens. On process start the server also catches up on due re-crawls and idle live-chat closes.
 
 ## Plan limits
 

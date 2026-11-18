@@ -9,7 +9,7 @@ import { classifyIntent } from "../lib/intent.js";
 import { chunkText } from "../lib/chunk.js";
 import { storeChunks, refreshCounts, indexPages } from "../lib/indexer.js";
 import { assertPublicHttpUrl } from "../lib/ssrf.js";
-import { clientIp, rateLimit } from "../lib/rateLimit.js";
+import { clientIp, rateLimitAsync } from "../lib/rateLimit.js";
 import { countOwnerSites, countUploads, messageLimit, refreshPeriod, effectiveBranding } from "../lib/usage.js";
 import { getTemplate } from "../lib/templates.js";
 import { extractPdfText, isPdfFile } from "../lib/pdf.js";
@@ -233,7 +233,7 @@ sitesRouter.patch("/:id", async (req, res) => {
 sitesRouter.post("/:id/tools/test", async (req, res) => {
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
-  const rl = rateLimit(`tooltest:${site.id}`, 20, 60_000);
+  const rl = await rateLimitAsync(`tooltest:${site.id}`, 20, 60_000);
   if (!rl.ok) return res.status(429).json({ error: "Too many tests. Try again in a minute." });
   try {
     const [tool] = await normalizeTools([req.body?.tool]);
@@ -262,7 +262,7 @@ async function normalizeScope(raw: Record<string, unknown>, siteUrl: string): Pr
 sitesRouter.post("/:id/crawl", async (req, res) => {
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
-  const rl = rateLimit(`crawl:${site.id}`, 5, 60 * 60 * 1000);
+  const rl = await rateLimitAsync(`crawl:${site.id}`, 5, 60 * 60 * 1000);
   if (!rl.ok) return res.status(429).json({ error: "Crawl limit reached. Try again in a bit." });
 
   const db = getDb();
@@ -327,7 +327,7 @@ sitesRouter.post("/:id/documents", upload.array("files", 5), async (req, res) =>
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const ip = clientIp(req);
-  const rl = rateLimit(`docs:${site.id}:${ip}`, 20, 60 * 60 * 1000);
+  const rl = await rateLimitAsync(`docs:${site.id}:${ip}`, 20, 60 * 60 * 1000);
   if (!rl.ok) return res.status(429).json({ error: "Upload limit reached. Try again later." });
 
   const existing = await countUploads(site.id);
@@ -507,7 +507,7 @@ sitesRouter.get("/:id/corrections", async (req, res) => {
 sitesRouter.post("/:id/corrections", async (req, res) => {
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
-  const rl = rateLimit(`fix:${site.id}`, 60, 60 * 60 * 1000);
+  const rl = await rateLimitAsync(`fix:${site.id}`, 60, 60 * 60 * 1000);
   if (!rl.ok) return res.status(429).json({ error: "Too many corrections at once. Try again shortly." });
   let question = String(req.body?.question || "");
   const logId = typeof req.body?.logId === "string" ? req.body.logId : null;

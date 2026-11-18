@@ -2,7 +2,7 @@ import { Router, type Request } from "express";
 import { getDb } from "../lib/supabase.js";
 import { config } from "../config.js";
 import type { AuthedRequest } from "../lib/auth.js";
-import { clientIp, rateLimit } from "../lib/rateLimit.js";
+import { clientIp, rateLimitAsync } from "../lib/rateLimit.js";
 import {
   LIVE_PLANS, channelWebhookSecret, encryptSecret, findRelay, getConversation, getConversationById, isTyping,
   liveSettings, newLinkCode, normalizeLiveSettings, handoffTimedOut, ownerChannels, resolveAgentName, sanitizeAgentName,
@@ -31,7 +31,7 @@ async function siteByKey(key: string): Promise<Site | null> {
 export const liveWidgetRouter = Router();
 
 liveWidgetRouter.get("/:siteKey/:sessionId", async (req, res) => {
-  if (!rateLimit(`live:poll:${clientIp(req)}`, 180, 60_000).ok) return res.status(429).json({ error: "Too many requests." });
+  if (!(await rateLimitAsync(`live:poll:${clientIp(req)}`, 180, 60_000)).ok) return res.status(429).json({ error: "Too many requests." });
   const site = await siteByKey(req.params.siteKey);
   if (!site) return res.status(404).json({ error: "Unknown site key." });
   const sessionId = String(req.params.sessionId).slice(0, 80);
@@ -68,7 +68,7 @@ liveWidgetRouter.get("/:siteKey/:sessionId", async (req, res) => {
 });
 
 liveWidgetRouter.post("/:siteKey/:sessionId/end", async (req, res) => {
-  if (!rateLimit(`live:end:${clientIp(req)}`, 20, 60_000).ok) return res.status(429).json({ error: "Too many requests." });
+  if (!(await rateLimitAsync(`live:end:${clientIp(req)}`, 20, 60_000)).ok) return res.status(429).json({ error: "Too many requests." });
   const site = await siteByKey(req.params.siteKey);
   if (!site) return res.status(404).json({ error: "Unknown site key." });
   const conv = await getConversation(site.id, String(req.params.sessionId).slice(0, 80));
@@ -83,7 +83,7 @@ liveWidgetRouter.post("/:siteKey/:sessionId/end", async (req, res) => {
 });
 
 liveWidgetRouter.post("/:siteKey/:sessionId/typing", async (req, res) => {
-  if (!rateLimit(`live:typing:${clientIp(req)}`, 60, 60_000).ok) return res.status(429).end();
+  if (!(await rateLimitAsync(`live:typing:${clientIp(req)}`, 60, 60_000)).ok) return res.status(429).end();
   const site = await siteByKey(req.params.siteKey);
   const conv = site ? await getConversation(site.id, String(req.params.sessionId).slice(0, 80)) : null;
   if (conv && (conv.status === "human" || conv.status === "waiting")) setTyping(conv.id, "visitor");

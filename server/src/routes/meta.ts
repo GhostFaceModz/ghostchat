@@ -2,7 +2,7 @@ import { Router } from "express";
 import { getDb } from "../lib/supabase.js";
 import { answerQuestion } from "../lib/chat.js";
 import { assertCanSend } from "../lib/usage.js";
-import { rateLimit } from "../lib/rateLimit.js";
+import { rateLimitAsync } from "../lib/rateLimit.js";
 import { channelActive, extractMetaMessages, metaEnabled, sendMetaReply, verifyChallenge, verifyMetaSignature, type MetaMessage } from "../lib/meta.js";
 import type { Site } from "../types.js";
 
@@ -33,7 +33,7 @@ metaWebhookRouter.post("/", async (req, res) => {
     try {
       const site = await siteFor(msg);
       if (!site || !channelActive(site, msg.channel)) continue;
-      if (!rateLimit(`meta:${site.id}:${msg.from}`, 6, 60_000).ok) continue;
+      if (!(await rateLimitAsync(`meta:${site.id}:${msg.from}`, 6, 60_000)).ok) continue;
       await assertCanSend(site);
       const out = await answerQuestion({ site, message: msg.text, sessionId: `${msg.channel === "whatsapp" ? "wa" : "ig"}_${msg.from}`.slice(0, 80) });
       await sendMetaReply(msg, out.answer + (out.sources[0]?.url ? `\n\n${out.sources[0].url}` : ""));
