@@ -198,6 +198,7 @@ Still to build:
 - [x] **Cluster unanswered questions** (group similar unsure questions by shared words)
 - [x] **Transcript search** (find conversations from the Transcripts tab)
 - [x] **Knowledge coverage map** (trained page URLs vs visitor pages and cited sources)
+- [x] **Broken-link report in recrawl preview** (404s and redirects shown before you publish)
 - [ ] Server-side TTS / STT beyond the browser voice mode
 
 ## License

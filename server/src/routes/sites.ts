@@ -304,7 +304,7 @@ sitesRouter.post("/:id/crawl", async (req, res) => {
     const scope = (site.crawl_scope as CrawlScope | undefined) || undefined;
     const result = await crawlSite(site.url, site.plan, scope);
     // First crawl applies immediately. Later recrawls write a preview for the owner to approve, unless nothing changed.
-    const outcome = await ingestCrawl(site, result.pages, { trigger: "manual", scope });
+    const outcome = await ingestCrawl(site, result.pages, { trigger: "manual", scope, issues: result.issues });
     const { count: storedCount } = await db.from("ghostchat_chunks").select("id", { count: "exact", head: true }).eq("site_id", site.id).eq("source_type", "crawl");
     const stored = storedCount ?? 0;
     const fresh = await loadOwnedSite(req, site.id);
@@ -318,6 +318,7 @@ sitesRouter.post("/:id/crawl", async (req, res) => {
       mode: outcome.mode,
       preview: outcome.preview,
       errors: result.errors.slice(0, 10),
+      issues: outcome.issues,
     });
   } catch (err) {
     await db

@@ -21,11 +21,43 @@ export type CrawledPage = {
   sections?: Array<{ heading: string; text: string }>;
 };
 
+export type CrawlIssue = {
+  url: string;
+  status?: number | null;
+  finalUrl?: string;
+  reason: "http" | "type" | "too_large" | "network" | "redirect" | "redirect_offsite";
+};
+
 export type CrawlResult = {
   pages: CrawledPage[];
   chunks: Array<TextChunk & { sourceUrl: string }>;
   errors: string[];
+  issues: CrawlIssue[];
 };
+
+export function urlKey(u: string): string {
+  try {
+    const x = new URL(u);
+    x.hash = "";
+    if (x.pathname.length > 1) x.pathname = x.pathname.replace(/\/+$/, "");
+    return `${x.host}${x.pathname}${x.search}`;
+  } catch {
+    return u;
+  }
+}
+
+export function resolveRedirect(from: URL, location: string | null): URL | null {
+  if (!location) return null;
+  try {
+    return new URL(location, from);
+  } catch {
+    return null;
+  }
+}
+
+export function isTrivialRedirect(from: string, to: string): boolean {
+  return urlKey(from) === urlKey(to);
+}
 
 export function extractText(html: string, pageUrl: string): { title: string; text: string; links: string[]; sections: Array<{ heading: string; text: string }>; jsonLdHtml?: string } {
   const $ = cheerio.load(html);
@@ -69,33 +101,76 @@ export function extractText(html: string, pageUrl: string): { title: string; tex
   return { title, text, links, sections, jsonLdHtml };
 }
 
-export async function fetchPage(url: URL, timeoutMs = 12000, signal?: AbortSignal): Promise<{ html: string; finalUrl: URL } | null> {
+export type FetchPageOk = { ok: true; html: string; finalUrl: URL; status: number; redirectedFrom?: string };
+export type FetchPageFail = {
+  ok: false;
+  status: number | null;
+  url: string;
+  finalUrl?: string;
+  redirectedFrom?: string;
+  reason: CrawlIssue["reason"];
+};
+export type FetchPageOutcome = FetchPageOk | FetchPageFail;
+
+export async function fetchPageOutcome(url: URL, timeoutMs = 12000, signal?: AbortSignal): Promise<FetchPageOutcome> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   const onAbort = () => ctrl.abort();
   signal?.addEventListener("abort", onAbort);
+  const headers = {
+    "user-agent": "GhostChatBot/1.0 (+https://github.com/GhostFaceModz/ghostchat)",
+    accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
+  };
+  const startHost = url.host;
+  let current = url;
+  let redirectedFrom: string | undefined;
+  const seen = new Set<string>();
   try {
-    const res = await fetch(url, {
-      method: "GET",
-      redirect: "follow",
-      signal: ctrl.signal,
-      headers: {
-        "user-agent": "GhostChatBot/1.0 (+https://github.com/GhostFaceModz/ghostchat)",
-        accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
-      },
-    });
-    const ctype = res.headers.get("content-type") || "";
-    if (!res.ok || !ctype.includes("html")) return null;
-    const html = await res.text();
-    if (html.length > 2_000_000) return null;
-    const finalUrl = new URL(res.url || url.href);
-    return { html, finalUrl };
+    for (let hop = 0; hop < 5; hop++) {
+      const key = current.href;
+      if (seen.has(key)) return { ok: false, status: null, url: url.href, finalUrl: current.href, redirectedFrom, reason: "redirect" };
+      seen.add(key);
+      const res = await fetch(current, { method: "GET", redirect: "manual", signal: ctrl.signal, headers });
+      if (res.status >= 300 && res.status < 400) {
+        const next = resolveRedirect(current, res.headers.get("location"));
+        if (!next) return { ok: false, status: res.status, url: url.href, finalUrl: current.href, redirectedFrom, reason: "http" };
+        if (!redirectedFrom) redirectedFrom = url.href;
+        if (next.host !== startHost) {
+          return { ok: false, status: res.status, url: url.href, finalUrl: next.href, redirectedFrom, reason: "redirect_offsite" };
+        }
+        current = next;
+        continue;
+      }
+      const ctype = res.headers.get("content-type") || "";
+      const finalUrl = new URL(res.url || current.href);
+      if (!res.ok) return { ok: false, status: res.status, url: url.href, finalUrl: finalUrl.href, redirectedFrom, reason: "http" };
+      if (!ctype.includes("html")) return { ok: false, status: res.status, url: url.href, finalUrl: finalUrl.href, redirectedFrom, reason: "type" };
+      const html = await res.text();
+      if (html.length > 2_000_000) return { ok: false, status: res.status, url: url.href, finalUrl: finalUrl.href, redirectedFrom, reason: "too_large" };
+      return { ok: true, html, finalUrl, status: res.status, redirectedFrom };
+    }
+    return { ok: false, status: null, url: url.href, finalUrl: current.href, redirectedFrom, reason: "redirect" };
   } catch {
-    return null;
+    return { ok: false, status: null, url: url.href, redirectedFrom, reason: "network" };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", onAbort);
   }
+}
+
+export async function fetchPage(url: URL, timeoutMs = 12000, signal?: AbortSignal): Promise<{ html: string; finalUrl: URL } | null> {
+  const outcome = await fetchPageOutcome(url, timeoutMs, signal);
+  return outcome.ok ? { html: outcome.html, finalUrl: outcome.finalUrl } : null;
+}
+
+export function issueFromOutcome(requested: URL, outcome: FetchPageOutcome): CrawlIssue | null {
+  if (!outcome.ok) {
+    return { url: requested.href, status: outcome.status, finalUrl: outcome.finalUrl, reason: outcome.reason };
+  }
+  if (outcome.redirectedFrom && !isTrivialRedirect(outcome.redirectedFrom, outcome.finalUrl.href)) {
+    return { url: outcome.redirectedFrom, status: outcome.status, finalUrl: outcome.finalUrl.href, reason: "redirect" };
+  }
+  return null;
 }
 
 
@@ -220,6 +295,7 @@ export async function crawlSite(startUrl: string, plan: Plan, scope?: CrawlScope
   }
   const pages: CrawledPage[] = [];
   const errors: string[] = [];
+  const issues: CrawlIssue[] = [];
   if (sitemapOnly && !queue.length) errors.push("The sitemap had no pages inside the chosen scope.");
 
   const normalize = (u: URL) => {
@@ -249,10 +325,24 @@ export async function crawlSite(startUrl: string, plan: Plan, scope?: CrawlScope
       if (doc && inScope(item.url, scope)) pages.push(doc);
       continue;
     }
-    const fetched = await fetchPage(item.url);
+    const fetched = await fetchPageOutcome(item.url);
     await politePause();
-    if (!fetched) continue;
-    if (fetched.finalUrl.host !== origin.host) continue;
+    const scoped = inScope(item.url, scope);
+    if (!fetched.ok) {
+      if (scoped) {
+        const issue = issueFromOutcome(item.url, fetched);
+        if (issue) issues.push(issue);
+      }
+      continue;
+    }
+    if (fetched.finalUrl.host !== origin.host) {
+      if (scoped) issues.push({ url: item.url.href, status: fetched.status, finalUrl: fetched.finalUrl.href, reason: "redirect_offsite" });
+      continue;
+    }
+    if (scoped) {
+      const issue = issueFromOutcome(item.url, fetched);
+      if (issue) issues.push(issue);
+    }
     const { title, text, links, sections, jsonLdHtml } = extractText(fetched.html, fetched.finalUrl.href);
     if (text.length >= 80 && inScope(fetched.finalUrl, scope)) {
       pages.push({ url: fetched.finalUrl.href, title, text, sections });
@@ -294,5 +384,5 @@ export async function crawlSite(startUrl: string, plan: Plan, scope?: CrawlScope
     }
   }
 
-  return { pages, chunks, errors };
+  return { pages, chunks, errors, issues: issues.slice(0, 40) };
 }
