@@ -18,7 +18,7 @@ test("login art uses the unclipped mascot crop", () => {
 
 test("legal links and marketing footers clear the demo widget badge", () => {
   assert.match(dashCss, /padding: 36px 20px calc\(96px \+ env\(safe-area-inset-bottom\)\)/);
-  assert.match(siteCss, /padding: 40px 0 calc\(112px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.match(siteCss, /body\.has-demo-widget \.footer \{ padding-bottom: calc\(112px \+ env\(safe-area-inset-bottom\)\)/);
 });
 
 test("test-widget empty state is calm and points to the dashboard", () => {

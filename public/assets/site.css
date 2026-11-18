@@ -3,8 +3,8 @@
   color-scheme: dark;
   --base: #07060f;
   --ink: #f6f3ff;
-  --muted: #aaa5c2;
-  --soft: #7f7a98;
+  --muted: #c9c3dc;
+  --soft: #b4aec8;
   --violet: #8f6cff;
   --violet-2: #b9a6ff;
   --cyan: #36c8ff;
@@ -82,14 +82,14 @@ button { font: inherit; color: inherit; }
 .tag { display: inline-block; padding: 3px 10px; border-radius: 999px; font-family: var(--font-label); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #cfc4ff; border: 1px solid var(--line-2); background: rgba(143, 108, 255, .1); }
 
 /* ---------- Typography ---------- */
-h1, h2, h3 { font-family: var(--font-display); letter-spacing: -.03em; line-height: 1.05; margin: 0; }
+h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -.03em; line-height: 1.12; margin: 0; font-weight: 700; }
 .shimmer { background: linear-gradient(100deg, #fff 0%, #e5dcff 30%, #b9a6ff 45%, #fff 55%, #bdf0ff 75%, #fff 100%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 7s linear infinite; }
 @keyframes shimmer { to { background-position: -220% 0; } }
 .grad { background: linear-gradient(90deg, #b9a6ff, #ff6ad5 60%, #36c8ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .section { padding: clamp(64px, 10vw, 120px) 0; position: relative; }
-.section-head { max-width: 720px; margin: 0 auto 48px; text-align: center; }
-.section-head h2 { font-size: clamp(28px, 4.6vw, 48px); margin: 14px 0 14px; }
-.section-head p { color: var(--muted); font-size: clamp(15px, 1.8vw, 18px); margin: 0; }
+.section-head { max-width: 720px; margin: 0 auto 44px; text-align: center; }
+.section-head h2 { font-size: clamp(28px, 4.6vw, 48px); margin: 12px 0 16px; line-height: 1.12; }
+.section-head p { color: var(--muted); font-size: clamp(16px, 1.8vw, 18px); margin: 0 auto; max-width: 38rem; line-height: 1.6; }
 .muted { color: var(--muted); }
 .lede { color: var(--muted); font-size: clamp(16px, 1.8vw, 19px); margin: 0 0 20px; max-width: 40rem; line-height: 1.55; }
 
@@ -107,7 +107,8 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -.03em; line-heig
 .reveal.d1 { transition-delay: .08s; } .reveal.d2 { transition-delay: .16s; } .reveal.d3 { transition-delay: .24s; }
 
 /* ---------- Footer ---------- */
-.footer { border-top: 1px solid var(--line); padding: 40px 0 calc(112px + env(safe-area-inset-bottom)); color: var(--muted); font-size: 14px; }
+.footer { border-top: 1px solid var(--line); padding: 40px 0 calc(40px + env(safe-area-inset-bottom)); color: var(--muted); font-size: 14px; }
+body.has-demo-widget .footer { padding-bottom: calc(112px + env(safe-area-inset-bottom)); }
 .footer .wrap { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: center; justify-content: space-between; }
 .footer nav { display: flex; flex-wrap: wrap; gap: 18px; }
 .footer a:hover { color: var(--ink); }
@@ -135,7 +136,23 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -.03em; line-heig
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .reveal { opacity: 1; transform: none; }
+  .glow-card:hover, .visual .frame, .bubble { transform: none !important; }
 }
+
+/* Sticky mobile signup CTA — leaves a gap on the right for the demo widget badge */
+.sticky-cta { display: none; }
+@media (max-width: 720px) {
+  .sticky-cta {
+    display: flex;
+    position: fixed;
+    left: 12px;
+    right: 80px;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    z-index: 25;
+  }
+  .sticky-cta .btn { width: 100%; justify-content: center; box-shadow: 0 16px 36px -10px rgba(0, 0, 0, .55); }
+}
+
 
 /* ---- Signed-in account menu ---- */
 .nav.signed-in .nav-cta { display: none !important; }
@@ -163,4 +180,4 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -.03em; line-heig
 .plan .price { margin: 4px 0 6px; color: var(--muted); }
 .plan .price b { font-family: var(--font-display); font-size: 34px; color: var(--ink); letter-spacing: -.02em; margin-right: 4px; }
 
-.plan .price .vat{font-size:.72em;opacity:.65;font-weight:500;margin-left:2px}
+.plan .price .vat{font-size:.72em;opacity:1;color:var(--muted);font-weight:500;margin-left:2px}
