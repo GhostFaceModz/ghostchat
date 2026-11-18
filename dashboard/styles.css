@@ -519,3 +519,19 @@ body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-ne
 .inbox-keys { margin: 0.25rem 0 0; }
 .inbox-canned { display:block; margin-bottom: 0.35rem; }
 .inbox-item.kb-on { outline: 2px solid var(--accent, #a78bfa); outline-offset: -2px; }
+
+/* Command palette */
+.cmd-kbd { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line-2); font: 600 10px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--muted); }
+#open-palette { width: 100%; justify-content: space-between; }
+.cmd-palette { width: min(520px, calc(100vw - 24px)); border: 1px solid var(--line-2); border-radius: 20px; padding: 14px; background: rgba(14, 10, 28, .96); color: var(--text); box-shadow: 0 30px 80px -20px rgba(0,0,0,.7); }
+.cmd-palette::backdrop { background: rgba(5, 3, 12, .62); }
+.cmd-palette input[type="search"] { margin: 0 0 10px; }
+.cmd-palette #cmd-list { list-style: none; margin: 0; padding: 0; max-height: min(50vh, 360px); overflow: auto; display: grid; gap: 4px; }
+.cmd-palette #cmd-list li { margin: 0; }
+.cmd-palette #cmd-list button { width: 100%; text-align: left; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 14px; padding: 10px 12px; border-radius: 12px; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
+.cmd-palette #cmd-list button small { color: var(--muted); font-size: 12px; }
+.cmd-palette #cmd-list button[aria-selected="true"], .cmd-palette #cmd-list button:hover { background: rgba(143, 108, 255, .2); }
+.cmd-palette .muted { margin: 10px 2px 0; }
+@media (prefers-reduced-motion: reduce) {
+  .cmd-palette { transition: none; }
+}
