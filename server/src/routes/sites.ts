@@ -25,6 +25,7 @@ import { normalizeChannels } from "../lib/meta.js";
 import { saveCorrection } from "../lib/corrections.js";
 import { faqCandidatesFromPages, listFaqDrafts, saveFaqDrafts, setFaqDraftStatus } from "../lib/faqDrafts.js";
 import type { Site, Theme } from "../types.js";
+import { checkInstallHealth } from "../lib/widgetHealth.js";
 
 export const sitesRouter = Router();
 const upload = multer({
@@ -263,6 +264,17 @@ async function normalizeScope(raw: Record<string, unknown>, siteUrl: string): Pr
   return scope;
 }
 
+
+sitesRouter.get("/:id/install-health", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const health = await checkInstallHealth(site, { force: String(req.query.refresh || "") === "1" });
+    res.json({ health });
+  } catch {
+    res.status(500).json({ error: "Could not check the widget install." });
+  }
+});
 sitesRouter.post("/:id/crawl", async (req, res) => {
   if (denyIfNotOwner(req, res)) return;
   const site = await loadOwnedSite(req, req.params.id);
