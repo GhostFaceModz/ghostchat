@@ -430,8 +430,10 @@
     class: "gc-launcher", type: "button", "aria-label": "Open chat", "aria-expanded": "false",
     html: '<span class="gc-ring"></span><span class="gc-core"></span><span class="gc-li gc-li-ghost"><img alt="" width="64" height="64" decoding="async" src="' + API_BASE + '/img/ghostchat-mascot.webp">' + ICONS.ghost + '</span><span class="gc-li gc-li-close">' + ICONS.close + '</span><span class="gc-dot"></span>'
   });
-  var panel = el("div", { class: "gc-panel", role: "dialog", "aria-label": "Chat" });
+  var panel = el("div", { class: "gc-panel", role: "dialog", "aria-modal": "true", "aria-label": "Chat" });
   var title = el("h2", { text: state.name });
+  title.id = "gc-title-" + String(SITE_KEY || "chat").replace(/[^a-z0-9_-]/gi, "").slice(0, 24);
+  panel.setAttribute("aria-labelledby", title.id);
   var soundBtn = el("button", { class: "gc-iconbtn", type: "button", title: "Sound", "aria-label": "Message sound", "aria-pressed": "false", html: ICONS.sound });
   var voiceBtn = el("button", { class: "gc-iconbtn", type: "button", title: "Read replies aloud", "aria-label": "Read replies aloud", "aria-pressed": "false", html: ICONS.speaker, hidden: "hidden" });
   var micBtn = el("button", { class: "gc-iconbtn", type: "button", title: "Speak", "aria-label": "Ask by voice", html: ICONS.mic, hidden: "hidden" });
@@ -470,7 +472,7 @@
   panel.appendChild(memNote);
   panel.appendChild(brand);
   var modal = el("div", { class: "gc-modal" });
-  var modalBox = el("div", { class: "gc-modal-box" });
+  var modalBox = el("div", { class: "gc-modal-box", role: "dialog", "aria-modal": "true", "aria-label": "Booking calendar" });
   var modalTitle = el("div", { text: "Book a time" });
   var modalClose = el("button", { class: "gc-iconbtn", type: "button", "aria-label": "Close", html: ICONS.close });
   var modalHead = el("header", {}, [modalTitle, modalClose]);
@@ -503,6 +505,7 @@
   // One gentle "hello" wiggle shortly after load (skipped automatically under prefers-reduced-motion).
   setTimeout(function () {
     if (state.open) return;
+    try { if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return; } catch (e) {}
     launcher.classList.add("gc-hello");
     setTimeout(function () { launcher.classList.remove("gc-hello"); }, 1000);
   }, 1400);
@@ -520,7 +523,27 @@
     try { document.documentElement.classList.toggle("ghostchat-open", open); } catch (e) {}
     try { window.dispatchEvent(new CustomEvent(open ? "ghostchat:open" : "ghostchat:close", { detail: { siteKey: SITE_KEY } })); } catch (e) {}
   }
+  var lastFocus = null;
+  function focusables(container) {
+    return Array.prototype.slice.call(container.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter(function (el) {
+      return !el.hidden && el.getAttribute("aria-hidden") !== "true" && el.offsetParent !== null;
+    });
+  }
+  function trapFocus(ev, container) {
+    if (ev.key !== "Tab") return;
+    var list = focusables(container);
+    if (!list.length) return;
+    var first = list[0], last = list[list.length - 1];
+    if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+  }
   function setOpen(open) {
+    if (open && !state.open) {
+      try {
+        var ae = document.activeElement;
+        if (ae && ae !== document.body && !root.contains(ae) && typeof ae.focus === "function") lastFocus = ae;
+      } catch (e) {}
+    }
     state.open = open;
     announce(!!open);
     root.setAttribute("data-open", open ? "true" : "false");
@@ -531,6 +554,10 @@
       loadFont();
       input.focus();
       maybeGreet();
+    } else {
+      var back = lastFocus && typeof lastFocus.focus === "function" ? lastFocus : launcher;
+      lastFocus = null;
+      try { back.focus(); } catch (e) { try { launcher.focus(); } catch (e2) {} }
     }
   }
   window.GhostChat = {
@@ -1526,8 +1553,11 @@
     window.open(href, "_blank", "noopener,noreferrer");
   });
   launcher.addEventListener("click", function () { setOpen(!state.open); });
-  closeBtn.addEventListener("click", function () { setOpen(false); launcher.focus(); });
-  panel.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { setOpen(false); launcher.focus(); } });
+  closeBtn.addEventListener("click", function () { setOpen(false); });
+  panel.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); setOpen(false); return; }
+    trapFocus(ev, panel);
+  });
   // Stop host-page swipe/back gestures from seeing touches inside the chat.
   // Only stopPropagation: never preventDefault, so scrolling, taps and typing still work.
   function trapHostGestures(e) { e.stopPropagation(); }

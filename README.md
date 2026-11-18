@@ -191,6 +191,7 @@ Still to build:
 - [x] **Recrawl preview and diff** (scheduled and later recrawls wait for owner approval; unchanged crawls auto-complete)
 - [x] **Staging / test widget** for unpublished training (`gc_stg_` key and /test-widget.html)
 - [x] **Team audit log** (workspace actions only — no chat messages or visitor content)
+- [x] **Widget accessibility pass** (focus trap, Escape, aria-modal, restore focus, reduced motion)
 - [ ] Server-side TTS / STT beyond the browser voice mode
 
 ## License
