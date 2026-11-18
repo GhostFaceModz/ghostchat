@@ -1,4 +1,7 @@
 import { EMBEDDING_DIMENSIONS, planChatChoice, resolveChatModel, resolveEmbeddingModel, type ResolvedModel } from "./models.js";
+
+/** Used when the default OpenRouter model returns 402 (no credits). These do not cost money. */
+export const FREE_OPENROUTER_FALLBACK = "google/gemma-4-31b-it:free";
 import { embedInActiveSpace } from "./embeddingSpace.js";
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
@@ -54,6 +57,14 @@ async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, str
     const text = await res.text().catch(() => "");
     if (isRetryable(res.status) && attempt < AI_MAX_RETRIES) { await sleep(backoffMs(attempt, res.headers.get("retry-after"))); continue; }
     if (isRetryable(res.status)) throw new AiUnavailableError(`${resolved.provider} request failed (${res.status}): ${text.slice(0, 200)}`, res.status);
+    // Paid OpenRouter credit exhaustion: retry once on a :free model (no spend).
+    if (res.status === 402 && resolved.provider === "openrouter" && !String(resolved.model).endsWith(":free")) {
+      const freeBody = body && typeof body === "object" && !Array.isArray(body)
+        ? { ...(body as Record<string, unknown>), model: FREE_OPENROUTER_FALLBACK }
+        : body;
+      console.warn(`openrouter 402 on ${resolved.model}; retrying with ${FREE_OPENROUTER_FALLBACK}`);
+      return aiFetch({ ...resolved, model: FREE_OPENROUTER_FALLBACK }, path, freeBody, stream, fetchImpl);
+    }
     throw new Error(`${resolved.provider} request failed (${res.status}): ${text.slice(0, 400)}`);
   }
   throw new AiUnavailableError(`${resolved.provider} request failed`, lastStatus);
