@@ -353,13 +353,17 @@
         <section class="panel glass hidden" data-panel="train">
           <h3>Train the assistant</h3>
           <p class="muted">Crawl your site (including sitemap.xml), upload PDFs or text docs, paste a FAQ, or import a Notion page shared with your integration.</p>
-          <div class="row">
-            <button type="button" class="btn primary" id="crawl-btn">Crawl site</button>
-            <span class="muted" id="crawl-status"></span>
-          </div>
-          <div id="preview-box" class="preview-box hidden"></div>
-          <div id="staging-box" class="staging-box">
-            <h4>Test widget</h4>
+          <details class="train-acc" open>
+            <summary>Crawl site</summary>
+            <div class="row">
+              <button type="button" class="btn primary" id="crawl-btn">Crawl site</button>
+              <span class="muted" id="crawl-status"></span>
+            </div>
+            <div id="preview-box" class="preview-box hidden"></div>
+          </details>
+          <details class="train-acc" open>
+            <summary>Test widget</summary>
+            <div id="staging-box" class="staging-box">
             <p class="muted tiny">Unpublished training and recrawl previews only answer here until you publish them. Live visitors still see the published assistant.</p>
             <pre id="staging-snippet" class="snippet"></pre>
             <div class="row">
@@ -368,8 +372,11 @@
               <button type="button" class="btn ghost" id="staging-discard">Discard unpublished training</button>
             </div>
             <div id="staging-docs" class="list"></div>
-          </div>
-          <form id="upload-form" class="stack">
+            </div>
+          </details>
+          <details class="train-acc" open>
+            <summary>Add documents and FAQs</summary>
+            <form id="upload-form" class="stack">
             <label>Upload PDF, .txt, .md, .html or .csv <input type="file" name="files" multiple accept=".pdf,.txt,.md,.markdown,.html,.htm,.csv,application/pdf,text/plain,text/markdown,text/html,text/csv" /></label>
             <label>Or paste a FAQ / notes <textarea name="text" rows="6" placeholder="Paste help content…"></textarea></label>
             <label>Title for pasted content <input name="title" placeholder="FAQ" /></label>
@@ -382,7 +389,8 @@
             <button type="submit" class="btn">Import from Notion</button>
             <p class="muted tiny">Share the Notion page with the GhostChat integration first, then paste its link.</p>
           </form>
-          <details class="scope" id="crawl-scope">
+          </details>
+          <details class="train-acc" id="crawl-scope">
             <summary>Crawl scope (optional)</summary>
             <form id="scope-form" class="stack">
               <label>Sitemap URL <input name="sitemap_url" placeholder="/sitemap.xml or https://yoursite.com/sitemap-titles.xml" /></label>
@@ -395,8 +403,9 @@
               <button type="submit" class="btn">Save scope</button>
             </form>
           </details>
-          <div id="eval-box" class="eval-box">
-            <h4>Eval set</h4>
+          <details class="train-acc">
+            <summary>Eval set</summary>
+            <div id="eval-box" class="eval-box">
             <p class="muted tiny">Questions the assistant must get right. Run them against published training or the test widget before you publish a recrawl. We check your expected phrases against the sources it would use — this does not call the chat model or use credits.</p>
             <form id="eval-form" class="stack">
               <label>Question <input name="question" required placeholder="How much does Pro cost per month?" /></label>
@@ -409,8 +418,11 @@
             </div>
             <p class="muted tiny" id="eval-status"></p>
             <div id="eval-list" class="list"></div>
-          </div>
-          <div id="faq-import-box" class="faq-import-box">
+            </div>
+          </details>
+          <details class="train-acc">
+            <summary>Import FAQs from CSV</summary>
+            <div id="faq-import-box" class="faq-import-box">
             <h4>Import FAQs from CSV</h4>
             <p class="muted tiny">A header row of <code>question,answer</code> is best. Each row becomes a training source. This also fixes FAQ drafts, which now save as the <code>faq</code> source type.</p>
             <form id="faq-import-form" class="stack">
@@ -418,18 +430,27 @@
               <button type="submit" class="btn">Import CSV</button>
             </form>
             <p class="muted tiny" id="faq-import-status"></p>
-          </div>
-          <div id="coverage-box" class="coverage-box">
+            </div>
+          </details>
+          <details class="train-acc">
+            <summary>Knowledge coverage</summary>
+            <div id="coverage-box" class="coverage-box">
             <h4>Knowledge coverage</h4>
             <p class="muted tiny">Pages in your training compared with pages visitors ask from, and sources the bot actually cites (last 30 days).</p>
             <div id="coverage-body"><p class="muted tiny">Loading…</p></div>
-          </div>
-          <div id="doc-list" class="list"></div>
-          <div id="recycle-box" class="recycle-box">
-            <h4>Recently removed</h4>
+            </div>
+          </details>
+          <details class="train-acc" open>
+            <summary>Training sources</summary>
+            <div id="doc-list" class="list"></div>
+          </details>
+          <details class="train-acc">
+            <summary>Recently removed</summary>
+            <div id="recycle-box" class="recycle-box">
             <p class="muted tiny">Removed training stays here for 7 days. Restore it to put the sources back into live answers, or delete it forever.</p>
             <div id="recycle-list" class="list"><p class="muted tiny">Nothing in the recycle bin.</p></div>
-          </div>
+            </div>
+          </details>
         </section>
 
         <section class="panel glass hidden" data-panel="tools">
