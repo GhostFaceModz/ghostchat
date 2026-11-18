@@ -17,6 +17,7 @@ import { liveWidgetRouter, liveOwnerRouter, telegramWebhookRouter, discordWebhoo
 import { resolveEmbeddingModel } from "./lib/models.js";
 import { promoteGteEmbeddings } from "./lib/embeddingSpace.js";
 import { ensureDemoSite } from "./lib/demoSite.js";
+import { startFreeModelPool, poolHealth } from "./lib/freeModelPool.js";
 import { shareRouter } from "./routes/share.js";
 import { warmupLocalEmbeddings } from "./lib/localEmbeddings.js";
 import { cronRouter } from "./routes/cron.js";
@@ -74,6 +75,9 @@ app.use(express.urlencoded({ extended: false }));
 
 app.get("/healthz", (_req, res) => {
   res.json({ ok: true, service: "ghostchat" });
+});
+app.get("/api/health/models", (_req, res) => {
+  res.json({ ok: true, service: "ghostchat", models: poolHealth() });
 });
 
 app.use("/api/auth", authRouter);
@@ -183,6 +187,7 @@ app.listen(config.port, () => {
   console.log(`GhostChat listening on ${config.publicUrl} (port ${config.port})`);
   startRecrawlScheduler();
   startIdleSweep();
+  startFreeModelPool();
   catchUpOnWake();
   if (resolveEmbeddingModel().provider === "local") {
     warmupLocalEmbeddings().then(

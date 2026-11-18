@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { backoffMs, isRetryable, _test, AiUnavailableError, FREE_OPENROUTER_FALLBACK, FREE_OPENROUTER_FALLBACKS, clearPaidCreditSkip } from "../server/src/lib/ai.ts";
+import { clearPoolState, currentFreePoolIds } from "../server/src/lib/freeModelPool.ts";
 import { chatRateLimit } from "../server/src/routes/chat.ts";
 import { dailyCapCheck, dailyCap, DEMO_DAILY_CAP } from "../server/src/lib/usage.ts";
 import { DEMO_SITE_KEY } from "../server/src/lib/demoSite.ts";
@@ -9,7 +10,7 @@ import { selectCards } from "../server/src/lib/cards.ts";
 
 const resolved = { provider: "openrouter", baseUrl: "https://x.test", apiKey: "k", model: "m", headers: {} } as never;
 
-beforeEach(() => clearPaidCreditSkip());
+beforeEach(() => { clearPaidCreditSkip(); clearPoolState(); });
 
 test("retries 429/5xx up to twice, then gives up gracefully", async () => {
   let calls = 0;
@@ -98,7 +99,7 @@ test("does not loop after every free OpenRouter model returns 402", async () => 
     return new Response("limited", { status: 402 });
   }) as typeof fetch;
   await assert.rejects(_test.aiFetch({ ...resolved, model: "deepseek/deepseek-v4-flash" }, "/chat/completions", { model: "deepseek/deepseek-v4-flash" }, false, fake));
-  assert.deepEqual(models, ["deepseek/deepseek-v4-flash", ...FREE_OPENROUTER_FALLBACKS]);
+  assert.deepEqual(models, ["deepseek/deepseek-v4-flash", ...currentFreePoolIds()]);
 });
 
 test("a rate-limited free model falls through to the next free model", async () => {
