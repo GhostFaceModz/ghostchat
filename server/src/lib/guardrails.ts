@@ -47,7 +47,7 @@ export function sanitizeContext(text: string): string {
 }
 
 export const UNSURE_REPLY =
-  "I'm not sure — I couldn't find that on this site, so I'd rather not guess. Try asking another way, or ask me something else.";
+  "I'm not sure — I couldn't find that on this site, so I'd rather not guess. Try asking about the product, pricing or setup, or rephrase your question and I'll try again.";
 
 /** The visitor explicitly wants a person. */
 export const HUMAN_REQUEST = /\b(human|real person|live (agent|person|chat)|(speak|talk|chat) (to|with) (a |an |the )?(person|someone|agent|team|support|staff|owner)|customer (service|support)|contact (support|the team|you|someone)|email (support|the team)|call me|get in touch)\b/i;

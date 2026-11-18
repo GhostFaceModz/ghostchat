@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
-import { backoffMs, isRetryable, _test, AiUnavailableError, FREE_OPENROUTER_FALLBACK, FREE_OPENROUTER_FALLBACKS } from "../server/src/lib/ai.ts";
+import { beforeEach, test } from "node:test";
+import { backoffMs, isRetryable, _test, AiUnavailableError, FREE_OPENROUTER_FALLBACK, FREE_OPENROUTER_FALLBACKS, clearPaidCreditSkip } from "../server/src/lib/ai.ts";
 import { chatRateLimit } from "../server/src/routes/chat.ts";
 import { dailyCapCheck, dailyCap } from "../server/src/lib/usage.ts";
 import { HUMAN_REQUEST } from "../server/src/lib/guardrails.ts";
 import { selectCards } from "../server/src/lib/cards.ts";
 
 const resolved = { provider: "openrouter", baseUrl: "https://x.test", apiKey: "k", model: "m", headers: {} } as never;
+
+beforeEach(() => clearPaidCreditSkip());
 
 test("retries 429/5xx up to twice, then gives up gracefully", async () => {
   let calls = 0;
@@ -108,5 +110,43 @@ test("a rate-limited free model falls through to the next free model", async () 
   );
   assert.equal(res.status, 200);
   assert.ok(models.includes(FREE_OPENROUTER_FALLBACKS[0]));
+  assert.equal(models.at(-1), FREE_OPENROUTER_FALLBACKS[1]);
+});
+
+test("skips a paid OpenRouter model after a recent 402", async () => {
+  _test.rememberPaidCreditsExhausted();
+  const models: string[] = [];
+  const fake = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    models.push(body.model);
+    return new Response("{}", { status: 200 });
+  }) as typeof fetch;
+  const res = await _test.aiFetch(
+    { ...resolved, model: "deepseek/deepseek-v4-flash" },
+    "/chat/completions",
+    { model: "deepseek/deepseek-v4-flash" },
+    false,
+    fake,
+  );
+  assert.equal(res.status, 200);
+  assert.deepEqual(models, [FREE_OPENROUTER_FALLBACK]);
+});
+
+test("a 404 on an unknown free model walks to the next fallback", async () => {
+  const models: string[] = [];
+  const fake = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    models.push(body.model);
+    if (body.model === FREE_OPENROUTER_FALLBACKS[0]) return new Response("missing", { status: 404 });
+    return new Response("{}", { status: 200 });
+  }) as typeof fetch;
+  const res = await _test.aiFetch(
+    { ...resolved, model: FREE_OPENROUTER_FALLBACKS[0] },
+    "/chat/completions",
+    { model: FREE_OPENROUTER_FALLBACKS[0] },
+    false,
+    fake,
+  );
+  assert.equal(res.status, 200);
   assert.equal(models.at(-1), FREE_OPENROUTER_FALLBACKS[1]);
 });

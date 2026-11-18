@@ -3,6 +3,8 @@ import { getDb } from "./supabase.js";
 import { crawlSite } from "./crawl.js";
 import { indexPages } from "./indexer.js";
 import type { Site } from "../types.js";
+import { ensureGhostChatKnowledgePack } from "./ghostchatKnowledgePack.js";
+import { ensureGhostChatEvalQuestions } from "./ghostchatEvalSet.js";
 
 export const DEMO_SITE_KEY = "gc_demo_ghostchat_pro";
 export const DEMO_SITE_URL = "https://ghostchat.pro";
@@ -53,16 +55,39 @@ export async function ensureDemoSite(): Promise<{ site?: Site; crawled?: boolean
   }
   const pages = Number(site.page_count || 0);
   const stale = !site.last_crawled_at || (Date.now() - Date.parse(String(site.last_crawled_at))) > 6 * 24 * 3600 * 1000;
-  if (pages > 0 && !stale) return { site, crawled: false };
-  const result = await crawlSite(site.url || DEMO_SITE_URL, site.plan || "free", (site.crawl_scope as typeof SCOPE) || SCOPE);
-  await indexPages(site, result.pages, { sourceType: "crawl", removeMissing: true, scope: (site.crawl_scope as typeof SCOPE) || SCOPE });
-  await db.from("ghostchat_sites").update({
-    crawl_status: result.pages.length ? "ready" : "error",
-    crawl_error: result.pages.length ? null : "No usable text was found on the site.",
-    last_crawled_at: new Date().toISOString(),
-    recrawl_schedule: site.recrawl_schedule || "weekly",
-    crawl_scope: site.crawl_scope || SCOPE,
-    updated_at: new Date().toISOString(),
-  }).eq("id", site.id);
-  return { site, crawled: true };
+  const missingYearly = await demoIndexMissingYearlyPrices(site.id);
+  if (pages === 0 || stale || missingYearly) {
+    const result = await crawlSite(site.url || DEMO_SITE_URL, site.plan || "free", (site.crawl_scope as typeof SCOPE) || SCOPE);
+    await indexPages(site, result.pages, { sourceType: "crawl", removeMissing: true, scope: (site.crawl_scope as typeof SCOPE) || SCOPE });
+    await db.from("ghostchat_sites").update({
+      crawl_status: result.pages.length ? "ready" : "error",
+      crawl_error: result.pages.length ? null : "No usable text was found on the site.",
+      last_crawled_at: new Date().toISOString(),
+      recrawl_schedule: site.recrawl_schedule || "weekly",
+      crawl_scope: site.crawl_scope || SCOPE,
+      updated_at: new Date().toISOString(),
+    }).eq("id", site.id);
+    site = { ...site, last_crawled_at: new Date().toISOString(), page_count: result.pages.length } as Site;
+    await seedOfficialKnowledge(site).catch((err) => console.error("demo knowledge seed:", (err as Error).message));
+    return { site, crawled: true };
+  }
+  await seedOfficialKnowledge(site).catch((err) => console.error("demo knowledge seed:", (err as Error).message));
+  return { site, crawled: false };
+}
+
+async function demoIndexMissingYearlyPrices(siteId: string): Promise<boolean> {
+  const { data, error } = await getDb()
+    .from("ghostchat_chunks")
+    .select("id")
+    .eq("site_id", siteId)
+    .ilike("content", "%two months free%")
+    .limit(1);
+  if (error) return true;
+  return !data?.length;
+}
+
+async function seedOfficialKnowledge(site: Site): Promise<void> {
+  const pack = await ensureGhostChatKnowledgePack(site);
+  const ev = await ensureGhostChatEvalQuestions(site.id);
+  console.log(`demo knowledge: pack ${pack.reason} (${pack.chunks} chunks); eval +${ev.added} (total ${ev.total})`);
 }
