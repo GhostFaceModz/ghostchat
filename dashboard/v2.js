@@ -190,9 +190,30 @@
     wzStep = n;
     wz.querySelectorAll("[data-step]").forEach((s) => (s.hidden = Number(s.dataset.step) !== n));
     wz.querySelectorAll(".wz-steps i").forEach((d, i) => d.classList.toggle("on", i < n));
-    if (n === 4) $("#wz-snippet").value = `<script src="${typeof widgetScriptUrl === "function" ? widgetScriptUrl(window.GHOSTCHAT_PUBLIC_ORIGIN) : (window.GHOSTCHAT_PUBLIC_ORIGIN || "https://ghostchat.pro") + "/widget.js"}" data-id="${wzSite.site_key}"></script>`;
+    if (n === 4) {
+      $("#wz-snippet").value = `<script src="${typeof widgetScriptUrl === "function" ? widgetScriptUrl(window.GHOSTCHAT_PUBLIC_ORIGIN) : (window.GHOSTCHAT_PUBLIC_ORIGIN || "https://ghostchat.pro") + "/widget.js"}" data-id="${wzSite.site_key}"></script>`;
+      showPlat($("#wz-plats .on")?.dataset.plat || "html");
+    }
     if (n === 5) $("#wz-chat").src = "/c/" + encodeURIComponent(wzSite.site_key);
   }
+  const PLATS = {
+    html: "Paste the snippet just before the closing </body> tag of your site, then publish.",
+    shopify: "In Shopify, go to Online Store → Themes → Edit code. Open layout/theme.liquid and paste the snippet just before </body>, then Save.",
+    wix: "In Wix, go to Settings → Custom Code → Add Code. Paste the snippet, set it to load on All pages in the Body — end, then Apply.",
+    squarespace: "In Squarespace, go to Settings → Developer Tools → Code Injection. Paste the snippet into the Footer box and Save.",
+    wordpress: "In WordPress, paste the snippet in your theme footer (Appearance → Theme File Editor → footer.php) just before </body>, or use a plugin like “Insert Headers and Footers” / WPCode in the footer section.",
+    webflow: "In Webflow, open Site Settings → Custom Code, paste the snippet into Footer Code, then Publish the site.",
+  };
+  function showPlat(id) {
+    const help = $("#wz-plat-help");
+    if (!help) return;
+    help.textContent = PLATS[id] || PLATS.html;
+    document.querySelectorAll("#wz-plats [data-plat]").forEach((b) => b.classList.toggle("on", b.dataset.plat === id));
+  }
+  $("#wz-plats")?.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-plat]"); if (!b) return;
+    showPlat(b.dataset.plat);
+  });
   function openWizard() { wzSite = null; $("#wz-site").reset(); $("#wz-err").hidden = true; go(1); wz.showModal(); }
   window.gcOpenWizard = openWizard;
   $("#wizard-open").addEventListener("click", () => { wzSite = site(); go(2); wz.showModal(); crawl(); });
@@ -211,6 +232,8 @@
   });
   async function crawl() {
     const msg = $("#wz-crawl-msg");
+    const faq = $("#wz-faq");
+    if (faq) faq.hidden = true;
     msg.textContent = "Crawling your pages… this usually takes under a minute.";
     wz.querySelector(".wz-progress").classList.add("run");
     try {
@@ -218,10 +241,32 @@
       const n = d.pages ?? d.site?.page_count ?? 0;
       msg.textContent = `Done: read ${n} page${n === 1 ? "" : "s"}.`;
       if (d.site) wzSite = d.site;
-      setTimeout(() => wzStep === 2 && go(3), 900);
-    } catch (e) { msg.textContent = "Couldn't crawl just now (" + e.message + "). You can retry from the Train tab."; }
+      if (n > 0) setTimeout(() => wzStep === 2 && go(3), 900);
+      else {
+        msg.textContent = "We couldn't find readable pages on that site.";
+        if (faq) faq.hidden = false;
+      }
+    } catch (e) {
+      msg.textContent = "Couldn't crawl just now (" + e.message + "). Paste a FAQ below, or retry from the Train tab.";
+      if (faq) faq.hidden = false;
+    }
     finally { wz.querySelector(".wz-progress").classList.remove("run"); }
   }
+  $("#wz-faq-form")?.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const err = $("#wz-faq-err");
+    if (err) err.hidden = true;
+    const fd = new FormData(ev.target);
+    if (!String(fd.get("text") || "").trim()) return;
+    if (!fd.get("title")) fd.set("title", "FAQ");
+    try {
+      await req("/api/sites/" + wzSite.id + "/documents", { method: "POST", body: fd });
+      go(3);
+    } catch (e) {
+      if (err) { err.textContent = e.message; err.hidden = false; }
+      else toast(e.message);
+    }
+  });
   $("#wz-style").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const f = ev.target;

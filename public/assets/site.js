@@ -114,4 +114,11 @@
     addEventListener("resize", resize);
     resize(); tick();
   }
+
+  const openDemo = () => {
+    if (window.GhostChat && typeof window.GhostChat.open === "function") window.GhostChat.open();
+    else location.href = "/demo/";
+  };
+  document.getElementById("try-demo")?.addEventListener("click", openDemo);
+  document.getElementById("try-demo-footer")?.addEventListener("click", openDemo);
 })();

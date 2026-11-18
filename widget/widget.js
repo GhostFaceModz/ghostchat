@@ -532,7 +532,14 @@
       maybeGreet();
     }
   }
+  window.GhostChat = {
+    open: function () { setOpen(true); },
+    close: function () { setOpen(false); },
+    toggle: function () { setOpen(!state.open); },
+    siteKey: SITE_KEY
+  };
   function setThinking(on) {
+
     state.thinking = on;
     root.setAttribute("data-thinking", on ? "true" : "false");
   }

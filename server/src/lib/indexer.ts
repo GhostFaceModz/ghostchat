@@ -5,6 +5,7 @@ import { embedTexts } from "./ai.js";
 import { chunkText, type TextChunk } from "./chunk.js";
 import { pageChunk, type CrawledPage, type CrawlScope } from "./crawl.js";
 import type { Site } from "../types.js";
+import { currentEmbeddingModel } from "./embeddingSpace.js";
 
 export function contentHash(text: string): string {
   return crypto.createHash("sha256").update(text.replace(/\s+/g, " ").trim()).digest("hex").slice(0, 32);
@@ -31,6 +32,7 @@ export async function storeChunks(opts: {
     token_count: chunk.tokenCount,
     source_type: opts.sourceType,
     embedding: vectors[i],
+    embedding_model: currentEmbeddingModel(),
   }));
   for (let i = 0; i < rows.length; i += 80) {
     const { error } = await getDb().from("ghostchat_chunks").insert(rows.slice(i, i + 80));

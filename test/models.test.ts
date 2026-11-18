@@ -20,6 +20,8 @@ const keys = [
   "AI_PROVIDER",
   "OPENROUTER_MODEL",
   "EMBEDDING_PROVIDER",
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_KEY",
 ];
 
 before(() => {
@@ -71,11 +73,12 @@ test("uses the owner's OpenRouter pick when the key is present", () => {
   delete process.env.OPENROUTER_API_KEY;
 });
 
-test("defaults embeddings to local hash embeddings with no API key", () => {
+test("defaults embeddings to local hash embeddings when Supabase is not configured", () => {
   const resolved = resolveEmbeddingModel();
   assert.equal(resolved.provider, "local");
   assert.equal(resolved.model, "hash/feature-384");
   assert.equal(resolved.apiKey, "");
+  assert.equal(resolved.fallbackFrom?.provider, "gte-small");
 });
 
 test("falls back to local embeddings when a paid provider has no key", () => {

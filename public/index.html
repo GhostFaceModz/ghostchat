@@ -194,7 +194,7 @@
           <p class="lede reveal d2">GhostChat is a premium AI assistant that learns your pages, docs and FAQs, then answers visitors in your brand's voice, shows its sources, and turns conversations into leads. Paste one line of code and you're live.</p>
           <div class="cta reveal d3">
             <a class="btn lg primary" href="/signup">Create your bot free →</a>
-            <a class="btn lg" href="/guide">Read the setup guide</a>
+            <button type="button" class="btn lg" id="try-demo">Ask GhostChat</button>
           </div>
           <div class="snippet reveal d3">
             <div class="code"><code id="hero-snippet"><span class="t">&lt;script</span> <span class="a">src</span>=<span class="s">"https://ghostchat.pro/widget.js?v=__WIDGET_V__"</span> <span class="a">data-id</span>=<span class="s">"YOUR_SITE_KEY"</span><span class="t">&gt;&lt;/script&gt;</span></code><button class="copy" type="button" data-copy="#hero-snippet">Copy</button></div>
@@ -353,7 +353,7 @@
       <div class="final glass reveal">
         <h2><span class="shimmer">Give your site a ghost</span> 👻</h2>
         <p>Set up your assistant in minutes. Free to start, no card needed.</p>
-        <div class="cta"><a class="btn lg primary" href="/signup">Create your bot</a><a class="btn lg" href="/demo">Try the widget demo</a></div>
+        <div class="cta"><a class="btn lg primary" href="/signup">Create your bot</a><button type="button" class="btn lg" id="try-demo-footer">Ask GhostChat</button></div>
       </div>
     </section>
   </main>
@@ -366,5 +366,6 @@
     </div>
   </footer>
   <script src="/assets/site.js" defer></script>
+  <script src="/widget.js?v=__WIDGET_V__" data-id="gc_demo_ghostchat_pro" data-delay="0"></script>
 </body>
 </html>
