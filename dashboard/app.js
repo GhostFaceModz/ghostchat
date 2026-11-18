@@ -1234,6 +1234,47 @@ function fmtDate(iso) {
 }
 
 
+
+const AUDIT_LABELS = {
+  "site.create": "Created a site",
+  "site.settings": "Updated site settings",
+  "training.crawl": "Crawled a site",
+  "training.approve_preview": "Approved a recrawl preview",
+  "training.reject_preview": "Discarded a recrawl preview",
+  "training.publish_staging": "Published unpublished training",
+  "training.discard_staging": "Discarded unpublished training",
+  "training.upload": "Added training",
+  "training.delete_document": "Removed a training document",
+  "training.faq_approve": "Approved an FAQ draft",
+  "training.faq_reject": "Rejected an FAQ draft",
+  "training.correction": "Saved a correction",
+  "training.teach": "Taught an unanswered question",
+  "team.invite": "Invited a teammate",
+  "team.remove": "Removed a teammate",
+  "team.accept": "Accepted a team invite"
+};
+
+async function renderAudit() {
+  const box = $("#acct-audit");
+  if (!box) return;
+  try {
+    const { events } = await req("/api/team/audit");
+    if (!events || !events.length) {
+      box.innerHTML = "<p class='muted tiny'>No activity recorded yet.</p>";
+      return;
+    }
+    box.innerHTML = events.map((e) => {
+      const when = new Date(e.created_at).toLocaleString();
+      const label = AUDIT_LABELS[e.action] || e.action;
+      const who = e.actor_email || "Someone";
+      const extra = e.meta && e.meta.email ? " · " + e.meta.email : (e.meta && e.meta.role ? " · " + e.meta.role : "");
+      return "<div class='item'><div class='who'>" + escapeHtml(when) + " · " + escapeHtml(who) + "</div><div>" + escapeHtml(label) + escapeHtml(extra) + "</div></div>";
+    }).join("");
+  } catch (e) {
+    box.innerHTML = "<p class='muted'>" + escapeHtml(e.message) + "</p>";
+  }
+}
+
 async function renderTeam() {
   const box = $("#acct-team");
   if (!box) return;
@@ -1269,6 +1310,7 @@ async function renderTeam() {
         renderTeam();
       } catch (e) { toast(e.message); }
     });
+    renderAudit();
   } catch (e) {
     box.innerHTML = "<p class='muted'>" + escapeHtml(e.message) + "</p>";
   }

@@ -3,6 +3,7 @@ import { denyIfNotOwner, type AuthedRequest, workspaceId } from "../lib/auth.js"
 import { acceptInvite, countSeatsUsed, inviteMember, listMembers, lookupInvite, revokeMember, seatsFor } from "../lib/team.js";
 import { getOwnerPlan } from "../lib/usage.js";
 import { mailerConfigured, sendMail } from "../lib/mailer.js";
+import { auditFromReq, listAudit } from "../lib/audit.js";
 
 export const teamRouter = Router();
 
@@ -23,6 +24,16 @@ teamRouter.get("/", async (req, res) => {
   });
 });
 
+teamRouter.get("/audit", async (req, res) => {
+  const ws = workspaceId(req);
+  try {
+    const events = await listAudit(ws, Number(req.query.limit) || 50);
+    res.json({ events });
+  } catch {
+    res.status(500).json({ error: "Could not load the audit log." });
+  }
+});
+
 teamRouter.post("/invites", async (req, res) => {
   if (denyIfNotOwner(req, res)) return;
   const owner = (req as AuthedRequest).owner;
@@ -37,6 +48,7 @@ teamRouter.post("/invites", async (req, res) => {
       });
       emailed = letter.ok;
     }
+    auditFromReq(req, "team.invite", { targetType: "member", targetId: member.id, meta: { email: member.email, role: member.role, emailed } }).catch(() => {});
     res.json({ member, inviteUrl: token ? inviteUrl : undefined, emailed });
   } catch (err) {
     const e = err as Error & { status?: number };
@@ -48,6 +60,7 @@ teamRouter.delete("/:id", async (req, res) => {
   if (denyIfNotOwner(req, res)) return;
   try {
     await revokeMember(workspaceId(req), req.params.id);
+    auditFromReq(req, "team.remove", { targetType: "member", targetId: req.params.id }).catch(() => {});
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Could not remove that teammate." });
@@ -60,6 +73,7 @@ teamRouter.post("/invites/:token/accept", async (req, res) => {
   const session = (req as unknown as AuthedRequest).owner;
   try {
     const accepted = await acceptInvite(req.params.token, session);
+    auditFromReq(req, "team.accept", { targetType: "member", targetId: session.id }).catch(() => {});
     res.json({ ok: true, ...accepted });
   } catch (err) {
     const e = err as Error & { status?: number };

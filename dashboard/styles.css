@@ -472,3 +472,6 @@ body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-ne
 .preview-box ul { margin: 6px 0; padding-left: 18px; }
 .preview-box li { margin: 2px 0; }
 #staging-snippet { overflow-x: auto; font-size: 12px; white-space: pre-wrap; }
+
+.audit-log .item { padding: 8px 0; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+.audit-log .item .who { font-size: 12px; color: var(--muted); }

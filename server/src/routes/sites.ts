@@ -28,6 +28,7 @@ import { saveCorrection } from "../lib/corrections.js";
 import { listFaqDrafts, setFaqDraftStatus } from "../lib/faqDrafts.js";
 import type { Site, Theme } from "../types.js";
 import { checkInstallHealth } from "../lib/widgetHealth.js";
+import { auditFromReq } from "../lib/audit.js";
 
 export const sitesRouter = Router();
 const upload = multer({
@@ -119,6 +120,7 @@ sitesRouter.post("/", async (req, res) => {
     .select("*")
     .single();
   if (error) return res.status(500).json({ error: "Could not create the site." });
+  auditFromReq(req, "site.create", { targetType: "site", targetId: (data as Site).id, meta: { name: (data as Site).name } }).catch(() => {});
   res.status(201).json({ site: publicSite(data as Site) });
 });
 
@@ -234,6 +236,7 @@ sitesRouter.patch("/:id", async (req, res) => {
     .select("*")
     .single();
   if (error) return res.status(500).json({ error: "Could not update the site." });
+  auditFromReq(req, "site.settings", { targetType: "site", targetId: site.id, meta: { fields: Object.keys(patch).filter((k) => k !== "updated_at") } }).catch(() => {});
   res.json({ site: publicSite(data as Site) });
 });
 
@@ -302,6 +305,7 @@ sitesRouter.post("/:id/crawl", async (req, res) => {
     const { count: storedCount } = await db.from("ghostchat_chunks").select("id", { count: "exact", head: true }).eq("site_id", site.id).eq("source_type", "crawl");
     const stored = storedCount ?? 0;
     const fresh = await loadOwnedSite(req, site.id);
+    auditFromReq(req, "training.crawl", { targetType: "site", targetId: site.id, meta: { mode: outcome.mode, pages: result.pages.length, ...outcome.summary } }).catch(() => {});
     res.json({
       site: fresh ? publicSite(fresh) : null,
       pages: result.pages.length,
@@ -344,6 +348,7 @@ sitesRouter.post("/:id/preview/approve", async (req, res) => {
   try {
     const result = await approvePreview(site, typeof req.body?.previewId === "string" ? req.body.previewId : undefined);
     const fresh = await loadOwnedSite(req, site.id);
+    auditFromReq(req, "training.approve_preview", { targetType: "preview", targetId: result.previewId, meta: { siteId: site.id, chunks: result.chunks } }).catch(() => {});
     res.json({ ok: true, ...result, site: fresh ? publicSite(fresh) : null });
   } catch (err) {
     const status = (err as Error & { status?: number }).status ?? 400;
@@ -358,6 +363,7 @@ sitesRouter.post("/:id/preview/reject", async (req, res) => {
   try {
     const result = await rejectPreview(site, typeof req.body?.previewId === "string" ? req.body.previewId : undefined);
     const fresh = await loadOwnedSite(req, site.id);
+    auditFromReq(req, "training.reject_preview", { targetType: "preview", targetId: result.previewId, meta: { siteId: site.id } }).catch(() => {});
     res.json({ ok: true, ...result, site: fresh ? publicSite(fresh) : null });
   } catch (err) {
     const status = (err as Error & { status?: number }).status ?? 400;
@@ -389,6 +395,7 @@ sitesRouter.post("/:id/staging/publish", async (req, res) => {
   try {
     const result = await publishStagingTraining(site);
     const fresh = await loadOwnedSite(req, site.id);
+    auditFromReq(req, "training.publish_staging", { targetType: "site", targetId: site.id, meta: { published: result.published, chunks: result.chunks } }).catch(() => {});
     res.json({ ok: true, ...result, site: fresh ? publicSite(fresh) : null });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message || "Could not publish unpublished training." });
@@ -402,6 +409,7 @@ sitesRouter.post("/:id/staging/discard", async (req, res) => {
   try {
     const discarded = await discardStagingTraining(site.id);
     const fresh = await loadOwnedSite(req, site.id);
+    auditFromReq(req, "training.discard_staging", { targetType: "site", targetId: site.id, meta: { discarded } }).catch(() => {});
     res.json({ ok: true, discarded, site: fresh ? publicSite(fresh) : null });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message || "Could not discard unpublished training." });
@@ -483,6 +491,7 @@ sitesRouter.post("/:id/documents", upload.array("files", 5), async (req, res) =>
     if (pastedText) await process(pastedTitle, pastedText, "paste");
     if (toStaging) await refreshStagingCount(site.id);
     else await refreshCounts(site.id);
+    auditFromReq(req, "training.upload", { targetType: "site", targetId: site.id, meta: { count: created.length, staging: toStaging } }).catch(() => {});
     res.status(201).json({ documents: created, staging: toStaging });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message || "Could not train on that document." });
@@ -544,6 +553,7 @@ sitesRouter.delete("/:id/documents/:docId", async (req, res) => {
     .eq("site_id", site.id);
   if (error) return res.status(500).json({ error: "Could not delete the document." });
   await refreshCounts(site.id);
+  auditFromReq(req, "training.delete_document", { targetType: "document", targetId: req.params.docId, meta: { siteId: site.id } }).catch(() => {});
   res.json({ ok: true });
 });
 
@@ -640,6 +650,7 @@ sitesRouter.post("/:id/corrections", async (req, res) => {
   }
   try {
     const correction = await saveCorrection(site.id, { question, answer: String(req.body?.answer || ""), logId, id: req.body?.id || null });
+    auditFromReq(req, "training.correction", { targetType: "correction", targetId: correction.id, meta: { siteId: site.id } }).catch(() => {});
     res.status(201).json({ correction });
   } catch (err) {
     res.status((err as Error & { status?: number }).status ?? 500).json({ error: (err as Error).message || "Could not save the correction." });
@@ -676,6 +687,7 @@ sitesRouter.post("/:id/faq-drafts/:did/:action", async (req, res) => {
   try {
     const draft = await setFaqDraftStatus(site, req.params.did, action === "approve" ? "approved" : "rejected");
     if (!draft) return res.status(404).json({ error: "Draft not found." });
+    auditFromReq(req, action === "approve" ? "training.faq_approve" : "training.faq_reject", { targetType: "faq", targetId: req.params.did, meta: { siteId: site.id } }).catch(() => {});
     res.json({ draft });
   } catch {
     res.status(500).json({ error: "Could not update that FAQ draft." });
@@ -695,6 +707,7 @@ sitesRouter.post("/:id/unanswered/:logId/teach", async (req, res) => {
       answer: String(req.body?.answer || ""),
       logId: req.params.logId,
     });
+    auditFromReq(req, "training.teach", { targetType: "correction", targetId: correction.id, meta: { siteId: site.id } }).catch(() => {});
     res.status(201).json({ correction });
   } catch (err) {
     res.status((err as Error & { status?: number }).status ?? 500).json({ error: "Could not save that answer." });
