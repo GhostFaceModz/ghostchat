@@ -499,3 +499,8 @@ body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-ne
 .cluster-list .cluster { display:flex; gap:0.75rem; justify-content:space-between; align-items:flex-start; }
 #log-search { margin: 0 0 0.5rem; }
 #log-search input[type="search"] { flex: 1; min-width: 12rem; }
+
+.coverage-box { margin: 1rem 0; }
+.coverage-cols { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+@media (max-width: 720px) { .coverage-cols { grid-template-columns:1fr; } }
+.coverage-box h5 { margin: 0.5rem 0 0.25rem; font-size: 0.9rem; }

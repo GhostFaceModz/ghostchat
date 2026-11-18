@@ -31,6 +31,7 @@ import { checkInstallHealth } from "../lib/widgetHealth.js";
 import { auditFromReq } from "../lib/audit.js";
 import { addEvalQuestion, deleteEvalQuestion, listEvalQuestions, runEvalSet } from "../lib/evalSet.js";
 import { shopifySnippet } from "../lib/integrations.js";
+import { siteCoverage } from "../lib/coverageMap.js";
 
 export const sitesRouter = Router();
 const upload = multer({
@@ -474,6 +475,16 @@ sitesRouter.post("/:id/staging/discard", async (req, res) => {
     res.json({ ok: true, discarded, site: fresh ? publicSite(fresh) : null });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message || "Could not discard unpublished training." });
+  }
+});
+
+sitesRouter.get("/:id/coverage", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    res.json({ coverage: await siteCoverage(site.id) });
+  } catch {
+    res.status(500).json({ error: "Could not load the coverage map." });
   }
 });
 
