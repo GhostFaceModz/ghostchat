@@ -880,12 +880,14 @@ async function loadEvalSet() {
     const { questions } = await req("/api/sites/" + state.site.id + "/eval");
     if (!questions.length) {
       box.innerHTML = "<p class='muted tiny'>No eval questions yet. Add the phrases a good answer should mention.</p>";
+      loadEvalHistory();
       return;
     }
     box.innerHTML = questions.map((q) => {
       const expect = q.expect ? "<div class='muted tiny'>Expect: " + escapeHtml(q.expect) + "</div>" : "";
       return "<div class='item' data-eval='" + escapeHtml(q.id) + "'><strong>" + escapeHtml(q.question) + "</strong>" + expect + "<button type='button' class='btn tiny ghost' data-eval-del='" + escapeHtml(q.id) + "'>Remove</button></div>";
     }).join("");
+    loadEvalHistory();
     box.querySelectorAll("[data-eval-del]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         await req("/api/sites/" + state.site.id + "/eval/" + btn.getAttribute("data-eval-del"), { method: "DELETE" });
@@ -897,6 +899,48 @@ async function loadEvalSet() {
   }
 }
 
+function evT(key, fallback) {
+  return (window.GhostChatI18n && window.GhostChatI18n.t(key)) || fallback;
+}
+
+function renderEvalDiff(diff) {
+  const box = $("#eval-diff");
+  if (!box) return;
+  if (!diff || diff.previousTotal == null) {
+    box.hidden = true;
+    box.innerHTML = "";
+    return;
+  }
+  const bits = [];
+  if ((diff.better || []).length) bits.push("<span class='better'>" + diff.better.length + " " + evT("eval.better", "better") + "</span>");
+  if ((diff.worse || []).length) bits.push("<span class='worse'>" + diff.worse.length + " " + evT("eval.worse", "worse") + "</span>");
+  if (!bits.length) bits.push(evT("eval.noChange", "no change against the last run"));
+  const names = (diff.better || []).map((q) => escapeHtml(q.question) + " (" + evT("eval.better", "better") + ")")
+    .concat((diff.worse || []).map((q) => escapeHtml(q.question) + " (" + evT("eval.worse", "worse") + ")"));
+  box.hidden = false;
+  box.innerHTML = "<p>" + evT("eval.vsLast", "Vs last run") + " (" + (diff.previousPassed ?? 0) + " of " + diff.previousTotal + " passed): " + bits.join(", ") + "</p>"
+    + (names.length ? "<ul class='tiny'>" + names.map((n) => "<li>" + n + "</li>").join("") + "</ul>" : "");
+}
+
+async function loadEvalHistory() {
+  const box = $("#eval-history");
+  if (!box || !state.site) return;
+  try {
+    const { runs } = await req("/api/sites/" + state.site.id + "/eval/runs");
+    if (!runs || !runs.length) {
+      box.innerHTML = "<p class='muted tiny'>No saved runs yet. Each run is kept so you can see what got better or worse.</p>";
+      return;
+    }
+    box.innerHTML = "<h4>" + evT("eval.history", "Eval history") + "</h4>" + runs.slice(0, 12).map((r) => {
+      const when = r.created_at ? new Date(r.created_at).toLocaleString() : "";
+      const where = r.staging ? "test widget" : "live training";
+      return "<div class='item muted tiny'>" + escapeHtml(when) + " · " + (r.passed || 0) + " of " + (r.total || 0) + " passed · " + where + "</div>";
+    }).join("");
+  } catch {
+    box.innerHTML = "";
+  }
+}
+
 async function runEvalSet(staging) {
   const status = $("#eval-status");
   const box = $("#eval-list");
@@ -904,6 +948,7 @@ async function runEvalSet(staging) {
   try {
     const report = await req("/api/sites/" + state.site.id + "/eval/run", { method: "POST", body: { staging: staging ? "1" : "" } });
     if (status) status.textContent = (report.passed || 0) + " of " + (report.total || 0) + " passed" + (staging ? " on the test widget" : " on live training");
+    renderEvalDiff(report.diff);
     if (box) {
       box.innerHTML = (report.results || []).map((r) => {
         const cls = r.pass ? "item pass" : "item fail";
@@ -913,6 +958,7 @@ async function runEvalSet(staging) {
         return "<div class='" + cls + "'><strong>" + escapeHtml(r.question) + "</strong> · " + (r.pass ? "Pass" : "Fail") + hit + miss + (src ? "<div class='muted tiny'>" + escapeHtml(src) + "</div>" : "") + "</div>";
       }).join("") || "<p class='muted tiny'>No questions to run.</p>";
     }
+    loadEvalHistory();
     toast(status ? status.textContent : "Eval finished");
   } catch (e) {
     if (status) status.textContent = e.message;

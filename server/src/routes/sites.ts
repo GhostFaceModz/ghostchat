@@ -30,7 +30,7 @@ import { importFaqRows, parseFaqCsv } from "../lib/faqImport.js";
 import type { Site, Theme } from "../types.js";
 import { checkInstallHealth } from "../lib/widgetHealth.js";
 import { auditFromReq } from "../lib/audit.js";
-import { addEvalQuestion, deleteEvalQuestion, listEvalQuestions, runEvalSet } from "../lib/evalSet.js";
+import { addEvalQuestion, deleteEvalQuestion, listEvalQuestions, listEvalRuns, runAndStoreEvalSet } from "../lib/evalSet.js";
 import { shopifySnippet } from "../lib/integrations.js";
 import { siteCoverage } from "../lib/coverageMap.js";
 import { listDeletedDocuments, purgeDocument, restoreDocument, softDeleteDocument } from "../lib/recycleBin.js";
@@ -382,13 +382,25 @@ sitesRouter.delete("/:id/eval/:qid", async (req, res) => {
   }
 });
 
+sitesRouter.get("/:id/eval/runs", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const stagingParam = req.query.staging;
+    const staging = stagingParam == null || stagingParam === "" ? undefined : ["1", "true", "on", "yes"].includes(String(stagingParam).toLowerCase());
+    res.json({ runs: await listEvalRuns(site.id, { staging, limit: 20 }) });
+  } catch {
+    res.status(500).json({ error: "Could not load eval history." });
+  }
+});
+
 sitesRouter.post("/:id/eval/run", async (req, res) => {
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   try {
     const staging = ["1", "true", "on", "yes"].includes(String(req.body?.staging || req.query.staging || "").toLowerCase());
-    const report = await runEvalSet(site, { staging });
-    auditFromReq(req, "training.eval_run", { targetType: "site", targetId: site.id, meta: { passed: report.passed, total: report.total, staging } }).catch(() => {});
+    const report = await runAndStoreEvalSet(site, { staging });
+    auditFromReq(req, "training.eval_run", { targetType: "site", targetId: site.id, meta: { passed: report.passed, total: report.total, staging, runId: report.runId } }).catch(() => {});
     res.json(report);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message || "Could not run the eval set." });

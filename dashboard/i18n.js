@@ -10,7 +10,7 @@
       "tab.support": "Mode & support", "tab.tickets": "Tickets", "tab.features": "Smart features",
       "nav.sites": "Your sites", "nav.new": "+ New site", "nav.jump": "Jump to…", "nav.guide": "📘 Setup guide",
       "nav.inbox": "Live inbox", "nav.billing": "Plan & billing", "nav.account": "My account", "nav.signout": "Sign out",
-      "nav.workspace": "Workspace", "nav.language": "Language",
+      "nav.workspace": "Workspace", "nav.language": "Language", "eval.history": "Eval history", "eval.better": "better", "eval.worse": "worse", "eval.vsLast": "Vs last run", "eval.noChange": "no change against the last run",
     },
     es: {
       "tab.setup": "Configuración", "tab.train": "Entrenar", "tab.tools": "Herramientas de búsqueda", "tab.persona": "Personalidad",
@@ -19,7 +19,7 @@
       "tab.support": "Modo y soporte", "tab.tickets": "Tickets", "tab.features": "Funciones inteligentes",
       "nav.sites": "Tus sitios", "nav.new": "+ Nuevo sitio", "nav.jump": "Ir a…", "nav.guide": "📘 Guía de setup",
       "nav.inbox": "Bandeja en vivo", "nav.billing": "Plan y facturación", "nav.account": "Mi cuenta", "nav.signout": "Salir",
-      "nav.workspace": "Espacio de trabajo", "nav.language": "Idioma",
+      "nav.workspace": "Espacio de trabajo", "nav.language": "Idioma", "eval.history": "Historial de pruebas", "eval.better": "mejoraron", "eval.worse": "empeoraron", "eval.vsLast": "Frente a la última prueba", "eval.noChange": "sin cambios respecto a la última prueba",
     },
     fr: {
       "tab.setup": "Configuration", "tab.train": "Entraînement", "tab.tools": "Outils de recherche", "tab.persona": "Persona",
@@ -28,7 +28,7 @@
       "tab.support": "Mode et support", "tab.tickets": "Tickets", "tab.features": "Fonctions intelligentes",
       "nav.sites": "Vos sites", "nav.new": "+ Nouveau site", "nav.jump": "Aller à…", "nav.guide": "📘 Guide",
       "nav.inbox": "Boîte de réception", "nav.billing": "Offre et facturation", "nav.account": "Mon compte", "nav.signout": "Déconnexion",
-      "nav.workspace": "Espace de travail", "nav.language": "Langue",
+      "nav.workspace": "Espace de travail", "nav.language": "Langue", "eval.history": "Historique des tests", "eval.better": "en mieux", "eval.worse": "en moins bien", "eval.vsLast": "Par rapport au dernier test", "eval.noChange": "aucun changement par rapport au dernier test",
     },
     de: {
       "tab.setup": "Einrichtung", "tab.train": "Training", "tab.tools": "Suchtools", "tab.persona": "Persona",
@@ -37,7 +37,7 @@
       "tab.support": "Modus & Support", "tab.tickets": "Tickets", "tab.features": "Intelligente Funktionen",
       "nav.sites": "Ihre Sites", "nav.new": "+ Neue Site", "nav.jump": "Gehe zu…", "nav.guide": "📘 Anleitung",
       "nav.inbox": "Live-Posteingang", "nav.billing": "Tarif & Abrechnung", "nav.account": "Mein Konto", "nav.signout": "Abmelden",
-      "nav.workspace": "Arbeitsbereich", "nav.language": "Sprache",
+      "nav.workspace": "Arbeitsbereich", "nav.language": "Sprache", "eval.history": "Testverlauf", "eval.better": "besser", "eval.worse": "schlechter", "eval.vsLast": "Gegenüber dem letzten Lauf", "eval.noChange": "keine Änderung gegenüber dem letzten Lauf",
     },
     pt: {
       "tab.setup": "Configuração", "tab.train": "Treinar", "tab.tools": "Ferramentas de pesquisa", "tab.persona": "Persona",
@@ -46,7 +46,7 @@
       "tab.support": "Modo e suporte", "tab.tickets": "Tickets", "tab.features": "Funções inteligentes",
       "nav.sites": "Os seus sites", "nav.new": "+ Novo site", "nav.jump": "Ir para…", "nav.guide": "📘 Guia",
       "nav.inbox": "Caixa ao vivo", "nav.billing": "Plano e faturação", "nav.account": "A minha conta", "nav.signout": "Sair",
-      "nav.workspace": "Espaço de trabalho", "nav.language": "Idioma",
+      "nav.workspace": "Espaço de trabalho", "nav.language": "Idioma", "eval.history": "Histórico de testes", "eval.better": "melhoraram", "eval.worse": "pioraram", "eval.vsLast": "Em relação ao último teste", "eval.noChange": "sem alterações em relação ao último teste",
     },
     it: {
       "tab.setup": "Configurazione", "tab.train": "Addestramento", "tab.tools": "Strumenti di ricerca", "tab.persona": "Persona",
@@ -55,7 +55,7 @@
       "tab.support": "Modalità e supporto", "tab.tickets": "Ticket", "tab.features": "Funzioni smart",
       "nav.sites": "I tuoi siti", "nav.new": "+ Nuovo sito", "nav.jump": "Vai a…", "nav.guide": "📘 Guida",
       "nav.inbox": "Inbox live", "nav.billing": "Piano e fatturazione", "nav.account": "Il mio account", "nav.signout": "Esci",
-      "nav.workspace": "Workspace", "nav.language": "Lingua",
+      "nav.workspace": "Workspace", "nav.language": "Lingua", "eval.history": "Cronologia test", "eval.better": "migliorati", "eval.worse": "peggiorati", "eval.vsLast": "Rispetto all’ultimo test", "eval.noChange": "nessun cambiamento rispetto all’ultimo test",
     },
     nl: {
       "tab.setup": "Installatie", "tab.train": "Trainen", "tab.tools": "Zoektools", "tab.persona": "Persona",
@@ -64,7 +64,7 @@
       "tab.support": "Modus en support", "tab.tickets": "Tickets", "tab.features": "Slimme functies",
       "nav.sites": "Jouw sites", "nav.new": "+ Nieuwe site", "nav.jump": "Ga naar…", "nav.guide": "📘 Handleiding",
       "nav.inbox": "Live-inbox", "nav.billing": "Abonnement en factuur", "nav.account": "Mijn account", "nav.signout": "Uitloggen",
-      "nav.workspace": "Werkruimte", "nav.language": "Taal",
+      "nav.workspace": "Werkruimte", "nav.language": "Taal", "eval.history": "Testhistorie", "eval.better": "beter", "eval.worse": "slechter", "eval.vsLast": "Ten opzichte van de vorige run", "eval.noChange": "geen verandering ten opzichte van de vorige run",
     },
     pl: {
       "tab.setup": "Ustawienia", "tab.train": "Szkolenie", "tab.tools": "Narzędzia wyszukiwania", "tab.persona": "Persona",
@@ -73,7 +73,7 @@
       "tab.support": "Tryb i wsparcie", "tab.tickets": "Zgłoszenia", "tab.features": "Inteligentne funkcje",
       "nav.sites": "Twoje witryny", "nav.new": "+ Nowa witryna", "nav.jump": "Przejdź do…", "nav.guide": "📘 Przewodnik",
       "nav.inbox": "Skrzynka na żywo", "nav.billing": "Plan i płatności", "nav.account": "Moje konto", "nav.signout": "Wyloguj",
-      "nav.workspace": "Przestrzeń", "nav.language": "Język",
+      "nav.workspace": "Przestrzeń", "nav.language": "Język", "eval.history": "Historia testów", "eval.better": "lepiej", "eval.worse": "gorzej", "eval.vsLast": "W porównaniu z poprzednim testem", "eval.noChange": "bez zmian względem poprzedniego testu",
     },
   };
 
