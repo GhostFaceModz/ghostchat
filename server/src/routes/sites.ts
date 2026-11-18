@@ -29,6 +29,7 @@ import { listFaqDrafts, setFaqDraftStatus } from "../lib/faqDrafts.js";
 import type { Site, Theme } from "../types.js";
 import { checkInstallHealth } from "../lib/widgetHealth.js";
 import { auditFromReq } from "../lib/audit.js";
+import { shopifySnippet } from "../lib/integrations.js";
 
 export const sitesRouter = Router();
 const upload = multer({
@@ -329,6 +330,15 @@ sitesRouter.post("/:id/crawl", async (req, res) => {
   }
 });
 
+
+sitesRouter.get("/:id/integrations/shopify.liquid", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  const body = shopifySnippet(site.site_key);
+  res.setHeader("content-type", "text/plain; charset=utf-8");
+  res.setHeader("content-disposition", "attachment; filename=\"ghostchat.liquid\"");
+  res.send(body);
+});
 
 sitesRouter.get("/:id/preview", async (req, res) => {
   const site = await loadOwnedSite(req, req.params.id);

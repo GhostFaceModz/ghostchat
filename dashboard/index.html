@@ -302,6 +302,27 @@
             <a class="btn ghost" id="open-demo" href="/demo" target="_blank">Open demo</a>
           </div>
           <div id="install-health" class="install-health"></div>
+          <div class="integrations">
+            <h3>WordPress and Shopify</h3>
+            <p class="muted tiny">Downloadable installers only. These are not listed on the WordPress or Shopify app stores, and we will not submit them unless you ask.</p>
+            <div class="row">
+              <a class="btn" href="/integrations/ghostchat-wordpress.zip" download>Download WordPress plugin</a>
+              <button type="button" class="btn" id="shopify-snippet">Download Shopify snippet</button>
+            </div>
+            <details class="scope"><summary>WordPress install steps</summary>
+              <ol class="tiny muted">
+                <li>In WordPress go to Plugins → Add New → Upload Plugin and choose the zip.</li>
+                <li>Activate GhostChat, then open Settings → GhostChat and paste your site key from this page.</li>
+              </ol>
+            </details>
+            <details class="scope"><summary>Shopify install steps</summary>
+              <ol class="tiny muted">
+                <li>Online Store → Themes → Edit code → Snippets → Add a new snippet named <code>ghostchat</code>, and paste the downloaded file.</li>
+                <li>In <code>layout/theme.liquid</code>, just before <code>&lt;/body&gt;</code>, add <code>{% render 'ghostchat' %}</code>.</li>
+                <li>The downloaded snippet already includes this site's key. If you use the generic file, replace <code>YOUR_SITE_KEY</code>.</li>
+              </ol>
+            </details>
+          </div>
           <form id="site-basics" class="stack">
             <h3>Site details</h3>
             <label>Display name <input name="name" required /></label>
