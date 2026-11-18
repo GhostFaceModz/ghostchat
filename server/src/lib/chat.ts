@@ -17,6 +17,7 @@ import { languageRule } from "./lang.js";
 import { modePlaybook, botMode, supportSettings, withinSupportHours, detectAnger } from "./modes.js";
 import { indexPages } from "./indexer.js";
 import type { CrawlScope } from "./crawl.js";
+import { rewriteQuery, type HistoryTurn } from "./queryRewrite.js";
 
 /** "I'm not sure" in the main languages (the bot replies in the visitor's language). */
 export const UNSURE_START = /^(i['’]m not sure|i am not sure|no estoy seguro|je ne suis pas s[uû]r|ich bin mir nicht sicher|n[aã]o tenho certeza|non sono sicur|ik weet het niet zeker|nie jestem pew|emin değilim)/i;
@@ -119,7 +120,7 @@ export type PromptContext = { lang?: string | null; memory?: string };
 export function buildSystemPrompt(site: Site, chunks: RetrievedChunk[], ctx: PromptContext = {}): string {
   const context = chunks
     .map((c, i) => {
-      const label = c.title || c.url || `Source ${i + 1}`;
+      const label = [c.title, c.heading && c.heading !== c.title ? c.heading : ""].filter(Boolean).join(" — ") || c.url || `Source ${i + 1}`;
       const url = c.url ? ` (${c.url})` : "";
       return `[#${i + 1} ${label}${url}]\n${sanitizeContext(c.content)}`;
     })
@@ -141,6 +142,7 @@ ${answerMode(site) === "strict" ? `- Answer ONLY using the CONTEXT below. Do not
 - Only if the CONTEXT has nothing relevant to the question, reply with exactly this sentence first: "I'm not sure — I couldn't find that on this site."` : `- Facts about ${site.name} itself (its features, prices, plans, policies, accounts, availability, contact details, how things work there) must come from the CONTEXT. If the CONTEXT covers it even partly, answer with what it says.
 - If the visitor asks about one of those site-specific facts and the CONTEXT doesn't cover it, reply with exactly this sentence first: "I'm not sure — I couldn't find that on this site." Never guess or make such facts up.
 - Everything else you can answer from your own general knowledge, warmly and briefly: greetings and small talk, questions about you, general knowledge, and recommendations or explanations (e.g. suggesting films, books or ideas, explaining a term). Where it fits, relate the answer back to ${site.name}, but don't claim ${site.name} offers something unless the CONTEXT says so.
+- When that reply is general knowledge and not grounded in the CONTEXT, start with exactly this line: "General knowledge (not from this site):" then a blank line, then the answer. Never use that label for greetings, thanks, or answers taken from the CONTEXT.
 - Never start a reply with "I'm not sure" unless it's a site-specific fact missing from the CONTEXT.`}
 - ${identityRule(site)}${site.multilingual !== false ? "\n" + languageRule(ctx.lang) : ""}
 - Never invent policies, prices, features, or contact details that are not in the context.
@@ -157,8 +159,21 @@ ${context || "(no relevant context was retrieved)"}
 """`;
 }
 
+export const GENERAL_KNOWLEDGE_LABEL = "General knowledge (not from this site):";
+
+/** Prefix helpful-mode answers that are not grounded in the site, if the model forgot the label. */
+export function labelGeneralKnowledge(site: Site, answer: string, chunks: RetrievedChunk[], unsure: boolean): string {
+  const text = (answer || "").trim();
+  if (!text || unsure || answerMode(site) !== "helpful") return text;
+  if (/^general knowledge\b/i.test(text)) return text;
+  // Short greetings / thanks don't need a disclaimer.
+  if (text.length < 80 && /^(hi|hello|hey|thanks|thank you|hiya|good (morning|afternoon|evening))\b/i.test(text)) return text;
+  if (citesContext(text, chunks)) return text;
+  return `${GENERAL_KNOWLEDGE_LABEL}\n\n${text}`;
+}
+
 /** Sources are shown only when the reply actually draws on the retrieved pages (not for "hi" or general chat). */
-function citesContext(answer: string, chunks: RetrievedChunk[]): boolean {
+export function citesContext(answer: string, chunks: RetrievedChunk[]): boolean {
   if (!chunks.length) return false;
   const words = (t: string) => new Set((t.toLowerCase().match(/[a-z0-9]{5,}/g) || []));
   const a = words(answer);
@@ -212,16 +227,39 @@ export async function wantsHandoff(site: Site, sessionId: string, message: strin
   }
 }
 
-export async function retrieveChunks(siteId: string, question: string): Promise<RetrievedChunk[]> {
-  const [embedding] = await embedTexts([question], "query");
+export async function loadSessionHistory(siteId: string, sessionId: string, limit = 8): Promise<HistoryTurn[]> {
+  const { data, error } = await getDb()
+    .from("ghostchat_logs")
+    .select("role, message, created_at")
+    .eq("site_id", siteId)
+    .eq("session_id", sessionId)
+    .in("role", ["user", "assistant"])
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) return [];
+  return (data || []).slice().reverse().map((r: { role: string; message: string }) => ({ role: r.role, content: r.message }));
+}
+
+export async function retrieveChunks(siteId: string, question: string, history: HistoryTurn[] = []): Promise<RetrievedChunk[]> {
+  const query = rewriteQuery(question, history);
+  const [embedding] = await embedTexts([query], "query");
   if (!embedding?.length) return [];
+  const hybrid = await getDb().rpc("ghostchat_hybrid_chunks", {
+    query_embedding: embedding,
+    query_text: query,
+    match_site_id: siteId,
+    match_count: 6,
+    match_threshold: similarityThreshold(),
+  });
   const [{ data, error }, corrections] = await Promise.all([
-    getDb().rpc("ghostchat_match_chunks", {
-      query_embedding: embedding,
-      match_site_id: siteId,
-      match_count: 6,
-      match_threshold: similarityThreshold(),
-    }),
+    hybrid.error
+      ? getDb().rpc("ghostchat_match_chunks", {
+          query_embedding: embedding,
+          match_site_id: siteId,
+          match_count: 6,
+          match_threshold: similarityThreshold(),
+        })
+      : Promise.resolve(hybrid),
     matchCorrections(siteId, embedding).catch(() => []),
   ]);
   if (error) throw error;
@@ -373,7 +411,8 @@ export async function answerQuestion(opts: {
     return { answer: tool.answer, unsure: false, sources: [], suggestions: tool.suggestions.slice(0, suggestionLimit(site)), results: tool.results, cards: [], userLogId, assistantLogId };
   }
 
-  let chunks = await retrieveChunks(site.id, message);
+  const history = await loadSessionHistory(site.id, sessionId).catch(() => [] as HistoryTurn[]);
+  let chunks = await retrieveChunks(site.id, message, history);
   let lookup: RetrievedChunk[] | null = null;
   let lookedUp = false;
   if (needsLookup(site, chunks)) { lookedUp = true; lookup = await runLookup(site, sessionId, message); if (lookup) chunks = [...lookup, ...chunks]; }
@@ -420,7 +459,7 @@ export async function answerQuestion(opts: {
     return { answer: AI_FALLBACK_REPLY, unsure: false, sources: [], suggestions: [], cards: [], userLogId, assistantLogId };
   }
   const unsure = isUnsureAnswer(answer);
-  const finalAnswer = answer.trim() || UNSURE_REPLY;
+  const finalAnswer = labelGeneralKnowledge(site, answer.trim() || UNSURE_REPLY, chunks, unsure);
   const sources = withLookupSource(site, unsure || !citesContext(finalAnswer, chunks) ? [] : pickSources(site, chunks, finalAnswer), lookup, unsure);
   const suggestions = await maybeSuggestions(site, message, finalAnswer, unsure);
   const assistantLogId = await insertLog({
@@ -492,7 +531,8 @@ export async function streamAnswer(opts: {
     return finish({ answer: tool.answer, unsure: false, sources: [], suggestions: tool.suggestions.slice(0, suggestionLimit(site)), results: tool.results, cards: [] });
   }
 
-  let chunks = await retrieveChunks(site.id, message);
+  const history = await loadSessionHistory(site.id, sessionId).catch(() => [] as HistoryTurn[]);
+  let chunks = await retrieveChunks(site.id, message, history);
   let lookup: RetrievedChunk[] | null = null;
   let lookedUp = false;
   if (needsLookup(site, chunks)) { lookedUp = true; lookup = await runLookup(site, sessionId, message, onEvent); if (lookup) chunks = [...lookup, ...chunks]; }
@@ -539,7 +579,12 @@ export async function streamAnswer(opts: {
     }
   }
   const unsure = isUnsureAnswer(answer);
-  const finalAnswer = answer.trim() || UNSURE_REPLY;
+  const streamed = answer.trim() || UNSURE_REPLY;
+  const finalAnswer = labelGeneralKnowledge(site, streamed, chunks, unsure);
+  if (finalAnswer !== streamed) {
+    onEvent({ type: "reset" });
+    onEvent({ type: "token", text: finalAnswer });
+  }
   const sources = withLookupSource(site, unsure || !citesContext(finalAnswer, chunks) ? [] : pickSources(site, chunks, finalAnswer), lookup, unsure);
   const suggestions = await maybeSuggestions(site, message, finalAnswer, unsure);
   return finish({ answer: finalAnswer, unsure, sources, suggestions });

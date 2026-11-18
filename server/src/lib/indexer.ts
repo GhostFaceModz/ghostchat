@@ -19,7 +19,7 @@ export async function storeChunks(opts: {
   site: Pick<Site, "id">;
   documentId: string;
   sourceType: string;
-  chunks: Array<{ title: string; url: string | null; content: string; tokenCount: number }>;
+  chunks: Array<{ title: string; url: string | null; heading?: string | null; content: string; tokenCount: number }>;
 }): Promise<number> {
   if (!opts.chunks.length) return 0;
   const vectors = await embedTexts(opts.chunks.map((c) => c.content));
@@ -28,6 +28,7 @@ export async function storeChunks(opts: {
     document_id: opts.documentId,
     url: chunk.url,
     title: chunk.title,
+    heading: chunk.heading || null,
     content: chunk.content,
     token_count: chunk.tokenCount,
     source_type: opts.sourceType,
@@ -51,7 +52,11 @@ export async function refreshCounts(siteId: string): Promise<void> {
 }
 
 export function pageChunks(page: CrawledPage, scope?: CrawlScope): TextChunk[] {
-  return scope?.page_chunks ? [pageChunk(page)] : chunkText(page.text, { title: page.title, url: page.url });
+  if (scope?.page_chunks) return [pageChunk(page)];
+  if (page.sections?.length) {
+    return page.sections.flatMap((s) => chunkText(s.text, { title: page.title, url: page.url, heading: s.heading }));
+  }
+  return chunkText(page.text, { title: page.title, url: page.url });
 }
 
 type ExistingDoc = { id: string; source_url: string | null; content_hash: string | null; source_type: string };

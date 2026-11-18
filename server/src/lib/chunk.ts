@@ -1,6 +1,7 @@
 export type TextChunk = {
   title: string;
   url: string | null;
+  heading?: string | null;
   content: string;
   tokenCount: number;
 };
@@ -22,7 +23,7 @@ export function cleanText(input: string): string {
     .trim();
 }
 
-export function chunkText(text: string, meta: { title: string; url?: string | null }): TextChunk[] {
+export function chunkText(text: string, meta: { title: string; url?: string | null; heading?: string | null }): TextChunk[] {
   const cleaned = cleanText(text);
   if (!cleaned) return [];
   const paragraphs = cleaned.split(/\n{2,}/);
@@ -35,11 +36,15 @@ export function chunkText(text: string, meta: { title: string; url?: string | nu
       current = "";
       return;
     }
+    const heading = (meta.heading || "").trim();
+    const labelled = [meta.title, heading && heading !== meta.title ? heading : ""].filter(Boolean).join(" — ");
+    const body = labelled && !content.startsWith(meta.title) ? `${labelled}\n${content}` : content;
     chunks.push({
       title: meta.title,
       url: meta.url ?? null,
-      content,
-      tokenCount: approxTokens(content),
+      heading: heading || null,
+      content: body,
+      tokenCount: approxTokens(body),
     });
     current = content.slice(-OVERLAP);
   };

@@ -97,6 +97,7 @@ export type RetrievedChunk = {
   site_id: string;
   url: string | null;
   title: string | null;
+  heading?: string | null;
   content: string;
   similarity: number;
 };

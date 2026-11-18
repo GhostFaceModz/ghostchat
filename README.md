@@ -2,7 +2,7 @@
 
 A premium, embeddable AI chatbot any website owner can add with one script tag. It answers questions about **their own site** using retrieval over content crawled or uploaded by the owner — and says “I’m not sure” instead of making things up.
 
-GhostChat is a GhostApps project. The default chat model is **DeepSeek V4 Flash** via OpenRouter. Embeddings default to a **local, key-free 384-d hash embedder** that fits Render's free RAM (a neural model such as MiniLM is too large for the free instance). Site owners can switch to a paid 384-d embeddings API. Stage B may add a free Supabase `gte-small` path when it is safe to enable.
+GhostChat is a GhostApps project. The default chat model is **DeepSeek V4 Flash** via OpenRouter (with a walk down `:free` models if paid credits run out). Embeddings default to free Supabase **gte-small** at 384-d via the `ghostchat-embed` Edge Function, and fall back to a local `hash/feature-384` embedder if that function is unavailable. A neural MiniLM model is too large for Render's free RAM and is not used.
 
 ## One-line embed
 
@@ -29,11 +29,11 @@ The widget also picks up theme, greeting, starter questions, branding, booking, 
 
 ### Dashboard
 - Email + password, **Discord**, and **Google** sign-in
-- Train from a site crawl (including `sitemap.xml`), PDFs, `.txt` / `.md` / `.html` / `.csv`, pasted FAQs, and Notion pages
+- Train from a site crawl (`sitemap.xml` plus internal links, per-plan page caps), linked PDFs and docs (`.docx`, `.rtf`, `.txt`, `.md`), structured product feeds (schema.org, Shopify `/products.json`, WooCommerce Store API), pasted FAQs, and Notion pages. JavaScript-rendered pages are skipped on the free Render instance (Chromium does not fit 512MB RAM; a hosted browser would be about $25/month).
 - Persona, templates, theme, voice toggle
 - Per-site **model picker** (only providers with a key are enabled)
 - Booking URL and conversion cards
-- Transcripts, analytics (full analytics on Pro+), leads with transcripts
+- Transcripts, analytics (full analytics on Pro+), unanswered-question teach loop, auto FAQ drafts for approval, leads with transcripts
 - Shareable chat link + QR
 - Plan & billing (Whop checkout links; the webhook URL is below under *Whop webhook*)
 - Sign-in at `/login`, sign-up at `/signup`; Discord/Google buttons show a "Soon" state until their env vars are set
@@ -44,7 +44,7 @@ The widget also picks up theme, greeting, starter questions, branding, booking, 
 
 ### Backend
 - Multi-model chat over an OpenAI-compatible adapter: OpenRouter (default: `deepseek/deepseek-v4-flash`), plus Grok, OpenAI, and Gemini when their keys exist. The picker also lists OpenRouter `:free` models for a $0 chat option. DeepSeek V4 Flash is extremely cheap, but not strictly free — OpenRouter has no truly-free DeepSeek variant.
-- Retrieval over `pgvector` (384-d). Default embeddings: local `hash/feature-384` (no API key, no cost, small enough for Render free). OpenRouter does not provide embeddings.
+- Hybrid retrieval over `pgvector` (384-d semantic + keyword/title/heading search), with query rewriting from chat history. Default embeddings: free `gte-small` (384-d) via `ghostchat-embed`, falling back to local `hash/feature-384`. OpenRouter does not provide embeddings. Helpful mode may add a clearly labelled general-knowledge answer; Strict mode stays on-site only.
 - Prompt-injection guards, rate limits, SSRF-safe crawler, PII-redacted logs
 - Per-site isolation and Whop-driven Free / Pro / Business limits
 

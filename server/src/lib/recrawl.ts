@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { getDb } from "./supabase.js";
 import { crawlSite, type CrawlScope } from "./crawl.js";
 import { indexPages } from "./indexer.js";
+import { faqCandidatesFromPages, saveFaqDrafts } from "./faqDrafts.js";
 import type { Site } from "../types.js";
 
 export const SCHEDULES = ["off", "daily", "weekly"] as const;
@@ -33,6 +34,7 @@ export async function recrawlSite(site: Site) {
     const result = await crawlSite(site.url, site.plan, scope);
     if (!result.pages.length) throw new Error("No usable text was found on the site.");
     const summary = await indexPages(site, result.pages, { sourceType: "crawl", removeMissing: true, scope });
+    await saveFaqDrafts(site.id, faqCandidatesFromPages(result.pages)).catch((err) => console.error("faq drafts:", (err as Error).message));
     await db.from("ghostchat_sites").update({ crawl_status: "ready", crawl_error: null, last_crawled_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", site.id);
     return { siteId: site.id, ok: true, ...summary };
   } catch (err) {

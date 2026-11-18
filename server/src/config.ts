@@ -42,8 +42,8 @@ export const config = {
   sessionSecret:
     process.env.SESSION_SECRET ??
     (process.env.NODE_ENV === "production" ? "" : "dev-only-change-me-not-for-production"),
-  crawlMaxPages: num("CRAWL_MAX_PAGES", 40),
-  crawlMaxDepth: num("CRAWL_MAX_DEPTH", 3),
+  crawlMaxPages: num("CRAWL_MAX_PAGES", 400),
+  crawlMaxDepth: num("CRAWL_MAX_DEPTH", 8),
   freeMonthlyMessages: num("FREE_MONTHLY_MESSAGES", 200),
   proMonthlyMessages: num("PRO_MONTHLY_MESSAGES", 5000),
   businessMonthlyMessages: num("BUSINESS_MONTHLY_MESSAGES", 25000),

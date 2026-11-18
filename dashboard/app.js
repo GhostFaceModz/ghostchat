@@ -617,7 +617,14 @@ async function loadAnalytics() {
     <div class="chart-card"><h3>Questions per day <span class="muted tiny">last 14 days</span></h3>${barChart(days.map((d) => d.count), days.map((d) => d.date), { label: "Questions per day", short: (l) => l.slice(8) })}</div>
     <div class="chart-card"><h3>Busiest hours <span class="muted tiny">${escapeHtml(a.timeZone || "")}${a.peakHour != null ? " · peak " + String(a.peakHour).padStart(2, "0") + ":00" : ""}</span></h3>${barChart(hours, hourLabels, { label: "Questions by hour", dense: true, highlight: a.peakHour, short: (l, i) => (i % 3 === 0 ? String(i) : "") })}</div>
     <div><h3>Top questions</h3><ul class="hbars">${q}</ul></div>
-    <div><h3>Unanswered &amp; low-confidence answers</h3><p class="muted tiny">Fix an answer once and the bot uses your version next time someone asks something similar.</p><ul class="lowc-list">${low}</ul>${(a.lowConfidence || []).length > 6 ? `<button type="button" class="btn ghost small" id="lowc-all">Show all ${a.lowConfidence.length}</button>` : ""}</div>
+    <div><h3>Unanswered questions</h3><p class="muted tiny">Type the right answer once and it becomes a source the bot will use next time. Low-confidence and 👎 replies are listed here too.</p><ul class="lowc-list">${low}</ul>${(a.lowConfidence || []).length > 6 ? `<button type="button" class="btn ghost small" id="lowc-all">Show all ${a.lowConfidence.length}</button>` : ""}
+      <form id="teach-form" class="stack tight" style="margin-top:1rem">
+        <label>Teach an answer <input name="question" required placeholder="Visitor question"></label>
+        <label>Your answer <textarea name="answer" required rows="3" placeholder="What the bot should say"></textarea></label>
+        <button type="submit" class="btn small">Save as a source</button>
+      </form>
+    </div>
+    <div><h3>FAQ drafts</h3><p class="muted tiny">Suggested from your site after a crawl. Approve one to add it as a source.</p><div id="faq-drafts" class="list"><p class="muted tiny">Loading…</p></div></div>
     <div><h3>Pages driving questions</h3><ul>${pages}</ul></div>
     ${a.languages && a.languages.length ? "<div><h3>Visitor languages</h3><p class='muted'>" + a.languages.map((l) => escapeHtml(l.lang) + " ×" + l.count).join(" · ") + "</p></div>" : ""}
     ${a.upgradeHint ? "<p class='muted tiny'>" + escapeHtml(a.upgradeHint) + "</p>" : ""}
@@ -626,6 +633,8 @@ async function loadAnalytics() {
   const all = $("#lowc-all");
   if (all) all.addEventListener("click", () => { box.querySelectorAll(".lowc-more").forEach((li) => li.classList.remove("lowc-more")); all.remove(); });
   loadCorrections();
+  loadFaqDrafts();
+  bindTeachForm();
 }
 
 // ---- "Fix this answer" ----
@@ -653,7 +662,7 @@ $("#fix-form")?.addEventListener("submit", async (ev) => {
     await req("/api/sites/" + state.site.id + "/corrections", { method: "POST", body: { logId: f.logId.value || null, id: f.cid.value || null, question: f.question.value, answer: f.answer.value } });
     $("#fix-dialog").close();
     toast("Saved. The bot will use your answer from now on.");
-    if (state.tab === "analytics") loadCorrections();
+    if (state.tab === "analytics") { loadCorrections(); loadFaqDrafts(); }
   } catch (e) { $("#fix-error").textContent = e.message; $("#fix-error").hidden = false; }
 });
 async function loadCorrections() {
@@ -673,6 +682,48 @@ async function loadCorrections() {
     del.addEventListener("click", async () => { await req("/api/sites/" + state.site.id + "/corrections/" + c.id, { method: "DELETE" }); loadCorrections(); });
     row.append(edit, del); item.appendChild(row); box.appendChild(item);
   });
+}
+
+
+function bindTeachForm() {
+  const f = $("#teach-form");
+  if (!f || f.dataset.bound) return;
+  f.dataset.bound = "1";
+  f.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try {
+      await req("/api/sites/" + state.site.id + "/corrections", { method: "POST", body: { question: f.question.value, answer: f.answer.value } });
+      f.reset();
+      toast("Saved. That answer is now a source.");
+      loadCorrections();
+    } catch (e) { toast(e.message || "Could not save that answer."); }
+  });
+}
+async function loadFaqDrafts() {
+  const box = $("#faq-drafts");
+  if (!box || !state.site) return;
+  const { drafts } = await req("/api/sites/" + state.site.id + "/faq-drafts").catch(() => ({ drafts: [] }));
+  const pending = (drafts || []).filter((d) => d.status === "pending");
+  const others = (drafts || []).filter((d) => d.status !== "pending");
+  box.innerHTML = pending.length || others.length ? "" : "<p class='muted tiny'>No drafts yet. Re-crawl the site to generate some from headings and FAQ pages.</p>";
+  const add = (d, actions) => {
+    const item = document.createElement("div");
+    item.className = "item";
+    item.innerHTML = "<div><strong>" + escapeHtml(d.question) + "</strong><div class='muted'>" + escapeHtml(String(d.answer || "").slice(0, 240)) + "</div><div class='muted tiny'>" + escapeHtml(d.status) + (d.source_url ? " · " + escapeHtml(d.source_url) : "") + "</div></div>";
+    if (actions) item.appendChild(actions);
+    box.appendChild(item);
+  };
+  pending.forEach((d) => {
+    const row = document.createElement("span");
+    row.className = "row tight";
+    const ok = document.createElement("button"); ok.className = "btn tiny"; ok.textContent = "Approve";
+    ok.addEventListener("click", async () => { await req("/api/sites/" + state.site.id + "/faq-drafts/" + d.id + "/approve", { method: "POST" }); toast("Approved and added as a source."); loadFaqDrafts(); });
+    const no = document.createElement("button"); no.className = "btn tiny ghost"; no.textContent = "Reject";
+    no.addEventListener("click", async () => { await req("/api/sites/" + state.site.id + "/faq-drafts/" + d.id + "/reject", { method: "POST" }); loadFaqDrafts(); });
+    row.append(ok, no);
+    add(d, row);
+  });
+  others.slice(0, 8).forEach((d) => add(d));
 }
 
 async function loadLeads() {
