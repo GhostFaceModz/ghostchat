@@ -382,6 +382,7 @@
     ".gc-csat textarea:focus { outline: 2px solid var(--gc-primary); outline-offset: 1px; }",
     ".gc-csat-send { margin-top: 6px; appearance: none; border: 0; border-radius: 10px; background: var(--gc-primary); color: #fff; font: 650 12.5px/1 'Instrument Sans', 'Segoe UI', system-ui, sans-serif; padding: 8px 12px; cursor: pointer; }",
     "@media (max-width: 480px), (max-height: 640px) { .gc-connect { top: 6px; padding: 10px 10px 10px; } .gc-connect-copy strong { font-size: 13px; } .gc-connect-actions button { flex: 1 1 auto; } }",
+    ".gc-root[data-staging='true'] .gc-sub { color: var(--gc-accent, #36c8ff); font-weight: 600; }",
     "@media (prefers-reduced-motion: reduce) { .gc-root *, .gc-root *::before, .gc-root *::after { animation: none !important; transition-duration: .01ms !important; } .gc-launcher::after { opacity: .45; } }"
   ].join("\n");
 
@@ -1585,6 +1586,10 @@
     if (cfg.bookingUrl) state.bookingUrl = cfg.bookingUrl;
     if (cfg.bookingProvider) state.bookingProvider = cfg.bookingProvider;
     state.openSiteLinks = cfg.openSiteLinks === "new_tab" ? "new_tab" : "same_tab";
+    if (cfg.staging) {
+      root.setAttribute("data-staging", "true");
+      sub.textContent = "Test widget — unpublished training";
+    }
     if (Array.isArray(cfg.siteHosts) && cfg.siteHosts.length) {
       state.siteHosts = cfg.siteHosts.map(function (h) { return String(h || "").toLowerCase(); }).filter(Boolean);
     } else if (cfg.siteUrl) {

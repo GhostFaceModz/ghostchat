@@ -8,6 +8,8 @@ import { resolveChatModel } from "./models.js";
 import { redactPii } from "./pii.js";
 import { incrementMessages } from "./usage.js";
 import { lookupCachedAnswer, storeCachedAnswer } from "./answerCache.js";
+import { matchStagingChunks, mergeRetrieval } from "./staging.js";
+import { hideUrlsFromDiff, pendingPreview } from "./preview.js";
 import { looksHardQuestion } from "./autoRoute.js";
 import { modelCreditCost } from "./credits.js";
 import { selectCards } from "./cards.js";
@@ -244,7 +246,7 @@ export async function loadSessionHistory(siteId: string, sessionId: string, limi
   return (data || []).slice().reverse().map((r: { role: string; message: string }) => ({ role: r.role, content: r.message }));
 }
 
-export async function retrieveChunks(siteId: string, question: string, history: HistoryTurn[] = []): Promise<RetrievedChunk[]> {
+export async function retrieveChunks(siteId: string, question: string, history: HistoryTurn[] = [], opts: { staging?: boolean } = {}): Promise<RetrievedChunk[]> {
   const query = rewriteQuery(question, history);
   const [embedding] = await embedTexts([query], "query");
   if (!embedding?.length) return [];
@@ -267,8 +269,17 @@ export async function retrieveChunks(siteId: string, question: string, history: 
     matchCorrections(siteId, embedding).catch(() => []),
   ]);
   if (error) throw error;
+  let retrieved = (data ?? []) as RetrievedChunk[];
+  if (opts.staging) {
+    const [staged, pending] = await Promise.all([
+      matchStagingChunks(siteId, embedding, query).catch(() => [] as RetrievedChunk[]),
+      pendingPreview(siteId).catch(() => null),
+    ]);
+    const hide = hideUrlsFromDiff(pending?.diff as { updated?: { url: string }[]; removed?: { url: string }[] } | null);
+    retrieved = mergeRetrieval(retrieved, staged, hide);
+  }
   // Owner corrections ("Fix this answer") always come first.
-  return [...correctionChunks(siteId, corrections), ...((data ?? []) as RetrievedChunk[])];
+  return [...correctionChunks(siteId, corrections), ...retrieved];
 }
 
 async function insertLog(row: {
@@ -416,7 +427,7 @@ export async function answerQuestion(opts: {
   }
 
   const history = await loadSessionHistory(site.id, sessionId).catch(() => [] as HistoryTurn[]);
-  const cached = await lookupCachedAnswer(site.id, message, history).catch(() => null);
+  const cached = site.staging ? null : await lookupCachedAnswer(site.id, message, history).catch(() => null);
   if (cached) {
     const assistantLogId = await insertLog({
       site_id: site.id, session_id: sessionId, role: "assistant",
@@ -430,7 +441,7 @@ export async function answerQuestion(opts: {
       userLogId, assistantLogId, cached: true,
     };
   }
-  let chunks = await retrieveChunks(site.id, message, history);
+  let chunks = await retrieveChunks(site.id, message, history, { staging: Boolean(site.staging) });
   let lookup: RetrievedChunk[] | null = null;
   let lookedUp = false;
   if (needsLookup(site, chunks)) { lookedUp = true; lookup = await runLookup(site, sessionId, message); if (lookup) chunks = [...lookup, ...chunks]; }
@@ -491,7 +502,7 @@ export async function answerQuestion(opts: {
     was_unsure: unsure,
   });
   await incrementMessages(site.id, usage.credits || 1);
-  await storeCachedAnswer(site.id, message, { answer: finalAnswer, sources, suggestions }, { unsure, history }).catch(() => {});
+  if (!site.staging) await storeCachedAnswer(site.id, message, { answer: finalAnswer, sources, suggestions }, { unsure, history }).catch(() => {});
   return { answer: finalAnswer, unsure, sources, suggestions, cards: await pickCards(site, sessionId, message, finalAnswer, unsure), userLogId, assistantLogId };
 }
 
@@ -554,7 +565,7 @@ export async function streamAnswer(opts: {
   }
 
   const history = await loadSessionHistory(site.id, sessionId).catch(() => [] as HistoryTurn[]);
-  const cached = await lookupCachedAnswer(site.id, message, history).catch(() => null);
+  const cached = site.staging ? null : await lookupCachedAnswer(site.id, message, history).catch(() => null);
   if (cached) {
     onEvent({ type: "token", text: cached.answer });
     return finish({
@@ -562,7 +573,7 @@ export async function streamAnswer(opts: {
       suggestions: cached.suggestions.slice(0, suggestionLimit(site)),
     }, { credits: 1 });
   }
-  let chunks = await retrieveChunks(site.id, message, history);
+  let chunks = await retrieveChunks(site.id, message, history, { staging: Boolean(site.staging) });
   let lookup: RetrievedChunk[] | null = null;
   let lookedUp = false;
   if (needsLookup(site, chunks)) { lookedUp = true; lookup = await runLookup(site, sessionId, message, onEvent); if (lookup) chunks = [...lookup, ...chunks]; }
@@ -618,6 +629,6 @@ export async function streamAnswer(opts: {
   }
   const sources = withLookupSource(site, unsure || !citesContext(finalAnswer, chunks) ? [] : pickSources(site, chunks, finalAnswer), lookup, unsure);
   const suggestions = await maybeSuggestions(site, message, finalAnswer, unsure);
-  await storeCachedAnswer(site.id, message, { answer: finalAnswer, sources, suggestions }, { unsure, history }).catch(() => {});
+  if (!site.staging) await storeCachedAnswer(site.id, message, { answer: finalAnswer, sources, suggestions }, { unsure, history }).catch(() => {});
   return finish({ answer: finalAnswer, unsure, sources, suggestions }, { credits: usage.credits || 1 });
 }

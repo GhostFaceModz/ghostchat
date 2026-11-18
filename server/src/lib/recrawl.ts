@@ -2,8 +2,7 @@
 import crypto from "node:crypto";
 import { getDb } from "./supabase.js";
 import { crawlSite, type CrawlScope } from "./crawl.js";
-import { indexPages } from "./indexer.js";
-import { faqCandidatesFromPages, saveFaqDrafts } from "./faqDrafts.js";
+import { ingestCrawl } from "./preview.js";
 import type { Site } from "../types.js";
 
 export const SCHEDULES = ["off", "daily", "weekly"] as const;
@@ -33,10 +32,8 @@ export async function recrawlSite(site: Site) {
     const scope = (site.crawl_scope as CrawlScope | undefined) || undefined;
     const result = await crawlSite(site.url, site.plan, scope);
     if (!result.pages.length) throw new Error("No usable text was found on the site.");
-    const summary = await indexPages(site, result.pages, { sourceType: "crawl", removeMissing: true, scope });
-    await saveFaqDrafts(site.id, faqCandidatesFromPages(result.pages)).catch((err) => console.error("faq drafts:", (err as Error).message));
-    await db.from("ghostchat_sites").update({ crawl_status: "ready", crawl_error: null, last_crawled_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", site.id);
-    return { siteId: site.id, ok: true, ...summary };
+    const outcome = await ingestCrawl(site, result.pages, { trigger: "scheduled", scope });
+    return { siteId: site.id, ok: true, mode: outcome.mode, ...outcome.summary, preview: outcome.preview ? { id: outcome.preview.id, status: outcome.preview.status } : null };
   } catch (err) {
     await db.from("ghostchat_sites").update({ crawl_status: "error", crawl_error: `Auto re-crawl: ${(err as Error).message}`, last_crawled_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", site.id);
     return { siteId: site.id, ok: false, error: (err as Error).message };

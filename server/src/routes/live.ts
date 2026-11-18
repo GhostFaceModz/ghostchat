@@ -15,6 +15,7 @@ import {
 } from "../lib/relay.js";
 import { applyTimeout, handleClaimComponent, supportName, GCL } from "../lib/discordClaim.js";
 import { conversationForAgentChannel, deliverAgentReply } from "../lib/discordInbox.js";
+import { loadSiteByPublicKey } from "../lib/staging.js";
 import type { Site } from "../types.js";
 
 const ownerOf = (req: Request) => {
@@ -27,9 +28,7 @@ const LINK_TTL_MS = 30 * 60_000;
 const tgNameWait = new Map<string, { convId: string; action: string }>();
 
 async function siteByKey(key: string): Promise<Site | null> {
-  if (!String(key).startsWith("gc_")) return null;
-  const { data } = await getDb().from("ghostchat_sites").select("*").eq("site_key", key).maybeSingle();
-  return (data as Site) ?? null;
+  return loadSiteByPublicKey(key);
 }
 
 // ---------------------------------------------------------------- widget (public)

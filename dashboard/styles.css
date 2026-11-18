@@ -464,3 +464,11 @@ body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-ne
 .install-health.ok { background: color-mix(in srgb, #16a34a 14%, transparent); }
 .install-health.warn { background: color-mix(in srgb, #dc2626 12%, transparent); }
 .install-health p { margin: 0 0 8px; }
+
+.preview-box, .staging-box { margin: 14px 0; padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, currentColor 6%, transparent); }
+.preview-box.pending { background: color-mix(in srgb, #f59e0b 14%, transparent); }
+.preview-box.unchanged { background: color-mix(in srgb, #16a34a 12%, transparent); }
+.preview-box h4, .staging-box h4 { margin: 0 0 6px; font-size: 14px; }
+.preview-box ul { margin: 6px 0; padding-left: 18px; }
+.preview-box li { margin: 2px 0; }
+#staging-snippet { overflow-x: auto; font-size: 12px; white-space: pre-wrap; }

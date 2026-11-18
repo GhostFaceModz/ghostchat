@@ -3,11 +3,13 @@ import multer from "multer";
 import { PLAN_LIMITS, type Plan } from "../config.js";
 import { getDb } from "../lib/supabase.js";
 import { newSiteKey, workspaceId, denyIfNotOwner, type AuthedRequest } from "../lib/auth.js";
+import { addStagingDocument, discardStagingTraining, ensureStagingKey, listStagingDocuments, newStagingKey, publishStagingTraining, refreshStagingCount } from "../lib/staging.js";
+import { approvePreview, ingestCrawl, latestPreview, rejectPreview } from "../lib/preview.js";
 import { crawlSite, type CrawlScope } from "../lib/crawl.js";
 import { normalizeTools, runTool, fillTemplate } from "../lib/siteTools.js";
 import { classifyIntent } from "../lib/intent.js";
 import { chunkText } from "../lib/chunk.js";
-import { storeChunks, refreshCounts, indexPages } from "../lib/indexer.js";
+import { storeChunks, refreshCounts } from "../lib/indexer.js";
 import { assertPublicHttpUrl } from "../lib/ssrf.js";
 import { clientIp, rateLimitAsync } from "../lib/rateLimit.js";
 import { countOwnerSites, countUploads, messageLimit, refreshPeriod, effectiveBranding } from "../lib/usage.js";
@@ -23,7 +25,7 @@ import { normalizeChatForm } from "../lib/forms.js";
 import { BOT_MODES, normalizeSupport } from "../lib/modes.js";
 import { normalizeChannels } from "../lib/meta.js";
 import { saveCorrection } from "../lib/corrections.js";
-import { faqCandidatesFromPages, listFaqDrafts, saveFaqDrafts, setFaqDraftStatus } from "../lib/faqDrafts.js";
+import { listFaqDrafts, setFaqDraftStatus } from "../lib/faqDrafts.js";
 import type { Site, Theme } from "../types.js";
 import { checkInstallHealth } from "../lib/widgetHealth.js";
 
@@ -104,6 +106,7 @@ sitesRouter.post("/", async (req, res) => {
       name: name || url.hostname,
       url: url.href,
       site_key: newSiteKey(),
+      staging_site_key: newStagingKey(),
       theme,
       greeting: req.body?.greeting || tmpl?.greeting || `Hi — I'm the ${name || url.hostname} assistant. How can I help?`,
       persona: req.body?.persona || tmpl?.persona || null,
@@ -122,6 +125,7 @@ sitesRouter.post("/", async (req, res) => {
 sitesRouter.get("/:id", async (req, res) => {
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
+  await ensureStagingKey(site).catch(() => {});
   res.json({ site: publicSite(await refreshPeriod(site)) });
 });
 
@@ -293,28 +297,19 @@ sitesRouter.post("/:id/crawl", async (req, res) => {
   try {
     const scope = (site.crawl_scope as CrawlScope | undefined) || undefined;
     const result = await crawlSite(site.url, site.plan, scope);
-    // Incremental: only new or changed pages are re-embedded; pages that disappeared are removed. Uploads stay.
-    const summary = await indexPages(site, result.pages, { sourceType: "crawl", removeMissing: true, scope });
-    const faqDrafts = await saveFaqDrafts(site.id, faqCandidatesFromPages(result.pages)).catch((err) => { console.error("faq drafts:", (err as Error).message); return 0; });
+    // First crawl applies immediately. Later recrawls write a preview for the owner to approve, unless nothing changed.
+    const outcome = await ingestCrawl(site, result.pages, { trigger: "manual", scope });
     const { count: storedCount } = await db.from("ghostchat_chunks").select("id", { count: "exact", head: true }).eq("site_id", site.id).eq("source_type", "crawl");
-    const stored = storedCount ?? summary.chunks;
-    await db
-      .from("ghostchat_sites")
-      .update({
-        crawl_status: stored ? "ready" : "error",
-        crawl_error: stored ? null : "No usable text was found on the site.",
-        last_crawled_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", site.id);
-    await refreshCounts(site.id);
+    const stored = storedCount ?? 0;
     const fresh = await loadOwnedSite(req, site.id);
     res.json({
       site: fresh ? publicSite(fresh) : null,
       pages: result.pages.length,
       chunks: stored,
-      changes: summary,
-      faq_drafts: faqDrafts,
+      changes: outcome.summary,
+      faq_drafts: outcome.faqDrafts,
+      mode: outcome.mode,
+      preview: outcome.preview,
       errors: result.errors.slice(0, 10),
     });
   } catch (err) {
@@ -327,6 +322,89 @@ sitesRouter.post("/:id/crawl", async (req, res) => {
       })
       .eq("id", site.id);
     res.status(500).json({ error: (err as Error).message || "Crawl failed." });
+  }
+});
+
+
+sitesRouter.get("/:id/preview", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const preview = await latestPreview(site.id);
+    res.json({ preview });
+  } catch {
+    res.status(500).json({ error: "Could not load the recrawl preview." });
+  }
+});
+
+sitesRouter.post("/:id/preview/approve", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const result = await approvePreview(site, typeof req.body?.previewId === "string" ? req.body.previewId : undefined);
+    const fresh = await loadOwnedSite(req, site.id);
+    res.json({ ok: true, ...result, site: fresh ? publicSite(fresh) : null });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status ?? 400;
+    res.status(status).json({ error: (err as Error).message });
+  }
+});
+
+sitesRouter.post("/:id/preview/reject", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const result = await rejectPreview(site, typeof req.body?.previewId === "string" ? req.body.previewId : undefined);
+    const fresh = await loadOwnedSite(req, site.id);
+    res.json({ ok: true, ...result, site: fresh ? publicSite(fresh) : null });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status ?? 400;
+    res.status(status).json({ error: (err as Error).message });
+  }
+});
+
+sitesRouter.get("/:id/staging", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    await ensureStagingKey(site);
+    const documents = await listStagingDocuments(site.id);
+    const fresh = await loadOwnedSite(req, site.id);
+    res.json({
+      staging_site_key: site.staging_site_key,
+      documents,
+      site: fresh ? publicSite(fresh) : null,
+    });
+  } catch {
+    res.status(500).json({ error: "Could not load unpublished training." });
+  }
+});
+
+sitesRouter.post("/:id/staging/publish", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const result = await publishStagingTraining(site);
+    const fresh = await loadOwnedSite(req, site.id);
+    res.json({ ok: true, ...result, site: fresh ? publicSite(fresh) : null });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message || "Could not publish unpublished training." });
+  }
+});
+
+sitesRouter.post("/:id/staging/discard", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const discarded = await discardStagingTraining(site.id);
+    const fresh = await loadOwnedSite(req, site.id);
+    res.json({ ok: true, discarded, site: fresh ? publicSite(fresh) : null });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message || "Could not discard unpublished training." });
   }
 });
 
@@ -360,10 +438,18 @@ sitesRouter.post("/:id/documents", upload.array("files", 5), async (req, res) =>
     return res.status(402).json({ error: "You've reached the upload limit for your plan." });
   }
 
+  const toStaging = ["1", "true", "on", "yes"].includes(String(req.body?.staging || "").toLowerCase());
   const created: unknown[] = [];
   const process = async (filename: string, text: string, sourceType: "upload" | "paste" | "pdf" | "notion", sourceUrl: string | null = null) => {
     const chunks = chunkText(text, { title: filename, url: null });
     if (!chunks.length) throw new Error(`No usable text in ${filename}`);
+    if (toStaging) {
+      const doc = await addStagingDocument(site, {
+        filename, sourceType, sourceUrl, byteSize: text.length, chunks,
+      });
+      created.push(doc);
+      return;
+    }
     const { data: doc, error } = await getDb()
       .from("ghostchat_documents")
       .insert({
@@ -395,8 +481,9 @@ sitesRouter.post("/:id/documents", upload.array("files", 5), async (req, res) =>
       await process(name, file.buffer.toString("utf8"), "upload");
     }
     if (pastedText) await process(pastedTitle, pastedText, "paste");
-    await refreshCounts(site.id);
-    res.status(201).json({ documents: created });
+    if (toStaging) await refreshStagingCount(site.id);
+    else await refreshCounts(site.id);
+    res.status(201).json({ documents: created, staging: toStaging });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message || "Could not train on that document." });
   }
@@ -417,6 +504,14 @@ sitesRouter.post("/:id/documents/notion", async (req, res) => {
     const imported = await importNotionPage(page);
     const chunks = chunkText(imported.text, { title: imported.title, url: imported.url });
     if (!chunks.length) throw new Error("No usable text in that Notion page.");
+    const toStaging = ["1", "true", "on", "yes"].includes(String(req.body?.staging || "").toLowerCase());
+    if (toStaging) {
+      const doc = await addStagingDocument(site, {
+        filename: imported.title, sourceType: "notion", sourceUrl: imported.url, byteSize: imported.text.length, chunks,
+      });
+      await refreshStagingCount(site.id);
+      return res.status(201).json({ document: doc, staging: true });
+    }
     const { data: doc, error } = await getDb()
       .from("ghostchat_documents")
       .insert({
