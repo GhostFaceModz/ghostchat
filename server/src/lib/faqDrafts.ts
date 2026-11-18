@@ -79,6 +79,7 @@ export async function setFaqDraftStatus(site: Pick<Site, "id">, draftId: string,
   if (error) throw error;
   if (!draft) return null;
   if (status === "approved") {
+    if (String(draft.answer || "").trim().length < 20) throw Object.assign(new Error("Add a fuller answer before approving this draft."), { status: 400 });
     const title = draft.question.slice(0, 200);
     const text = `Q: ${draft.question}\nA: ${draft.answer}`;
     const chunks = chunkText(text, { title, url: draft.source_url, heading: draft.question });
@@ -97,4 +98,42 @@ export async function setFaqDraftStatus(site: Pick<Site, "id">, draftId: string,
   const { data: updated, error: ue } = await db.from("ghostchat_faq_drafts").update({ status, updated_at: new Date().toISOString() }).eq("id", draftId).eq("site_id", site.id).select("*").single();
   if (ue) throw ue;
   return updated as FaqDraft;
+}
+
+export function questionFromGapUrl(raw: string): string {
+  const fallback = "What should visitors know about this page?";
+  try {
+    const u = new URL(String(raw || "").trim(), "https://example.com");
+    const path = decodeURIComponent(u.pathname || "/").replace(/\/+/g, "/").replace(/\/$/, "") || "/";
+    const slug = path.split("/").filter(Boolean).pop() || "";
+    const title = slug.replace(/[-_]+/g, " ").replace(/\.\w+$/, "").trim();
+    if (title) {
+      const nice = title.charAt(0).toUpperCase() + title.slice(1);
+      return `What should visitors know about ${nice}?`;
+    }
+  } catch { /* use fallback */ }
+  return fallback;
+}
+
+export async function createOwnerFaqDraft(siteId: string, input: { question?: string; answer?: string; source_url?: string | null }) {
+  const source_url = String(input.source_url || "").trim().slice(0, 2000) || null;
+  const question = String(input.question || (source_url ? questionFromGapUrl(source_url) : "")).replace(/\s+/g, " ").trim().slice(0, 500);
+  if (question.length < 8) throw Object.assign(new Error("Write a question of at least a few words."), { status: 400 });
+  const answer = String(input.answer || "").replace(/\s+/g, " ").trim().slice(0, 4000);
+  const db = getDb();
+  const { data: existing } = await db
+    .from("ghostchat_faq_drafts")
+    .select("*")
+    .eq("site_id", siteId)
+    .eq("status", "pending")
+    .ilike("question", question)
+    .maybeSingle();
+  if (existing) return existing as FaqDraft;
+  const { data, error } = await db
+    .from("ghostchat_faq_drafts")
+    .insert({ site_id: siteId, question, answer, source_url, status: "pending" })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as FaqDraft;
 }

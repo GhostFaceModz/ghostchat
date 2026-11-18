@@ -819,6 +819,23 @@
     </form>
   </dialog>
 
+  <dialog id="gap-dialog" class="glass">
+    <form id="gap-form" class="stack">
+      <h3 data-i18n="gap.title">Train this gap</h3>
+      <p class="muted tiny">Visitors asked from this page, but it isn’t in your training yet. Write a short Q&amp;A and we’ll save it as an FAQ draft — or add it to training straight away if the answer is complete.</p>
+      <p class="muted tiny" id="gap-url"></p>
+      <input type="hidden" name="source_url" />
+      <label>Question <input name="question" required maxlength="500" /></label>
+      <label>Answer <textarea name="answer" rows="6" maxlength="4000" placeholder="What the assistant should say about this page"></textarea></label>
+      <p class="error" id="gap-error" hidden></p>
+      <div class="row">
+        <button type="submit" class="btn primary" name="intent" value="train" data-i18n="gap.train">Add to training</button>
+        <button type="submit" class="btn" name="intent" value="draft" data-i18n="gap.draft">Save draft</button>
+        <button type="button" class="btn ghost" id="gap-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="new-dialog" class="glass">
     <form id="new-form" class="stack">
       <h3>New site</h3>
