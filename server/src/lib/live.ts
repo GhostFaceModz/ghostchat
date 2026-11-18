@@ -4,6 +4,7 @@
  * Owners reply from the dashboard Inbox, their linked Telegram chat, or Discord (inbox card + DMs).
  */
 import crypto from "node:crypto";
+import { topicTagsFromText } from "./topicTags.js";
 import { getDb } from "./supabase.js";
 import { HUMAN_REQUEST } from "./guardrails.js";
 import type { Site } from "../types.js";
@@ -280,7 +281,8 @@ export async function countUnsure(siteId: string, sessionId: string): Promise<nu
 export async function addLog(row: { site_id: string; session_id: string; role: "user" | "assistant" | "agent" | "system"; message: string; agent_name?: string | null; page_url?: string | null; thread?: "assistant" | "support" }): Promise<string | null> {
   const thread = row.thread || (row.role === "agent" || row.role === "system" ? "support" : "assistant");
   const { thread: _ignored, ...rest } = row;
-  const { data } = await getDb().from("ghostchat_logs").insert({ ...rest, thread, was_unsure: false }).select("id").single();
+  const topic_tags = row.role === "user" ? topicTagsFromText(row.message) : [];
+  const { data } = await getDb().from("ghostchat_logs").insert({ ...rest, thread, was_unsure: false, topic_tags }).select("id").single();
   return (data as { id: string } | null)?.id ?? null;
 }
 export async function transcript(siteId: string, sessionId: string, limit = 200, thread?: "assistant" | "support") {

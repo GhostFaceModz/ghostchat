@@ -547,3 +547,8 @@ body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-ne
 .eval-list .item.fail, #eval-list .item.fail { border-left: 3px solid #fb7185; padding-left: 10px; }
 
 .coverage-gap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0; }
+
+.topic-pill, .topic-chip { display: inline-flex; align-items: center; gap: 4px; margin: 0 6px 0 0; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line, #3a3348); background: color-mix(in srgb, var(--accent, #a78bfa) 16%, transparent); font-size: 11px; line-height: 1.4; }
+button.topic-chip { cursor: pointer; color: inherit; font: inherit; }
+.topic-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
+#log-topic { max-width: 180px; }

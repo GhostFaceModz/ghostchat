@@ -615,6 +615,10 @@
           <h3>Transcripts</h3>
           <form id="log-search" class="row" role="search">
             <input type="search" name="q" id="log-q" placeholder="Search conversations" maxlength="80" />
+            <label class="sr" for="log-topic" data-i18n="logs.topic">Topic</label>
+            <select id="log-topic" name="tag">
+              <option value="" data-i18n="logs.allTopics">All topics</option>
+            </select>
             <button type="submit" class="btn">Search</button>
           </form>
           <p class="muted tiny" id="log-search-status"></p>

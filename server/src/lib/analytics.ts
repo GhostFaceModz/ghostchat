@@ -1,7 +1,10 @@
+import { topicBreakdown } from "./topicTags.js";
+
 /** Owner analytics, computed from recent chat logs (pure function so it is easy to test). */
 export type LogRow = {
   id: string; session_id: string; role: string; message: string; was_unsure: boolean;
   feedback: string | null; page_url: string | null; created_at: string; lang?: string | null;
+  topic_tags?: string[] | null;
 };
 
 export function hourIn(iso: string, timeZone: string): number {
@@ -77,6 +80,7 @@ export function computeAnalytics(input: {
     csat: { count: csat.length, average: csat.length ? Math.round((csat.reduce((a, b) => a + b, 0) / csat.length) * 10) / 10 : null },
     tickets: input.tickets ? { open: input.tickets.filter((t) => t.status === "open").length, pending: input.tickets.filter((t) => t.status === "pending").length, solved: input.tickets.filter((t) => t.status === "solved").length } : null,
     totals: { messages: rows.length, assistant },
+    topics: topicBreakdown(rows),
   };
 }
 
