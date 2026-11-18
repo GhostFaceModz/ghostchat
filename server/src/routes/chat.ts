@@ -204,7 +204,21 @@ chatRouter.post("/csat", async (req, res) => {
   const comment = typeof req.body?.comment === "string" ? req.body.comment.trim().slice(0, 500) || null : null;
   const db = getDb();
   const { data: ticket } = await db.from("ghostchat_tickets").select("id").eq("site_id", site.id).eq("session_id", sessionId).order("created_at", { ascending: false }).limit(1).maybeSingle();
-  const { error } = await db.from("ghostchat_csat").upsert({ site_id: site.id, session_id: sessionId, rating, comment, ticket_id: ticket?.id ?? null }, { onConflict: "site_id,session_id" });
+  const { data: conv } = await db.from("ghostchat_live_conversations").select("id, last_agent_id, last_agent_name, claimed_by_id, claimed_by_name, agent_name, last_agent_at").eq("site_id", site.id).eq("session_id", sessionId).maybeSingle();
+  const agentId = (conv?.last_agent_id || conv?.claimed_by_id || null) as string | null;
+  const agentName = (conv?.last_agent_name || conv?.claimed_by_name || conv?.agent_name || null) as string | null;
+  const handledByHuman = Boolean(conv && (conv.last_agent_at || conv.last_agent_id || conv.last_agent_name || conv.claimed_by_id));
+  const { error } = await db.from("ghostchat_csat").upsert({
+    site_id: site.id,
+    session_id: sessionId,
+    rating,
+    comment,
+    ticket_id: ticket?.id ?? null,
+    conversation_id: conv?.id ?? null,
+    agent_id: handledByHuman ? agentId : null,
+    agent_name: handledByHuman ? agentName : null,
+    handled_by_human: handledByHuman,
+  }, { onConflict: "site_id,session_id" });
   if (error) return res.status(500).json({ error: "Could not save your rating." });
   if (ticket?.id) await db.from("ghostchat_tickets").update({ rating, updated_at: new Date().toISOString() }).eq("id", ticket.id);
   await clearReviewPending(site.id, sessionId).catch(() => {});

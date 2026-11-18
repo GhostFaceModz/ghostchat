@@ -5,6 +5,7 @@ import { getOwnerPlan } from "../lib/usage.js";
 import { mailerConfigured, sendMail } from "../lib/mailer.js";
 import { auditFromReq, listAudit } from "../lib/audit.js";
 import { normalizeCreditCap, setMemberCreditCap } from "../lib/agentCredits.js";
+import { loadAgentReviews } from "../lib/agentReviews.js";
 
 export const teamRouter = Router();
 
@@ -23,6 +24,19 @@ teamRouter.get("/", async (req, res) => {
     role: (req as AuthedRequest).role,
     self: owner.id === ws,
   });
+});
+
+
+teamRouter.get("/reviews", async (req, res) => {
+  const ws = workspaceId(req);
+  try {
+    const board = await loadAgentReviews(ws);
+    res.json(board);
+  } catch (err) {
+    const e = err as Error;
+    console.error("agent reviews:", e.message);
+    res.status(500).json({ error: "Could not load agent reviews." });
+  }
 });
 
 teamRouter.get("/audit", async (req, res) => {

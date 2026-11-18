@@ -5,7 +5,25 @@
     const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
     return s < 60 ? "just now" : s < 3600 ? Math.round(s / 60) + "m ago" : s < 86400 ? Math.round(s / 3600) + "h ago" : Math.round(s / 86400) + "d ago";
   };
-  const live = { overview: null, open: null, timer: null, inboxTimer: null, lastCount: -1, canned: [], focus: -1 };
+  const live = { overview: null, open: null, timer: null, inboxTimer: null, lastCount: -1, canned: [], focus: -1, filter: "live", msgCount: 0 };
+  const NEAR_BOTTOM = 120;
+  function wasNearBottom(box, px) {
+    if (!box) return true;
+    return box.scrollHeight - box.scrollTop - box.clientHeight < (px || NEAR_BOTTOM);
+  }
+  function applyTranscriptScroll(box, opts) {
+    if (!box) return false;
+    const stick = Boolean(opts.force || !opts.hasPrev || opts.prevNearBottom);
+    const max = Math.max(0, box.scrollHeight - box.clientHeight);
+    if (stick) box.scrollTop = box.scrollHeight;
+    else box.scrollTop = Math.max(0, Math.min(opts.prevTop || 0, max));
+    return Boolean(opts.grew && !stick);
+  }
+  function setNewMsgPill(show) {
+    const pill = $("#inbox-new-pill");
+    if (!pill) return;
+    pill.hidden = !show;
+  }
 
   // ---------------- Inbox ----------------
   function hideInbox() {
@@ -43,7 +61,7 @@
   }
 
   function item(c) {
-    const status = c.status === "human" ? "<span class='st human'>You're live</span>" : c.status === "waiting" ? "<span class='st waiting'>Waiting for you</span>" : c.status === "bot" ? "<span class='st'>Back with AI</span>" : "<span class='st'>AI</span>";
+    const status = c.status === "human" ? "<span class='st human'>You're live</span>" : c.status === "waiting" ? "<span class='st waiting'>Waiting for you</span>" : c.status === "closed" ? "<span class='st closed'>Closed</span>" : c.status === "bot" ? "<span class='st'>Back with AI</span>" : "<span class='st'>AI</span>";
     const key = c.site_id + ":" + c.session_id;
     const on = live.open && live.open.key === key ? " on" : "";
     return `<button type="button" class="inbox-item${on}" data-site="${esc(c.site_id)}" data-session="${esc(c.session_id)}">
@@ -60,12 +78,27 @@
     if ($("#inbox-view").classList.contains("hidden")) return;
     $("#inbox-live").innerHTML = data.live.length ? data.live.map(item).join("") : "<p class='muted tiny'>No live chats right now.</p>";
     $("#inbox-recent").innerHTML = data.recent.length ? data.recent.map(item).join("") : "<p class='muted tiny'>No recent chats.</p>";
+    const closed = data.closed || [];
+    const closedBox = $("#inbox-closed");
+    if (closedBox) closedBox.innerHTML = closed.length ? closed.map(item).join("") : "<p class='muted tiny'>No closed chats yet.</p>";
     $("#inbox-updated").textContent = "Updated " + new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    applyInboxFilter(live.filter || "live");
     $$("#inbox-view .inbox-item").forEach((b) => b.addEventListener("click", () => openConversation(b.dataset.site, b.dataset.session)));
     if (live.focus >= 0) highlightInboxFocus();
   }
 
-  function inboxItems() { return $$("#inbox-view .inbox-item"); }
+  function applyInboxFilter(name) {
+    const filter = name === "recent" || name === "closed" ? name : "live";
+    live.filter = filter;
+    $$("#inbox-view [data-inbox-filter]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-inbox-filter") === filter));
+    $$("#inbox-view [data-inbox-panel]").forEach((p) => { p.hidden = p.getAttribute("data-inbox-panel") !== filter; });
+  }
+  document.addEventListener("click", (ev) => {
+    const btn = ev.target && ev.target.closest && ev.target.closest("[data-inbox-filter]");
+    if (!btn || !$("#inbox-view") || $("#inbox-view").classList.contains("hidden")) return;
+    applyInboxFilter(btn.getAttribute("data-inbox-filter"));
+  });
+  function inboxItems() { return $$("#inbox-view [data-inbox-panel]:not([hidden]) .inbox-item"); }
   function isTypingTarget(el) {
     if (!el) return false;
     const tag = (el.tagName || "").toLowerCase();
@@ -132,6 +165,7 @@
   setTimeout(() => { if (state.owner) { refreshInbox(); openInboxFromUrl(); } }, 1500);
 
   async function openConversation(siteId, sessionId) {
+    if (!live.open || live.open.key !== siteId + ":" + sessionId) live.msgCount = 0;
     live.open = { key: siteId + ":" + sessionId, siteId, sessionId };
     $$("#inbox-view .inbox-item").forEach((b) => b.classList.toggle("on", b.dataset.site + ":" + b.dataset.session === live.open.key));
     document.querySelector("#inbox-view .inbox")?.classList.add("is-thread");
@@ -150,20 +184,28 @@
     const status = c ? c.status : "ai";
     const pane = $("#inbox-pane");
     const keepDraft = $("#inbox-reply")?.value || "";
+    const prevBox = $("#inbox-msgs");
+    const prev = prevBox ? { top: prevBox.scrollTop, near: wasNearBottom(prevBox), count: live.msgCount || 0 } : null;
     const msgs = d.messages.map((m) => {
       const who = m.role === "user" ? "Visitor" : m.role === "agent" ? (m.agent_name || "You") : m.role === "system" ? "" : "AI";
       return `<div class="im ${esc(m.role)}">${who ? `<span class="im-who">${esc(who)} · ${esc(new Date(m.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }))}</span>` : ""}<div class="im-b">${esc(m.message)}</div></div>`;
     }).join("") + (d.visitor_typing ? "<div class='im user'><div class='im-b'><i>typing…</i></div></div>" : "");
-    const pill = status === "human" ? "<span class='st human'>You're live</span>" : status === "waiting" ? "<span class='st waiting'>Waiting for you</span>" : "<span class='st'>AI is answering</span>";
+    const pill = status === "human" ? "<span class='st human'>You're live</span>" : status === "waiting" ? "<span class='st waiting'>Waiting for you</span>" : status === "closed" ? "<span class='st closed'>Closed</span>" : "<span class='st'>AI is answering</span>";
     const canCopilot = (state.workspaces || []).some((w) => w.id === state.workspaceId && w.plan === "business") || (state.owner && state.owner.plan === "business" && (!state.workspaceId || state.workspaceId === state.owner.id));
     const copilotBtn = canCopilot && state.role !== "viewer" ? `<button type="button" class="btn ghost small" id="inbox-copilot">✨ Suggest reply</button>` : "";
-    const actions = status === "human" || status === "waiting"
-      ? `<button type="button" class="btn small" id="inbox-handback">🤖 Hand back to AI</button><button type="button" class="btn ghost small" id="inbox-close">Close</button>${copilotBtn}`
-      : `<button type="button" class="btn primary small" id="inbox-take">🧑 Take over</button>${copilotBtn}`;
+    const closeBtn = c && status !== "closed" ? `<button type="button" class="btn ghost small" id="inbox-close">Close chat</button>` : "";
+    const actions = status === "closed"
+      ? `<span class="st closed">Closed</span>`
+      : status === "human" || status === "waiting"
+        ? `<button type="button" class="btn small" id="inbox-handback">🤖 Hand back to AI</button>${closeBtn}${copilotBtn}`
+        : `<button type="button" class="btn primary small" id="inbox-take">🧑 Take over</button>${closeBtn}${copilotBtn}`;
     const nameField = agentNameFieldHtml();
+    const replyDisabled = status === "closed" ? " disabled" : "";
+    const replyPh = status === "closed" ? "This chat is closed. The visitor can start a new one." : status === "human" || status === "waiting" ? "Reply to the visitor…" : "Type to take over and reply…";
     pane.innerHTML = `<div class="ip-head"><button type="button" class="btn tiny ghost" id="inbox-back">← Inbox</button><div><b>${esc(d.site.name)}</b> · visitor ${esc(o.sessionId.slice(-6))} ${pill}${c && c.page_url ? `<div class="muted tiny ip-url">${esc(c.page_url)}</div>` : ""}</div><div class="row">${actions}</div></div>
-      <div class="ip-msgs" id="inbox-msgs">${msgs || "<p class='muted'>No messages yet.</p>"}</div>
-      <form class="ip-reply" id="inbox-form">${nameField}${inboxCannedHtml()}<textarea id="inbox-reply" rows="2" placeholder="${status === "human" || status === "waiting" ? "Reply to the visitor…" : "Type to take over and reply…"}"></textarea><button class="btn primary" type="submit">Send</button></form>
+      <div class="ip-msgs-wrap"><div class="ip-msgs" id="inbox-msgs">${msgs || "<p class='muted'>No messages yet.</p>"}</div>
+      <button type="button" class="inbox-new-pill" id="inbox-new-pill" hidden>New messages ↓</button></div>
+      <form class="ip-reply" id="inbox-form">${nameField}${inboxCannedHtml()}<textarea id="inbox-reply" rows="2" placeholder="${replyPh}"${replyDisabled}></textarea><button class="btn primary" type="submit"${replyDisabled}>Send</button></form>
       <p class="muted tiny inbox-keys">j/k move · Enter open · Esc back · t take over</p>`;
     const ta = $("#inbox-reply");
     ta.value = keepDraft;
@@ -176,7 +218,13 @@
       ta.focus();
     });
     const box = $("#inbox-msgs");
-    if (scroll || box.scrollHeight - box.scrollTop < box.clientHeight + 120) box.scrollTop = box.scrollHeight;
+    const newCount = (d.messages || []).length + (d.visitor_typing ? 1 : 0);
+    const grew = Boolean(prev && newCount > (prev.count || 0));
+    const showPill = applyTranscriptScroll(box, { force: Boolean(scroll), hasPrev: Boolean(prev), prevNearBottom: prev ? prev.near : true, prevTop: prev ? prev.top : 0, grew });
+    live.msgCount = newCount;
+    setNewMsgPill(showPill);
+    $("#inbox-new-pill")?.addEventListener("click", () => { box.scrollTop = box.scrollHeight; setNewMsgPill(false); });
+    box?.addEventListener("scroll", () => { if (wasNearBottom(box)) setNewMsgPill(false); }, { passive: true });
     $("#inbox-take")?.addEventListener("click", takeOver);
     $("#inbox-back")?.addEventListener("click", () => {
       live.open = null;
@@ -346,7 +394,7 @@
     f.agent_name.value = cfg.agent_name || "";
     f.claim_timeout_min.value = cfg.claim_timeout_min || 5;
     f.timeout_fallback.value = cfg.timeout_fallback || "ai";
-    if (f.idle_timeout_min) f.idle_timeout_min.value = cfg.idle_timeout_min || 15;
+    if (f.idle_timeout_min) f.idle_timeout_min.value = cfg.idle_timeout_min || 30;
     if (f.clear_closed_discord) f.clear_closed_discord.checked = cfg.clear_closed_discord !== false;
     if (f.clear_closed_discord_sec) f.clear_closed_discord_sec.value = cfg.clear_closed_discord_sec || 60;
     f.agent_name.placeholder = "e.g. " + ((state.owner && state.owner.name || "").split(" ")[0] || "Sam");
@@ -373,7 +421,7 @@
       enabled: $("#live-enabled").checked,
       trigger: f.trigger.value, misses: Number(f.misses.value) || 2, agent_name: f.agent_name.value.trim(),
       claim_timeout_min: Number(f.claim_timeout_min.value) || 5, timeout_fallback: f.timeout_fallback.value,
-      idle_timeout_min: Number(f.idle_timeout_min && f.idle_timeout_min.value) || 15,
+      idle_timeout_min: Number(f.idle_timeout_min && f.idle_timeout_min.value) || 30,
       clear_closed_discord: Boolean(f.clear_closed_discord && f.clear_closed_discord.checked),
       clear_closed_discord_sec: Number(f.clear_closed_discord_sec && f.clear_closed_discord_sec.value) || 60,
       status: ($("input[name=status]:checked", f) || {}).value || "online",

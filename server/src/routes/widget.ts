@@ -2,6 +2,8 @@ import { Router } from "express";
 import QRCode from "qrcode";
 import { getDb } from "../lib/supabase.js";
 import { effectiveBranding, effectiveDisclosure } from "../lib/usage.js";
+import { sanitizeLauncher } from "../lib/launcher.js";
+import { sanitizeHeader } from "../lib/widgetHeader.js";
 import { sanitizeGa4Id, sanitizePlausibleDomain } from "../lib/widgetAnalytics.js";
 import { config } from "../config.js";
 import { BOT_TEMPLATES } from "../lib/templates.js";
@@ -36,7 +38,8 @@ widgetRouter.get("/config/:siteKey", async (req, res) => {
     config: {
       name: site.name,
       greeting: site.greeting,
-      theme: site.theme,
+      theme: { ...site.theme, launcher: sanitizeLauncher(site.theme && site.theme.launcher, site.plan), header: sanitizeHeader(site.theme && site.theme.header, site.plan, site.name) },
+      header: sanitizeHeader(site.theme && site.theme.header, site.plan, site.name),
       starterQuestions: site.starter_questions ?? [],
       proactiveDelayMs: site.proactive_delay_ms,
       soundDefault: site.sound_default,

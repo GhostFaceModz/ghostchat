@@ -13,6 +13,8 @@ import { storeChunks, refreshCounts } from "../lib/indexer.js";
 import { assertPublicHttpUrl } from "../lib/ssrf.js";
 import { clientIp, rateLimitAsync } from "../lib/rateLimit.js";
 import { countOwnerSites, countUploads, messageLimit, refreshPeriod, effectiveBranding, sanitizeDisclosure } from "../lib/usage.js";
+import { sanitizeLauncher } from "../lib/launcher.js";
+import { sanitizeHeader } from "../lib/widgetHeader.js";
 import { sanitizeGa4Id, sanitizePlausibleDomain } from "../lib/widgetAnalytics.js";
 import { getTemplate } from "../lib/templates.js";
 import { extractPdfText, isPdfFile } from "../lib/pdf.js";
@@ -108,6 +110,8 @@ sitesRouter.post("/", async (req, res) => {
   }
 
   const theme = { ...DEFAULT_THEME, ...(req.body?.theme && typeof req.body.theme === "object" ? req.body.theme : {}) };
+  theme.launcher = sanitizeLauncher(theme.launcher, plan);
+  theme.header = sanitizeHeader(theme.header, plan, name || url.hostname);
   const tmpl = getTemplate(req.body?.template);
   const { data, error } = await getDb()
     .from("ghostchat_sites")
@@ -162,7 +166,12 @@ sitesRouter.patch("/:id", async (req, res) => {
     patch.proactive_delay_ms = Math.min(60000, Math.max(0, Math.round(body.proactive_delay_ms)));
   }
   if (typeof body.sound_default === "boolean") patch.sound_default = body.sound_default;
-  if (body.theme && typeof body.theme === "object") patch.theme = { ...site.theme, ...body.theme };
+  if (body.theme && typeof body.theme === "object") {
+    const merged = { ...site.theme, ...body.theme };
+    merged.launcher = sanitizeLauncher(merged.launcher, site.plan);
+    merged.header = sanitizeHeader(merged.header, site.plan, site.name);
+    patch.theme = merged;
+  }
   if (typeof body.show_branding === "boolean") {
     const limits = PLAN_LIMITS[site.plan];
     patch.show_branding = limits.brandingRequired ? true : body.show_branding;

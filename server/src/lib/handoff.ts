@@ -36,7 +36,7 @@ export async function startHandoff(site: Site, sessionId: string, reason: "asked
     const patch: Partial<Conversation> = { status: fresh ? status : existing.status === "waiting" && reason === "manual" ? "human" : existing.status, reason, agent_name: agent, page_url: pageUrl ?? existing.page_url, review_pending: false };
     if (fresh) {
       // Keep any existing Discord thread so a new handoff reuses it instead of opening a duplicate.
-      Object.assign(patch, { telegram_chat_id: null, telegram_thread_id: null, claimed_by_id: null, claimed_by_name: null, claimed_at: null, waiting_since: new Date().toISOString(), last_agent_at: null, closed_at: null, discord_cleared_at: null });
+      Object.assign(patch, { telegram_chat_id: null, telegram_thread_id: null, claimed_by_id: null, claimed_by_name: null, claimed_at: null, waiting_since: new Date().toISOString(), last_agent_at: null, last_agent_id: null, last_agent_name: null, closed_at: null, discord_cleared_at: null });
     }
     await updateConversation(existing.id, patch);
     conv = { ...existing, ...patch } as Conversation;
@@ -70,7 +70,7 @@ export async function visitorLiveMessage(site: Site, conv: Conversation, message
 }
 
 /** A human reply from the dashboard, Telegram or Discord. */
-export async function agentReply(conv: Conversation, text: string, via: "dashboard" | "telegram" | "discord", name?: string | null): Promise<string | null> {
+export async function agentReply(conv: Conversation, text: string, via: "dashboard" | "telegram" | "discord", name?: string | null, agentId?: string | null): Promise<string | null> {
   const site = await loadSite(conv.site_id);
   if (!site) return null;
   const agent = sanitizeAgentName(name) || sanitizeAgentName(conv.agent_name) || (await agentNameFor(site));
@@ -81,7 +81,7 @@ export async function agentReply(conv: Conversation, text: string, via: "dashboa
     }
   }
   const id = await addLog({ site_id: site.id, session_id: conv.session_id, role: "agent", message: text.slice(0, 4000), agent_name: agent, thread: "support" });
-  await updateConversation(conv.id, { status: "human", agent_name: agent, last_agent_at: new Date().toISOString(), close_warned_at: null } as Partial<Conversation>);
+  await updateConversation(conv.id, { status: "human", agent_name: agent, last_agent_at: new Date().toISOString(), last_agent_name: agent, last_agent_id: agentId || conv.last_agent_id || conv.claimed_by_id || null, close_warned_at: null } as Partial<Conversation>);
   if (via === "dashboard") echoToChannels(conv, `🧑 ${agent} (dashboard): ${text}`).catch(() => {});
   if (conv.discord_message_id || conv.discord_panel_id || conv.discord_thread_id) {
     const next = { ...conv, status: "human" as const, agent_name: agent };
@@ -90,13 +90,21 @@ export async function agentReply(conv: Conversation, text: string, via: "dashboa
   return id;
 }
 
-export async function takeOver(conv: Conversation, name?: string | null): Promise<void> {
+export async function takeOver(conv: Conversation, name?: string | null, agentId?: string | null): Promise<void> {
   const site = await loadSite(conv.site_id);
   const agent = sanitizeAgentName(name) || sanitizeAgentName(conv.agent_name) || (site ? await agentNameFor(site) : "Team");
   if (conv.status !== "human" && site) {
     await addLog({ site_id: site.id, session_id: conv.session_id, role: "system", message: `${agent} joined the chat`, thread: "support" });
   }
-  await updateConversation(conv.id, { status: "human", agent_name: agent, review_pending: false });
+  const now = new Date().toISOString();
+  await updateConversation(conv.id, {
+    status: "human",
+    agent_name: agent,
+    review_pending: false,
+    last_agent_at: now,
+    last_agent_name: agent,
+    last_agent_id: agentId || conv.last_agent_id || conv.claimed_by_id || null,
+  } as Partial<Conversation>);
 }
 
 export type EndKind = "end" | "cancel" | "handback";
@@ -105,7 +113,7 @@ export type EndVia = "visitor" | "dashboard" | "telegram" | "discord" | "idle";
 export function endChatSystemMessage(kind: EndKind): string {
   if (kind === "cancel") return "The request for a team member was cancelled. You're back with the AI assistant.";
   if (kind === "handback") return "You're back with the AI assistant.";
-  return "You're back with the AI assistant.";
+  return "This chat has been closed. You can start a new one any time.";
 }
 
 export function endChatAgentNotice(kind: EndKind, via: EndVia): string {
@@ -137,7 +145,15 @@ export async function endLiveChat(conv: Conversation, via: EndVia, kind: EndKind
   const closedAt = conv.closed_at || new Date().toISOString();
   const patch: Partial<Conversation> = already
     ? { status: "closed", review_pending: conv.review_pending || review }
-    : { status: "closed", claimed_by_id: null, claimed_by_name: null, review_pending: review, closed_at: closedAt };
+    : {
+        status: "closed",
+        claimed_by_id: null,
+        claimed_by_name: null,
+        review_pending: review,
+        closed_at: closedAt,
+        last_agent_id: conv.last_agent_id || conv.claimed_by_id || null,
+        last_agent_name: conv.last_agent_name || conv.claimed_by_name || conv.agent_name || null,
+      };
   if (!already) {
     await updateConversation(conv.id, patch);
     if (site) {
