@@ -18,6 +18,17 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&display=swap" />
   <link rel="stylesheet" href="/dashboard/styles.css" />
+  <script>
+    (function () {
+      try {
+        var s = localStorage.getItem("gc_dash_theme");
+        var theme = (s === "light" || s === "dark") ? s : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+        document.documentElement.setAttribute("data-theme", theme);
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    })();
+  </script>
 </head>
 <body>
   <div class="scene" aria-hidden="true">
@@ -42,6 +53,7 @@
     </div>
 
     <div class="auth-side">
+        <button type="button" class="theme-toggle btn ghost tiny" data-theme-toggle aria-pressed="false" title="Switch to light theme" data-i18n-title="theme.toLight">Light theme</button>
       <a class="brand auth-mobile-brand" href="/"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V10a7 7 0 0 1 14 0v11l-3.5-2-3.5 2-3.5-2Z"/><path d="M9.5 10v1.5m5-1.5v1.5"/></svg></span>GhostChat</a>
       <div class="auth-card glass">
         <h1 id="auth-title">Welcome back</h1>
@@ -88,6 +100,7 @@
       <div class="dash-lang-wrap">
         <label class="rail-label" for="dash-lang" data-i18n="nav.language">Language</label>
         <select id="dash-lang" aria-label="Language"></select>
+        <button type="button" class="theme-toggle btn ghost tiny" data-theme-toggle aria-pressed="false" title="Switch to light theme" data-i18n-title="theme.toLight">Light theme</button>
       </div>
       <div id="workspace-switch" class="workspace-switch hidden">
         <label class="rail-label" for="workspace-select" data-i18n="nav.workspace">Workspace</label>
@@ -956,6 +969,7 @@
     <ul id="cmd-list" role="listbox"></ul>
     <p class="muted tiny">Type to filter. Enter to jump. Esc to close.</p>
   </dialog>
+  <script src="/dashboard/theme.js"></script>
   <script src="/dashboard/app.js"></script>
   <script src="/dashboard/i18n.js"></script>
   <script src="/dashboard/commandPalette.js"></script>
