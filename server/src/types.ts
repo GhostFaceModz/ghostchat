@@ -98,6 +98,11 @@ export type Site = {
   last_install_check_at?: string | null;
   last_install_check?: Record<string, unknown> | null;
   knowledge_rev?: number;
+  staging_site_key?: string | null;
+  staging_chunk_count?: number;
+  preview_status?: string | null;
+  /** Runtime only: true when the visitor used the test-widget (staging) key. */
+  staging?: boolean;
 };
 
 export type RetrievedChunk = {

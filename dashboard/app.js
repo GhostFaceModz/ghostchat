@@ -601,6 +601,20 @@ $("#theme-form").addEventListener("submit", async (ev) => {
   toast("Appearance saved");
 });
 
+
+$("#staging-publish")?.addEventListener("click", async () => {
+  if (!state.site) return;
+  await req("/api/sites/" + state.site.id + "/staging/publish", { method: "POST" });
+  toast("Unpublished training is now live");
+  loadDocs();
+});
+$("#staging-discard")?.addEventListener("click", async () => {
+  if (!state.site) return;
+  await req("/api/sites/" + state.site.id + "/staging/discard", { method: "POST" });
+  toast("Unpublished training discarded");
+  loadDocs();
+});
+
 $("#crawl-btn").addEventListener("click", async () => {
   const btn = $("#crawl-btn");
   const status = $("#crawl-status");
@@ -609,10 +623,19 @@ $("#crawl-btn").addEventListener("click", async () => {
   try {
     const data = await req("/api/sites/" + state.site.id + "/crawl", { method: "POST" });
     state.site = data.site || state.site;
-    status.textContent = "Indexed " + data.pages + " pages · " + data.chunks + " chunks";
+    if (data.mode === "preview") {
+      const d = data.changes || {};
+      status.textContent = "Preview ready: +" + (d.added || 0) + " added, ~" + (d.updated || 0) + " changed, -" + (d.removed || 0) + " removed — review below";
+      toast("Recrawl preview ready — approve it to update live answers");
+    } else if (data.mode === "unchanged") {
+      status.textContent = "Recrawl found no changes";
+      toast("No changes in this recrawl");
+    } else {
+      status.textContent = "Indexed " + data.pages + " pages · " + data.chunks + " chunks";
+      toast("Crawl complete");
+    }
     renderSite();
     loadDocs();
-    toast("Crawl complete");
   } catch (e) {
     status.textContent = e.message;
   } finally {
@@ -633,7 +656,7 @@ $("#upload-form").addEventListener("submit", async (ev) => {
     return j;
   });
   ev.target.reset();
-  toast("Added " + (data.documents || []).length + " document(s)");
+  toast((data.staging ? "Added to the test widget: " : "Added ") + (data.documents || []).length + " document(s)");
   loadDocs();
 });
 
@@ -656,7 +679,68 @@ async function loadDocs() {
     item.appendChild(del);
     box.appendChild(item);
   });
+  loadPreviewAndStaging();
 }
+
+
+function previewUrlList(items, limit) {
+  return (items || []).slice(0, limit || 12).map((e) => "<li>" + escapeHtml((e.title || e.url || "") + (e.title && e.url ? " — " + e.url : "")) + "</li>").join("");
+}
+
+async function loadPreviewAndStaging() {
+  if (!state.site) return;
+  const box = $("#preview-box");
+  const stagingBox = $("#staging-box");
+  if (!box) return;
+  try {
+    const { preview } = await req("/api/sites/" + state.site.id + "/preview");
+    if (!preview) { box.className = "preview-box hidden"; box.innerHTML = ""; }
+    else if (preview.status === "pending") {
+      const d = preview.diff || {};
+      box.className = "preview-box pending";
+      box.innerHTML = "<h4>Recrawl waiting for approval</h4>"
+        + "<p class='muted tiny'>+" + (preview.added || 0) + " added · ~" + (preview.updated || 0) + " changed · -" + (preview.removed || 0) + " removed · " + (preview.unchanged || 0) + " unchanged. Live answers stay on the current training until you approve.</p>"
+        + (d.added && d.added.length ? "<p class='tiny'><b>Added</b></p><ul>" + previewUrlList(d.added) + "</ul>" : "")
+        + (d.updated && d.updated.length ? "<p class='tiny'><b>Changed</b></p><ul>" + previewUrlList(d.updated) + "</ul>" : "")
+        + (d.removed && d.removed.length ? "<p class='tiny'><b>Removed</b></p><ul>" + previewUrlList(d.removed) + "</ul>" : "")
+        + "<div class='row'><button type='button' class='btn primary' id='preview-approve'>Approve and publish</button>"
+        + "<button type='button' class='btn ghost' id='preview-reject'>Discard preview</button></div>";
+      $("#preview-approve")?.addEventListener("click", async () => {
+        await req("/api/sites/" + state.site.id + "/preview/approve", { method: "POST" });
+        toast("Recrawl published");
+        loadDocs();
+      });
+      $("#preview-reject")?.addEventListener("click", async () => {
+        await req("/api/sites/" + state.site.id + "/preview/reject", { method: "POST" });
+        toast("Preview discarded");
+        loadDocs();
+      });
+    } else if (preview.status === "unchanged") {
+      box.className = "preview-box unchanged";
+      box.innerHTML = "<h4>Last recrawl found no changes</h4><p class='muted tiny'>The published training already matches the site.</p>";
+    } else {
+      box.className = "preview-box hidden";
+      box.innerHTML = "";
+    }
+  } catch { box.className = "preview-box hidden"; }
+
+  try {
+    const data = await req("/api/sites/" + state.site.id + "/staging");
+    if (data.site) state.site = data.site;
+    const key = data.staging_site_key || state.site.staging_site_key;
+    const snippet = key ? '<script src="' + widgetScriptUrl(PUBLIC_ORIGIN) + '" data-id="' + key + '"></script>' : "";
+    const pre = $("#staging-snippet");
+    if (pre) pre.textContent = snippet;
+    const open = $("#staging-open");
+    if (open && key) open.href = "/test-widget.html?key=" + encodeURIComponent(key);
+    const list = $("#staging-docs");
+    const docs = (data.documents || []).filter((d) => !d.preview_id);
+    if (list) {
+      list.innerHTML = docs.length ? docs.map((d) => "<div class='item'><strong>" + escapeHtml(d.filename) + "</strong> · " + escapeHtml(d.source_type) + " · " + d.chunk_count + " chunks · unpublished</div>").join("") : "<p class='muted tiny'>No unpublished documents yet. Tick “Add to the test widget first” when you upload or paste.</p>";
+    }
+  } catch {}
+}
+
 
 async function loadLogs() {
   if (!state.site) return;
@@ -974,9 +1058,10 @@ document.getElementById("open-billing")?.addEventListener("click", showBilling);
 document.getElementById("notion-form")?.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const fd = new FormData(ev.target);
-  await req("/api/sites/" + state.site.id + "/documents/notion", { method: "POST", body: { url: fd.get("url") } });
+  const staged = Boolean(fd.get("staging"));
+  await req("/api/sites/" + state.site.id + "/documents/notion", { method: "POST", body: { url: fd.get("url"), staging: staged ? "1" : undefined } });
   ev.target.reset();
-  toast("Notion page imported");
+  toast(staged ? "Notion page added to the test widget" : "Notion page imported");
   loadDocs();
 });
 

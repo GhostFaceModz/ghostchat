@@ -9,6 +9,7 @@ import { openTicket } from "../lib/tickets.js";
 import { ticketPriority } from "../lib/modes.js";
 import { notifyOwner } from "../lib/relay.js";
 import type { Site } from "../types.js";
+import { loadSiteByPublicKey } from "../lib/staging.js";
 
 export const leadsRouter = Router();
 
@@ -27,13 +28,10 @@ leadsRouter.post("/", async (req, res) => {
   const rl = await rateLimitAsync(`lead:${siteKey}:${ip}`, 8, 30 * 60 * 1000);
   if (!rl.ok) return res.status(429).json({ error: "Too many submissions. Try again shortly." });
 
-  const { data: site, error: siteErr } = await getDb()
-    .from("ghostchat_sites")
-    .select("*")
-    .eq("site_key", siteKey)
-    .maybeSingle();
-  if (siteErr || !site) return res.status(404).json({ error: "Unknown site key." });
-  const typed = site as Site;
+  let site: Site | null = null;
+  try { site = await loadSiteByPublicKey(siteKey); } catch { site = null; }
+  if (!site) return res.status(404).json({ error: "Unknown site key." });
+  const typed = site;
   if (kind !== "email") {
     // In-chat forms: validate against the owner's fields (or the support ticket fields).
     const fields = kind === "support" ? SUPPORT_FORM_FIELDS : chatForm(typed).fields;

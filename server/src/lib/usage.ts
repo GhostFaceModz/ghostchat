@@ -1,6 +1,7 @@
 import { PLAN_LIMITS, type Plan } from "../config.js";
 import { getDb } from "./supabase.js";
 import type { Site } from "../types.js";
+import { countStagingUploads } from "./staging.js";
 
 function startOfUtcMonth(): string {
   const now = new Date();
@@ -134,7 +135,8 @@ export async function countUploads(siteId: string): Promise<number> {
     .eq("site_id", siteId)
     .in("source_type", ["upload", "paste", "pdf", "notion"]);
   if (error) throw error;
-  return count ?? 0;
+  const staged = await countStagingUploads(siteId).catch(() => 0);
+  return (count ?? 0) + staged;
 }
 
 export function limitsFor(plan: Plan) {

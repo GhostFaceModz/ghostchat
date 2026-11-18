@@ -128,7 +128,9 @@ test("widget shows a same-size speaker button next to thumbs, with play/stop and
 test("read-aloud is a separate owner setting, default on, and does not change voice mode", () => {
   assert.match(migration, /ADD COLUMN IF NOT EXISTS read_aloud_enabled boolean NOT NULL DEFAULT true/);
   assert.match(types, /read_aloud_enabled\?: boolean;/);
-  assert.match(widgetRoute, /voice_enabled, read_aloud_enabled, greetings/);
+  assert.match(widgetRoute, /site\.voice_enabled/);
+  assert.match(widgetRoute, /site\.read_aloud_enabled/);
+  assert.match(widgetRoute, /site\.greetings/);
   assert.match(widgetRoute, /readAloudEnabled: site\.read_aloud_enabled !== false/);
   assert.match(widgetRoute, /voiceEnabled: Boolean\(config\.voiceEnabled && site\.voice_enabled && site\.plan !== "free"\)/);
   assert.match(sitesRoute, /if \(typeof body\.read_aloud_enabled === "boolean"\) patch\.read_aloud_enabled = body\.read_aloud_enabled;/);

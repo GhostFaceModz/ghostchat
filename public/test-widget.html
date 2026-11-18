@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>GhostChat test widget</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; min-height: 100vh; font: 16px/1.5 Inter, system-ui, sans-serif; color: #f6f3ff; background: #07060f; }
+    main { max-width: 40rem; margin: 0 auto; padding: 48px 20px; }
+    h1 { font-family: Unbounded, system-ui, sans-serif; letter-spacing: -.03em; }
+    .muted { color: #aaa5c2; }
+    .warn { color: #fb7185; }
+    code { background: rgba(143,108,255,.16); padding: 1px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Test widget</h1>
+    <p id="msg" class="muted">This page is for trying unpublished training and recrawl previews. Live visitors still see the published assistant.</p>
+  </main>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+      var key = (params.get("key") || "").trim();
+      var msg = document.getElementById("msg");
+      if (!key || key.indexOf("gc_stg_") !== 0) {
+        msg.className = "warn";
+        msg.textContent = "Open this page from your GhostChat dashboard with the test-widget key. The public site key will not load unpublished training here.";
+        return;
+      }
+      var s = document.createElement("script");
+      s.src = "/widget.js";
+      s.setAttribute("data-id", key);
+      s.async = true;
+      document.body.appendChild(s);
+    })();
+  </script>
+</body>
+</html>

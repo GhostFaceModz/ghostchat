@@ -9,6 +9,7 @@ import { suggestionLimit } from "../lib/chat.js";
 import type { Site } from "../types.js";
 import { siteHostsFrom, openSiteLinksMode } from "../lib/siteLinks.js";
 import { clipPageUrl, recordWidgetSeen } from "../lib/widgetHealth.js";
+import { loadSiteByPublicKey } from "../lib/staging.js";
 
 export const widgetRouter = Router();
 
@@ -18,18 +19,18 @@ widgetRouter.get("/templates", (_req, res) => {
 
 widgetRouter.get("/config/:siteKey", async (req, res) => {
   const siteKey = String(req.params.siteKey || "");
-  const { data, error } = await getDb()
-    .from("ghostchat_sites")
-    .select(
-      "id, name, url, theme, greeting, starter_questions, proactive_delay_ms, sound_default, show_branding, plan, site_key, booking_url, booking_provider, voice_enabled, read_aloud_enabled, greetings, memory_enabled, multilingual, bot_mode, support, live_lookup, max_suggestions, open_site_links, custom_domain, last_widget_seen_at, last_widget_page",
-    )
-    .eq("site_key", siteKey)
-    .maybeSingle();
-  if (error) return res.status(500).json({ error: "Could not load widget config." });
-  if (!data) return res.status(404).json({ error: "Unknown site key." });
-  const site = data as Site;
+  let site: Site;
+  try {
+    const found = await loadSiteByPublicKey(siteKey);
+    if (!found) return res.status(404).json({ error: "Unknown site key." });
+    site = found;
+  } catch {
+    return res.status(500).json({ error: "Could not load widget config." });
+  }
   const page = clipPageUrl(String(req.query.page || req.get("referer") || ""));
-  recordWidgetSeen(site.id, page, { last_widget_seen_at: site.last_widget_seen_at, last_widget_page: site.last_widget_page }).catch(() => {});
+  if (!site.staging) {
+    recordWidgetSeen(site.id, page, { last_widget_seen_at: site.last_widget_seen_at, last_widget_page: site.last_widget_page }).catch(() => {});
+  }
   res.json({
     config: {
       name: site.name,
@@ -57,6 +58,7 @@ widgetRouter.get("/config/:siteKey", async (req, res) => {
       openSiteLinks: openSiteLinksMode((site as Site).open_site_links),
       siteUrl: site.url || null,
       siteHosts: siteHostsFrom(site.url, (site as Site).custom_domain),
+      staging: Boolean(site.staging),
     },
   });
 });

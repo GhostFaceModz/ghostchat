@@ -15,16 +15,13 @@ import { loadVisitor, memoryOn, memoryPrompt, rememberVisitor, forgetVisitor, VI
 import { botMode, detectAnger, supportSettings, ticketPriority, withinSupportHours } from "../lib/modes.js";
 import { openTicket } from "../lib/tickets.js";
 import type { PromptContext } from "../lib/chat.js";
+import { loadSiteByPublicKey } from "../lib/staging.js";
 import type { Site } from "../types.js";
 
 export const chatRouter = Router();
 
 async function loadSiteByKey(siteKey: string): Promise<Site | null> {
-  const key = String(siteKey || "").trim();
-  if (!key.startsWith("gc_")) return null;
-  const { data, error } = await getDb().from("ghostchat_sites").select("*").eq("site_key", key).maybeSingle();
-  if (error) throw error;
-  return (data as Site) ?? null;
+  return loadSiteByPublicKey(siteKey);
 }
 
 /** Per visitor (session) and per IP: 6 messages a minute and 60 an hour. In memory. */
