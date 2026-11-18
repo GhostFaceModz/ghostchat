@@ -25,6 +25,7 @@ import { normalizeChatForm } from "../lib/forms.js";
 import { BOT_MODES, normalizeSupport } from "../lib/modes.js";
 import { normalizeChannels } from "../lib/meta.js";
 import { saveCorrection } from "../lib/corrections.js";
+import { buildKnowledgeExport, exportFilename, knowledgeExportToCsv } from "../lib/knowledgeExport.js";
 import { createOwnerFaqDraft, listFaqDrafts, setFaqDraftStatus } from "../lib/faqDrafts.js";
 import { importFaqRows, parseFaqCsv } from "../lib/faqImport.js";
 import type { Site, Theme } from "../types.js";
@@ -501,6 +502,28 @@ sitesRouter.get("/:id/coverage", async (req, res) => {
     res.json({ coverage: await siteCoverage(site.id) });
   } catch {
     res.status(500).json({ error: "Could not load the coverage map." });
+  }
+});
+
+sitesRouter.get("/:id/knowledge-export", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  const ip = clientIp(req);
+  const rl = await rateLimitAsync(`export:${site.id}:${ip}`, 20, 60 * 60 * 1000);
+  if (!rl.ok) return res.status(429).json({ error: "Export limit reached. Try again later." });
+  try {
+    const payload = await buildKnowledgeExport(site);
+    const format = String(req.query.format || "json").toLowerCase() === "csv" ? "csv" : "json";
+    const filename = exportFilename(site, format);
+    res.setHeader("content-disposition", `attachment; filename="${filename}"`);
+    if (format === "csv") {
+      res.setHeader("content-type", "text/csv; charset=utf-8");
+      return res.send(knowledgeExportToCsv(payload));
+    }
+    res.setHeader("content-type", "application/json; charset=utf-8");
+    res.send(JSON.stringify(payload, null, 2));
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message || "Could not export knowledge." });
   }
 });
 
