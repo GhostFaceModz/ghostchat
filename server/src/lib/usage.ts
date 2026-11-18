@@ -229,17 +229,15 @@ export async function dailyCapCheckAsync(site: Site, now = new Date()): Promise<
   }
 }
 
+/** Suggested wording if an owner wants a disclosure line. Not shown unless they add one. */
 export const DEFAULT_AI_DISCLOSURE = "This chat uses AI.";
 
-/** Custom widget disclosure line. Free plans always show at least the default. */
+/** Optional widget disclosure line. Off by default on every plan; owners can add their own wording. */
 export function effectiveDisclosure(site: Pick<Site, "plan" | "ai_disclosure">): string {
-  const raw = String(site.ai_disclosure ?? DEFAULT_AI_DISCLOSURE).replace(/\s+/g, " ").trim().slice(0, 120);
-  if (raw) return raw;
-  const limits = PLAN_LIMITS[site.plan as Plan] ?? PLAN_LIMITS.free;
-  if (limits.brandingRequired) return DEFAULT_AI_DISCLOSURE;
-  return "";
+  void site.plan;
+  return String(site.ai_disclosure ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
-export function sanitizeDisclosure(value: string, plan: Plan): string {
-  return effectiveDisclosure({ plan, ai_disclosure: String(value ?? "") });
+export function sanitizeDisclosure(value: string, _plan: Plan = "free"): string {
+  return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
 }

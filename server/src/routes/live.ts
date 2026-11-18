@@ -230,7 +230,7 @@ liveOwnerRouter.get("/inbox", async (req, res) => {
   const owner = ownerOf(req);
   const { data: sites } = await getDb().from("ghostchat_sites").select("id, name").eq("owner_id", owner.id);
   const siteName = new Map((sites || []).map((s) => [s.id, s.name]));
-  const { data: convs } = await getDb().from("ghostchat_live_conversations").select("*").eq("owner_id", owner.id).order("updated_at", { ascending: false }).limit(50);
+  const { data: convs } = await getDb().from("ghostchat_live_conversations").select("*").eq("owner_id", owner.id).order("updated_at", { ascending: false }).limit(80);
   // Recent AI-only sessions (last 48h) so the owner can take over manually.
   const since = new Date(Date.now() - 48 * 3600_000).toISOString();
   const ids = [...siteName.keys()];
@@ -254,7 +254,8 @@ liveOwnerRouter.get("/inbox", async (req, res) => {
     const [site_id, session_id] = [k.slice(0, 36), k.slice(37)];
     return { id: null, site_id, site_name: siteName.get(site_id) || "", session_id, status: "ai", updated_at: l.created_at, preview: l.message.slice(0, 140), messages: l.count };
   });
-  res.json({ live: live.filter((c) => c.status !== "closed").map(toItem), recent });
+  const closed = live.filter((c) => c.status === "closed").map(toItem);
+  res.json({ live: live.filter((c) => c.status !== "closed").map(toItem), recent, closed });
 });
 
 liveOwnerRouter.get("/inbox/session/:siteId/:sessionId", async (req, res) => {
@@ -289,7 +290,7 @@ liveOwnerRouter.post("/inbox/take", async (req, res) => {
   const agent = await resolveOwnerAgent(req, typeof req.body?.agentName === "string" ? req.body.agentName : null);
   if (agent.needsName) return res.status(400).json({ error: "Enter the name visitors will see in the chat.", needName: true });
   const conv = await startHandoff(site, String(req.body?.sessionId || "").slice(0, 80), "manual");
-  await takeOver(conv, agent.name);
+  await takeOver(conv, agent.name, actorOf(req).id);
   res.json({ conversation: { ...conv, status: "human", agent_name: agent.name }, agentName: agent.name });
 });
 
@@ -301,7 +302,7 @@ liveOwnerRouter.post("/inbox/:id/reply", async (req, res) => {
   if (!text) return res.status(400).json({ error: "Write a reply first." });
   const agent = await resolveOwnerAgent(req, typeof req.body?.agentName === "string" ? req.body.agentName : null);
   if (agent.needsName) return res.status(400).json({ error: "Enter the name visitors will see in the chat.", needName: true });
-  const id = await agentReply(conv, text, "dashboard", agent.name);
+  const id = await agentReply(conv, text, "dashboard", agent.name, actorOf(req).id);
   res.json({ ok: true, id, agentName: agent.name });
 });
 liveOwnerRouter.post("/inbox/:id/typing", async (req, res) => {
@@ -314,7 +315,7 @@ liveOwnerRouter.post("/inbox/:id/takeover", async (req, res) => {
   if (denyIfViewer(req, res)) return;
   const conv = await ownedConversation(req);
   if (!conv) return res.status(404).json({ error: "Not found." });
-  await takeOver(conv);
+  await takeOver(conv, null, actorOf(req).id);
   res.json({ ok: true });
 });
 liveOwnerRouter.post("/inbox/:id/handback", async (req, res) => {

@@ -139,10 +139,23 @@
               <button type="button" class="btn tiny" id="pwa-install" hidden>Add to Home Screen</button>
             </div>
             <p class="muted tiny" id="pwa-hint" hidden></p>
-            <div class="rail-label">Live now</div>
-            <div id="inbox-live" class="inbox-items"><p class="muted tiny">No live chats right now.</p></div>
-            <div class="rail-label">Recent AI chats <span class="muted tiny">(last 48h)</span></div>
-            <div id="inbox-recent" class="inbox-items"></div>
+            <div class="inbox-filters" role="tablist" aria-label="Inbox filters">
+              <button type="button" class="on" data-inbox-filter="live" data-i18n="inbox.liveNow">Live now</button>
+              <button type="button" data-inbox-filter="recent" data-i18n="inbox.recentAi">Recent AI</button>
+              <button type="button" data-inbox-filter="closed" data-i18n="inbox.closed">Closed</button>
+            </div>
+            <div data-inbox-panel="live">
+              <div class="rail-label" data-i18n="inbox.liveNow">Live now</div>
+              <div id="inbox-live" class="inbox-items"><p class="muted tiny">No live chats right now.</p></div>
+            </div>
+            <div data-inbox-panel="recent" hidden>
+              <div class="rail-label">Recent AI chats <span class="muted tiny">(last 48h)</span></div>
+              <div id="inbox-recent" class="inbox-items"></div>
+            </div>
+            <div data-inbox-panel="closed" hidden>
+              <div class="rail-label" data-i18n="inbox.closed">Closed</div>
+              <div id="inbox-closed" class="inbox-items"></div>
+            </div>
           </div>
           <div class="inbox-pane" id="inbox-pane">
             <div class="inbox-empty muted">Pick a conversation to read the transcript, reply, take over or hand it back to the AI.</div>
@@ -222,9 +235,15 @@
         </section>
 
         <section class="panel glass acct" id="acct-team-wrap">
-          <h3>Team</h3>
+          <h3 data-i18n="team.title">Team</h3>
           <p class="muted tiny" id="acct-team-intro">Invite teammates to this workspace. Pro includes 2 seats, Business includes 5, with agent or viewer roles. You can cap an agent's monthly inbox/email copilot credits; the visitor widget is not affected.</p>
           <div id="acct-team"></div>
+        </section>
+
+        <section class="panel glass acct" id="acct-reviews-wrap">
+          <h3 data-i18n="team.reviews">Agent reviews</h3>
+          <p class="muted tiny" data-i18n="team.reviewsIntro">Ratings visitors leave after a human agent closes a chat. Ranked by average rating.</p>
+          <div id="acct-reviews"></div>
         </section>
 
         <section class="panel glass acct" id="acct-audit-wrap">
@@ -565,6 +584,80 @@
               </select>
             </label>
             <label>Primary colour <input name="primary" type="color" value="#a78bfa" /></label>
+
+            <div class="appear-preview" id="appear-preview">
+              <div class="lp-stage" id="lp-stage" data-side="right" data-size="md">
+                <div class="lp-panel">
+                  <div class="lp-head"><b id="lp-title">GhostChat</b><span id="lp-sub">AI assistant · Online</span></div>
+                </div>
+                <button type="button" class="lp-bubble" id="lp-bubble" data-style="gradient" data-icon="ghost" aria-label="Launcher preview"><span class="lp-ico" id="lp-ico"></span><span class="lp-lab" id="lp-lab">Chat</span></button>
+              </div>
+              <p class="muted tiny" data-i18n="appearance.preview">Live preview of the bubble and header</p>
+            </div>
+
+            <fieldset class="appear-block">
+              <legend data-i18n="appearance.header">Chat header</legend>
+              <p class="muted tiny" id="header-note" data-i18n="appearance.headerNoteFree">On the Free plan the title stays “GhostChat” with the “AI assistant · Online” subtitle.</p>
+              <label data-i18n-skip-title>Title
+                <select name="header_title_preset" id="header-title-preset">
+                  <option value="GhostChat">GhostChat</option>
+                  <option value="GhostChat Support">GhostChat Support</option>
+                  <option value="Support">Support</option>
+                  <option value="Help Center">Help Center</option>
+                  <option value="Customer Care">Customer Care</option>
+                  <option value="Live Help">Live Help</option>
+                  <option value="Sales Assistant">Sales Assistant</option>
+                </select>
+                <input name="header_title" id="header-title-custom" maxlength="40" placeholder="GhostChat" hidden />
+              </label>
+              <label>Subtitle
+                <select name="header_subtitle_preset" id="header-subtitle-preset">
+                  <option value="AI assistant · Online">AI assistant · Online</option>
+                  <option value="Support · Online">Support · Online</option>
+                  <option value="We reply instantly">We reply instantly</option>
+                </select>
+                <input name="header_subtitle" id="header-subtitle-custom" maxlength="60" placeholder="AI assistant · Online" hidden />
+              </label>
+            </fieldset>
+
+            <fieldset class="appear-block">
+              <legend data-i18n="appearance.launcher">Launcher bubble</legend>
+              <p class="muted tiny" data-i18n="appearance.launcherNote">Free plans can pick 3 icons and 2 styles. Pro and Business unlock the full set, a custom icon, size and position.</p>
+              <input type="hidden" name="launcher_icon" id="launcher-icon" value="ghost" />
+              <input type="hidden" name="launcher_style" id="launcher-style" value="gradient" />
+              <input type="hidden" name="launcher_custom_icon" id="launcher-custom-icon" value="" />
+              <div class="rail-label" data-i18n="appearance.icon">Icon</div>
+              <div class="icon-picks" id="launcher-icons" role="listbox" aria-label="Bubble icon"></div>
+              <label class="launcher-upload" id="launcher-upload-wrap">Custom icon <span class="pill">Pro</span>
+                <input type="file" id="launcher-upload" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" />
+              </label>
+              <div class="rail-label" data-i18n="appearance.style">Style</div>
+              <div class="icon-picks style-picks" id="launcher-styles" role="listbox" aria-label="Bubble style"></div>
+              <div class="row two paid-only" id="launcher-paid">
+                <label>Size
+                  <select name="launcher_size">
+                    <option value="sm">Small</option>
+                    <option value="md" selected>Medium</option>
+                    <option value="lg">Large</option>
+                  </select>
+                </label>
+                <label>Position
+                  <select name="launcher_side">
+                    <option value="right">Bottom right</option>
+                    <option value="left">Bottom left</option>
+                  </select>
+                </label>
+              </div>
+              <div class="row two paid-only" id="launcher-paid-2">
+                <label>Offset (px)
+                  <input name="launcher_offset" type="number" min="8" max="64" value="22" />
+                </label>
+                <label>Pill label
+                  <input name="launcher_label" maxlength="18" value="Chat" />
+                </label>
+              </div>
+            </fieldset>
+
             <label class="check"><input name="sound_default" type="checkbox" /> Sound on by default</label>
             <label class="check"><input name="read_aloud_enabled" type="checkbox" checked /> Show a listen button on replies (reads the answer aloud with the device's built-in voices)</label>
             <label class="check"><input name="voice_enabled" type="checkbox" /> Enable voice mode <span class="pill">Pro</span> (mic button + auto read-aloud in the browser; hidden where unsupported)</label>
@@ -573,7 +666,7 @@
             <label><span data-i18n="appearance.disclosure">AI disclosure line</span>
               <input name="ai_disclosure" maxlength="120" placeholder="This chat uses AI." />
             </label>
-            <p class="muted tiny" data-i18n="appearance.disclosureNote">Shown at the bottom of the chat. On the Free plan it can’t be hidden — Pro and Business can clear the field to hide it.</p>
+            <p class="muted tiny" data-i18n="appearance.disclosureNote">Optional line under the composer. Leave it blank to hide it — off by default on every plan. “Powered by GhostChat”, “Add to your website” and “Forget me” stay as they are.</p>
             <label><span data-i18n="analytics.plausible">Plausible domain</span>
               <input name="plausible_domain" maxlength="253" placeholder="yoursite.com" autocomplete="off" />
             </label>
@@ -694,7 +787,7 @@
                 </label>
               </div>
               <label>Auto-close a claimed chat after (minutes of no messages)
-                <input name="idle_timeout_min" type="number" min="3" max="120" value="15" />
+                <input name="idle_timeout_min" type="number" min="3" max="120" value="30" />
               </label>
               <p class="muted tiny">We'll warn both sides 2 minutes before closing. Claimed chats continue in Discord DMs, not in a public thread.</p>
               <label class="check"><input type="checkbox" name="clear_closed_discord" checked /> Remove closed chats from the Discord channel</label>

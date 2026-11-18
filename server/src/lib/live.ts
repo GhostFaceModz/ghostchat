@@ -19,7 +19,7 @@ export type LiveSettings = {
   claim_timeout_min: number;
   /** What happens when nobody joins in time: the AI carries on, or the visitor gets the email form. */
   timeout_fallback: "ai" | "form";
-  /** Minutes of silence (either side) after a claim before the chat auto-closes. */
+  /** Minutes of silence (either side) after a claim before the chat auto-closes. Default 30. */
   idle_timeout_min: number;
   /** Remove the inbox card (and any fallback thread) from the Discord support channel after a chat closes. */
   clear_closed_discord: boolean;
@@ -39,6 +39,8 @@ export type Conversation = {
   close_warned_at?: string | null;
   closed_at?: string | null;
   discord_cleared_at?: string | null;
+  last_agent_id?: string | null;
+  last_agent_name?: string | null;
 };
 
 export const LIVE_PLANS = new Set(["pro", "business"]);
@@ -54,7 +56,7 @@ export function liveSettings(site: Pick<Site, "live_chat">): LiveSettings {
     agent_name: typeof raw.agent_name === "string" && raw.agent_name.trim() ? raw.agent_name.trim().slice(0, 40) : null,
     claim_timeout_min: Math.min(30, Math.max(1, Math.round(Number(raw.claim_timeout_min) || 5))),
     timeout_fallback: raw.timeout_fallback === "form" ? "form" : "ai",
-    idle_timeout_min: Math.min(120, Math.max(3, Math.round(Number(raw.idle_timeout_min) || 15))),
+    idle_timeout_min: Math.min(120, Math.max(3, Math.round(Number(raw.idle_timeout_min) || 30))),
     clear_closed_discord: raw.clear_closed_discord !== false,
     clear_closed_discord_sec: Math.min(600, Math.max(10, Math.round(Number(raw.clear_closed_discord_sec) || 60))),
   };

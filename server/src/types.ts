@@ -7,6 +7,16 @@ export type Theme = {
   text?: string;
   accent?: string;
   title?: string;
+  launcher?: {
+    icon?: string;
+    style?: string;
+    size?: string;
+    side?: string;
+    offset?: number;
+    label?: string;
+    custom_icon?: string | null;
+  };
+  header?: { title?: string; subtitle?: string };
 };
 
 export type ConversionCard = {

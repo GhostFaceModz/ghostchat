@@ -380,13 +380,189 @@ function renderSite() {
   persona.banned_topics.value = (s.banned_topics || []).join(", ");
   persona.proactive_delay_ms.value = s.proactive_delay_ms ?? 4000;
 
+
+const LAUNCHER_ICON_SVG = {
+  ghost: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12 2.6c-4.3 0-7.4 3.2-7.4 7.5v9.6c0 .9 1 1.4 1.7.8l1.5-1.2 1.6 1.4c.5.4 1.2.4 1.7 0L12 19.3l1.9 1.4c.5.4 1.2.4 1.7 0l1.6-1.4 1.5 1.2c.7.6 1.7.1 1.7-.8v-9.6c0-4.3-3.1-7.5-7.4-7.5ZM9.3 9.4a1.35 1.6 0 1 0 0 3.2 1.35 1.6 0 0 0 0-3.2Zm5.4 0a1.35 1.6 0 1 0 0 3.2 1.35 1.6 0 0 0 0-3.2Z"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7A2.5 2.5 0 0 1 16.5 16H9l-4 3.5V6.5Z"/></svg>',
+  headset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.8 12a7.2 7.2 0 0 1 14.4 0"/><rect x="3.5" y="11" width="3.4" height="6.2" rx="1.5"/><rect x="17.1" y="11" width="3.4" height="6.2" rx="1.5"/><path d="M20.5 16.6v1.2A3.4 3.4 0 0 1 17.1 21H14"/></svg>',
+  question: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1.1 1-1.1 1.8"/><circle cx="12" cy="17.2" r="0.85" fill="currentColor" stroke="none"/></svg>',
+  sparkle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 13.7 9 19.5 10.8 13.7 12.6 12 18.4 10.3 12.6 4.5 10.8 10.3 9Z"/><path d="M18.2 4.5 18.8 6.4 20.7 7 18.8 7.6 18.2 9.5 17.6 7.6 15.7 7 17.6 6.4Z"/></svg>',
+  custom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>'
+};
+const FREE_LAUNCHER_ICONS = ["ghost", "chat", "question"];
+const FREE_LAUNCHER_STYLES = ["solid", "gradient"];
+const ALL_LAUNCHER_ICONS = ["ghost", "chat", "headset", "question", "sparkle", "custom"];
+const ALL_LAUNCHER_STYLES = ["solid", "outline", "gradient", "glass", "neon", "rounded-square", "pill"];
+
+function appearancePlan() { return (state.site && state.site.plan) || "free"; }
+function isPaidAppearance() { const p = appearancePlan(); return p === "pro" || p === "business"; }
+function isBusinessAppearance() { return appearancePlan() === "business"; }
+
+function fillAppearanceExtras(s) {
+  const form = $("#theme-form");
+  if (!form) return;
+  const paid = isPaidAppearance();
+  const biz = isBusinessAppearance();
+  const L = (s.theme && s.theme.launcher) || {};
+  const H = (s.theme && s.theme.header) || {};
+  form.launcher_icon.value = L.icon || "ghost";
+  form.launcher_style.value = L.style || "gradient";
+  form.launcher_custom_icon.value = L.custom_icon || "";
+  if (form.launcher_size) form.launcher_size.value = L.size || "md";
+  if (form.launcher_side) form.launcher_side.value = L.side || "right";
+  if (form.launcher_offset) form.launcher_offset.value = L.offset || 22;
+  if (form.launcher_label) form.launcher_label.value = L.label || "Chat";
+  const title = H.title || (paid ? (s.name || "GhostChat") : "GhostChat");
+  const sub = H.subtitle || "AI assistant · Online";
+  const titleSel = $("#header-title-preset");
+  const titleIn = $("#header-title-custom");
+  const subSel = $("#header-subtitle-preset");
+  const subIn = $("#header-subtitle-custom");
+  if (titleSel) {
+    titleSel.hidden = biz;
+    titleSel.disabled = !paid;
+    if ([].some.call(titleSel.options, (o) => o.value === title)) titleSel.value = title;
+    else titleSel.value = "GhostChat";
+  }
+  if (titleIn) {
+    titleIn.hidden = !biz;
+    titleIn.disabled = !biz;
+    titleIn.value = title;
+  }
+  if (subSel) {
+    subSel.hidden = biz;
+    subSel.disabled = !paid;
+    if ([].some.call(subSel.options, (o) => o.value === sub)) subSel.value = sub;
+    else subSel.value = "AI assistant · Online";
+  }
+  if (subIn) {
+    subIn.hidden = !biz;
+    subIn.disabled = !biz;
+    subIn.value = sub;
+  }
+  const note = $("#header-note");
+  if (note) note.textContent = !paid
+    ? "On the Free plan the title stays “GhostChat” with the “AI assistant · Online” subtitle."
+    : biz
+      ? "Business: type your own title and subtitle."
+      : "Pro: pick a title and subtitle from the preset list.";
+  ["launcher-paid", "launcher-paid-2"].forEach((id) => {
+    const box = document.getElementById(id);
+    if (!box) return;
+    box.querySelectorAll("input,select").forEach((el) => { el.disabled = !paid; });
+  });
+  const up = $("#launcher-upload");
+  if (up) up.disabled = !paid;
+  renderLauncherPicks();
+  updateAppearancePreview();
+}
+
+function renderLauncherPicks() {
+  const paid = isPaidAppearance();
+  const icons = $("#launcher-icons");
+  const styles = $("#launcher-styles");
+  const form = $("#theme-form");
+  if (!form) return;
+  if (icons) {
+    icons.innerHTML = ALL_LAUNCHER_ICONS.map((id) => {
+      const locked = !paid && !FREE_LAUNCHER_ICONS.includes(id) && id !== "custom" || (!paid && id === "custom");
+      const on = form.launcher_icon.value === id ? " on" : "";
+      return "<button type='button' class='" + on + "' data-launcher-icon='" + id + "'" + (locked ? " disabled" : "") + " title='" + id + (locked ? " (Pro)" : "") + "'>" + (LAUNCHER_ICON_SVG[id] || "") + "</button>";
+    }).join("");
+    icons.querySelectorAll("[data-launcher-icon]").forEach((b) => b.addEventListener("click", () => {
+      if (b.disabled) return;
+      form.launcher_icon.value = b.getAttribute("data-launcher-icon");
+      renderLauncherPicks();
+      updateAppearancePreview();
+    }));
+  }
+  if (styles) {
+    styles.innerHTML = ALL_LAUNCHER_STYLES.map((id) => {
+      const locked = !paid && !FREE_LAUNCHER_STYLES.includes(id);
+      const on = form.launcher_style.value === id ? " on" : "";
+      return "<button type='button' class='" + on + "' data-launcher-style='" + id + "'" + (locked ? " disabled" : "") + " title='" + id + (locked ? " (Pro)" : "") + "'>" + id.replace("-", " ") + "</button>";
+    }).join("");
+    styles.querySelectorAll("[data-launcher-style]").forEach((b) => b.addEventListener("click", () => {
+      if (b.disabled) return;
+      form.launcher_style.value = b.getAttribute("data-launcher-style");
+      renderLauncherPicks();
+      updateAppearancePreview();
+    }));
+  }
+}
+
+function currentHeaderValues() {
+  const biz = isBusinessAppearance();
+  const paid = isPaidAppearance();
+  if (!paid) return { title: "GhostChat", subtitle: "AI assistant · Online" };
+  if (biz) {
+    return {
+      title: ($("#header-title-custom")?.value || "").trim() || "GhostChat",
+      subtitle: ($("#header-subtitle-custom")?.value || "").trim() || "AI assistant · Online"
+    };
+  }
+  return {
+    title: $("#header-title-preset")?.value || "GhostChat",
+    subtitle: $("#header-subtitle-preset")?.value || "AI assistant · Online"
+  };
+}
+
+function updateAppearancePreview() {
+  const form = $("#theme-form");
+  const stage = $("#lp-stage");
+  const bubble = $("#lp-bubble");
+  if (!form || !stage || !bubble) return;
+  const header = currentHeaderValues();
+  if ($("#lp-title")) $("#lp-title").textContent = header.title;
+  if ($("#lp-sub")) $("#lp-sub").textContent = header.subtitle;
+  const icon = form.launcher_icon.value || "ghost";
+  const style = form.launcher_style.value || "gradient";
+  const size = form.launcher_size ? form.launcher_size.value : "md";
+  const side = form.launcher_side ? form.launcher_side.value : "right";
+  stage.dataset.side = side;
+  stage.dataset.size = size;
+  stage.dataset.mode = form.mode ? form.mode.value : "dark";
+  bubble.dataset.style = style;
+  bubble.dataset.icon = icon;
+  bubble.style.background = (form.primary && form.primary.value) || "#8b5cf6";
+  if (style === "gradient" || style === "neon" || style === "solid" || style === "pill") bubble.style.background = (form.primary && form.primary.value) || "#8b5cf6";
+  const ico = $("#lp-ico");
+  if (ico) {
+    if (icon === "custom" && form.launcher_custom_icon.value) ico.innerHTML = "<img alt='' src='" + form.launcher_custom_icon.value.replace(/'/g, "") + "' width='28' height='28' />";
+    else ico.innerHTML = LAUNCHER_ICON_SVG[icon] || LAUNCHER_ICON_SVG.ghost;
+  }
+  if ($("#lp-lab")) $("#lp-lab").textContent = form.launcher_label ? form.launcher_label.value : "Chat";
+}
+
+function bindAppearancePreview() {
+  const form = $("#theme-form");
+  if (!form || form.dataset.previewBound) return;
+  form.dataset.previewBound = "1";
+  form.addEventListener("input", updateAppearancePreview);
+  form.addEventListener("change", updateAppearancePreview);
+  const up = $("#launcher-upload");
+  if (up) up.addEventListener("change", () => {
+    const file = up.files && up.files[0];
+    if (!file) return;
+    if (file.size > 60_000) { toast("Please use a smaller icon (under 60KB)."); up.value = ""; return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      form.launcher_custom_icon.value = String(reader.result || "");
+      form.launcher_icon.value = "custom";
+      renderLauncherPicks();
+      updateAppearancePreview();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
   const theme = $("#theme-form");
   theme.mode.value = (s.theme && s.theme.mode) || "dark";
   theme.primary.value = (s.theme && s.theme.primary) || "#a78bfa";
   theme.sound_default.checked = !!s.sound_default;
   theme.show_branding.checked = s.show_branding !== false;
   theme.show_branding.disabled = s.plan === "free";
-  theme.ai_disclosure.value = s.ai_disclosure != null ? s.ai_disclosure : "This chat uses AI.";
+  theme.ai_disclosure.value = s.ai_disclosure || "";
   theme.ai_disclosure.placeholder = "This chat uses AI.";
   if (theme.plausible_domain) theme.plausible_domain.value = s.plausible_domain || "";
   if (theme.ga4_id) theme.ga4_id.value = s.ga4_id || "";
@@ -395,6 +571,8 @@ function renderSite() {
     : "Pro and Business can hide the badge.";
   if (theme.read_aloud_enabled) theme.read_aloud_enabled.checked = s.read_aloud_enabled !== false;
   if (theme.voice_enabled) theme.voice_enabled.checked = !!s.voice_enabled;
+  bindAppearancePreview();
+  fillAppearanceExtras(s);
   const booking = $("#booking-form");
   if (booking) booking.booking_url.value = s.booking_url || "";
   renderCards();
@@ -612,12 +790,25 @@ $("#theme-form").addEventListener("submit", async (ev) => {
   const { site } = await req("/api/sites/" + state.site.id, {
     method: "PATCH",
     body: {
-      theme: { mode: fd.get("mode"), primary: fd.get("primary") },
+      theme: {
+        mode: fd.get("mode"),
+        primary: fd.get("primary"),
+        launcher: {
+          icon: $("#theme-form").launcher_icon ? $("#theme-form").launcher_icon.value : "ghost",
+          style: $("#theme-form").launcher_style ? $("#theme-form").launcher_style.value : "gradient",
+          size: $("#theme-form").launcher_size ? $("#theme-form").launcher_size.value : "md",
+          side: $("#theme-form").launcher_side ? $("#theme-form").launcher_side.value : "right",
+          offset: $("#theme-form").launcher_offset ? Number($("#theme-form").launcher_offset.value) : 22,
+          label: $("#theme-form").launcher_label ? $("#theme-form").launcher_label.value : "Chat",
+          custom_icon: $("#theme-form").launcher_custom_icon ? $("#theme-form").launcher_custom_icon.value || null : null
+        },
+        header: currentHeaderValues()
+      },
       sound_default: $("#theme-form").sound_default.checked,
       show_branding: $("#theme-form").show_branding.checked,
       voice_enabled: $("#theme-form").voice_enabled ? $("#theme-form").voice_enabled.checked : false,
       read_aloud_enabled: $("#theme-form").read_aloud_enabled ? $("#theme-form").read_aloud_enabled.checked : true,
-      ai_disclosure: $("#theme-form").ai_disclosure ? $("#theme-form").ai_disclosure.value : "This chat uses AI.",
+      ai_disclosure: $("#theme-form").ai_disclosure ? $("#theme-form").ai_disclosure.value : "",
       plausible_domain: $("#theme-form").plausible_domain ? $("#theme-form").plausible_domain.value : "",
       ga4_id: $("#theme-form").ga4_id ? $("#theme-form").ga4_id.value : ""
     }
@@ -1637,6 +1828,50 @@ async function renderAudit() {
   }
 }
 
+
+function formatMs(ms) {
+  if (ms == null || !Number.isFinite(ms)) return "—";
+  if (ms < 1000) return Math.round(ms) + "ms";
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60), r = s % 60;
+  return r ? m + "m " + r + "s" : m + "m";
+}
+function starsLabel(n) {
+  if (n == null) return "—";
+  const full = Math.round(n);
+  return "★".repeat(Math.max(0, Math.min(5, full))) + " " + n.toFixed(1);
+}
+async function renderReviews() {
+  const box = $("#acct-reviews");
+  if (!box) return;
+  const i18n = window.GhostChatI18n;
+  const tr = (k, fallback) => (i18n && i18n.t(k)) || fallback;
+  try {
+    const d = await req("/api/team/reviews");
+    const agents = d.agents || [];
+    if (!agents.length) {
+      box.innerHTML = "<p class='muted tiny'>" + escapeHtml(tr("team.noReviews", "No agent reviews yet.")) + "</p>";
+      return;
+    }
+    box.innerHTML = "<div class='reviews-board'>" + agents.map((a) => {
+      const av = a.avatar_url
+        ? "<img src='" + escapeHtml(a.avatar_url) + "' alt='' referrerpolicy='no-referrer' />"
+        : "<div class='reviews-av'>" + escapeHtml((a.display_name || "A").slice(0, 1).toUpperCase()) + "</div>";
+      const comments = (a.recent_comments || []).map((c) => "<li>★" + c.rating + " — " + escapeHtml(c.comment) + "</li>").join("");
+      return "<article class='reviews-card'><div>" + av + "</div><div><div class='row' style='justify-content:space-between;gap:8px'><b>" + escapeHtml(a.display_name) + "</b><span class='reviews-rank'>#" + a.rank + "</span></div>" +
+        "<div class='reviews-meta'><span>" + escapeHtml(tr("team.avgRating", "Average rating")) + ": " + escapeHtml(starsLabel(a.average_rating)) + "</span>" +
+        "<span>" + escapeHtml(tr("team.ratings", "Ratings")) + ": " + a.ratings + "</span>" +
+        "<span>" + escapeHtml(tr("team.chatsHandled", "Chats handled")) + ": " + a.chats_handled + "</span>" +
+        "<span>" + escapeHtml(tr("team.medianFirst", "Median first response")) + ": " + escapeHtml(formatMs(a.median_first_response_ms)) + "</span></div>" +
+        (comments ? "<div class='muted tiny' style='margin-top:8px'>" + escapeHtml(tr("team.recentComments", "Recent comments")) + "</div><ul class='reviews-comments'>" + comments + "</ul>" : "") +
+        "</div></article>";
+    }).join("") + "</div>";
+  } catch (e) {
+    box.innerHTML = "<p class='muted'>" + escapeHtml(e.message) + "</p>";
+  }
+}
+
 async function renderTeam() {
   const box = $("#acct-team");
   if (!box) return;
@@ -1689,10 +1924,12 @@ async function renderTeam() {
       } catch (e) { toast(e.message); }
     });
     renderAudit();
+    renderReviews();
   } catch (e) {
     box.innerHTML = "<p class='muted'>" + escapeHtml(e.message) + "</p>";
   }
 }
+
 
 async function renderDigest() {
   const box = $("#acct-digest");

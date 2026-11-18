@@ -84,7 +84,7 @@ test("idle auto-close warns two minutes before, then closes; activity resets it"
   assert.equal(live.idleAction({ ...base, close_warned_at: "2026-11-15T04:58:00Z" }, settings, now), null);
   assert.equal(live.idleAction({ ...base, last_visitor_at: "2026-11-15T04:44:00Z", last_agent_at: "2026-11-15T04:44:00Z", updated_at: "2026-11-15T04:44:00Z" }, settings, now), "close");
   assert.equal(live.idleAction({ ...base, status: "waiting" }, settings, now), null);
-  assert.equal(live.liveSettings({ live_chat: {} } as never).idle_timeout_min, 15);
+  assert.equal(live.liveSettings({ live_chat: {} } as never).idle_timeout_min, 30);
   assert.equal(live.liveSettings({ live_chat: { idle_timeout_min: 3 } } as never).idle_timeout_min, 3);
   assert.equal(live.liveSettings({ live_chat: { idle_timeout_min: 200 } } as never).idle_timeout_min, 120);
   assert.equal(live.isLegacyThreadChat({ discord_thread_id: "1", discord_dm_channel_id: null }), true);

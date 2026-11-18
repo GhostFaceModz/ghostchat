@@ -35,7 +35,8 @@ test("Telegram agent names are remembered per user on the channel config", () =>
 });
 
 test("end-chat copy for the visitor and the agent", () => {
-  assert.match(handoff.endChatSystemMessage("end"), /back with the AI assistant/i);
+  assert.match(handoff.endChatSystemMessage("end"), /chat has been closed/i);
+  assert.match(handoff.endChatSystemMessage("end"), /new one/i);
   assert.match(handoff.endChatSystemMessage("cancel"), /cancelled/i);
   assert.match(handoff.endChatSystemMessage("handback"), /back with the AI assistant/i);
   assert.match(handoff.endChatAgentNotice("end", "visitor"), /visitor ended the chat/i);
