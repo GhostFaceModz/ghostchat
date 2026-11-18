@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getDb } from "../lib/supabase.js";
-import { hashPassword, verifyPassword, signToken, sessionTtl, isValidEmail, requireAuth, signOAuthState, verifyOAuthState, readOAuthState, type AuthedRequest } from "../lib/auth.js";
+import { hashPassword, verifyPassword, signToken, sessionTtl, isValidEmail, requireAuth, signOAuthState, verifyOAuthState, readOAuthState, workspaceId, denyIfNotOwner, type AuthedRequest } from "../lib/auth.js";
+import { normalizeCannedReplies } from "../lib/cannedReplies.js";
 import { listWorkspaces } from "../lib/team.js";
 import { mailerConfigured } from "../lib/mailer.js";
 import { clientIp, rateLimitAsync } from "../lib/rateLimit.js";
@@ -259,6 +260,26 @@ authRouter.get("/me", requireAuth, async (req, res) => {
 });
 
 // ---- My account ----
+
+authRouter.get("/canned", requireAuth, async (req, res) => {
+  const ws = workspaceId(req);
+  const { data, error } = await getDb().from("ghostchat_owners").select("canned_replies").eq("id", ws).maybeSingle();
+  if (error) return res.status(500).json({ error: "Could not load canned replies." });
+  res.json({ replies: normalizeCannedReplies(data?.canned_replies) });
+});
+
+authRouter.put("/canned", requireAuth, async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const ws = workspaceId(req);
+  const replies = normalizeCannedReplies(req.body?.replies);
+  const { error } = await getDb()
+    .from("ghostchat_owners")
+    .update({ canned_replies: replies, updated_at: new Date().toISOString() })
+    .eq("id", ws);
+  if (error) return res.status(500).json({ error: "Could not save canned replies." });
+  res.json({ replies });
+});
+
 authRouter.patch("/me", requireAuth, async (req, res) => {
   const { id } = (req as AuthedRequest).owner;
   const name = String(req.body?.name ?? "").trim().slice(0, 80);

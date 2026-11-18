@@ -1525,6 +1525,54 @@ async function renderDigest() {
   }
 }
 
+
+function cannedEditorRow(c) {
+  return "<div class='canned glass'><input data-c='title' placeholder='Title, e.g. Refund policy' maxlength='60' value='" + escapeHtml(c.title || "") + "' /><textarea data-c='text' rows='2' maxlength='1500' placeholder='Text'>" + escapeHtml(c.text || "") + "</textarea><button type='button' class='btn ghost small' data-rm>Remove</button></div>";
+}
+
+async function loadWorkspaceCanned() {
+  try {
+    const { replies } = await req("/api/auth/canned");
+    state.workspaceCanned = replies || [];
+  } catch {
+    state.workspaceCanned = state.workspaceCanned || [];
+  }
+  return state.workspaceCanned;
+}
+
+async function renderWorkspaceCanned() {
+  const box = $("#acct-canned-list");
+  if (!box) return;
+  const replies = await loadWorkspaceCanned();
+  box.innerHTML = replies.length ? replies.map(cannedEditorRow).join("") : "<p class='muted tiny'>None yet.</p>";
+}
+
+$("#acct-canned-add")?.addEventListener("click", () => {
+  const box = $("#acct-canned-list");
+  if (!box) return;
+  if (!box.querySelector(".canned")) box.innerHTML = "";
+  box.insertAdjacentHTML("beforeend", cannedEditorRow({ title: "", text: "" }));
+});
+$("#acct-canned-list")?.addEventListener("click", (ev) => {
+  if (ev.target.closest("[data-rm]")) ev.target.closest(".canned")?.remove();
+});
+$("#acct-canned-save")?.addEventListener("click", async () => {
+  const replies = $$("#acct-canned-list .canned").map((n) => ({
+    title: n.querySelector("[data-c=title]").value.trim(),
+    text: n.querySelector("[data-c=text]").value.trim(),
+  })).filter((c) => c.title && c.text);
+  const status = $("#acct-canned-status");
+  try {
+    const data = await req("/api/auth/canned", { method: "PUT", body: { replies } });
+    state.workspaceCanned = data.replies || replies;
+    if (status) status.textContent = "Saved " + (state.workspaceCanned.length) + " canned " + (state.workspaceCanned.length === 1 ? "reply" : "replies");
+    toast("Canned replies saved");
+  } catch (e) {
+    if (status) status.textContent = e.message;
+    toast(e.message);
+  }
+});
+
 async function showAccount() {
   state.view = "account";
   ["#site-view", "#empty-state", "#billing-view"].forEach((s) => $(s)?.classList.add("hidden"));
@@ -1551,6 +1599,7 @@ async function showAccount() {
   renderAccountBilling();
   renderTeam();
   renderDigest();
+  renderWorkspaceCanned();
 }
 
 async function renderAccountBilling() {
