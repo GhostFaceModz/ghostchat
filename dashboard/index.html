@@ -82,25 +82,29 @@
     <aside class="rail">
       <div class="rail-top">
         <a class="brand" href="/"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V10a7 7 0 0 1 14 0v11l-3.5-2-3.5 2-3.5-2Z"/><path d="M9.5 10v1.5m5-1.5v1.5"/></svg></span>GhostChat</a>
-        <button type="button" class="btn primary small" id="new-site">+ New site</button>
-        <button type="button" class="btn ghost tiny" id="open-palette" aria-keyshortcuts="Control+K Meta+K" aria-haspopup="dialog">Jump to… <kbd class="cmd-kbd">Ctrl+K</kbd></button>
+        <button type="button" class="btn primary small" id="new-site" data-i18n="nav.new">+ New site</button>
+        <button type="button" class="btn ghost tiny" id="open-palette" aria-keyshortcuts="Control+K Meta+K" aria-haspopup="dialog"><span data-i18n="nav.jump">Jump to…</span> <kbd class="cmd-kbd">Ctrl+K</kbd></button>
+      </div>
+      <div class="dash-lang-wrap">
+        <label class="rail-label" for="dash-lang" data-i18n="nav.language">Language</label>
+        <select id="dash-lang" aria-label="Language"></select>
       </div>
       <div id="workspace-switch" class="workspace-switch hidden">
-        <label class="rail-label" for="workspace-select">Workspace</label>
+        <label class="rail-label" for="workspace-select" data-i18n="nav.workspace">Workspace</label>
         <select id="workspace-select"></select>
       </div>
-      <div class="rail-label">Your sites</div>
+      <div class="rail-label" data-i18n="nav.sites">Your sites</div>
       <nav id="site-list" class="site-list" aria-label="Your sites"></nav>
       <div class="rail-foot">
-        <a class="btn ghost tiny" href="/guide" target="_blank" rel="noopener">📘 Setup guide</a>
-        <button type="button" class="btn ghost tiny" id="open-inbox">💬 Live inbox <span class="badge" id="inbox-badge" hidden>0</span></button>
-        <button type="button" class="btn ghost tiny" id="open-billing">💎 Plan &amp; billing</button>
-        <button type="button" class="btn ghost tiny" id="open-account">👤 My account</button>
+        <a class="btn ghost tiny" href="/guide" target="_blank" rel="noopener" data-i18n="nav.guide">📘 Setup guide</a>
+        <button type="button" class="btn ghost tiny" id="open-inbox">💬 <span data-i18n="nav.inbox">Live inbox</span> <span class="badge" id="inbox-badge" hidden>0</span></button>
+        <button type="button" class="btn ghost tiny" id="open-billing">💎 <span data-i18n="nav.billing">Plan &amp; billing</span></button>
+        <button type="button" class="btn ghost tiny" id="open-account">👤 <span data-i18n="nav.account">My account</span></button>
         <div class="owner">
           <span class="avatar" id="owner-avatar">👻</span>
           <span id="owner-email" class="muted tiny"></span>
         </div>
-        <button type="button" class="btn ghost tiny" id="sign-out">Sign out</button>
+        <button type="button" class="btn ghost tiny" id="sign-out" data-i18n="nav.signout">Sign out</button>
       </div>
     </aside>
 
@@ -281,21 +285,21 @@
         <div class="usage-banner hidden" id="usage-banner" role="status"></div>
 
         <nav class="tabs" id="tabs">
-          <button type="button" data-tab="setup" class="on">Setup</button>
-          <button type="button" data-tab="train">Train</button>
-          <button type="button" data-tab="tools">Search tools</button>
-          <button type="button" data-tab="persona">Persona</button>
-          <button type="button" data-tab="appearance">Appearance</button>
-          <button type="button" data-tab="model">Model</button>
-          <button type="button" data-tab="convert">Convert</button>
-          <button type="button" data-tab="transcripts">Transcripts</button>
-          <button type="button" data-tab="analytics">Analytics</button>
-          <button type="button" data-tab="leads">Leads</button>
-          <button type="button" data-tab="share">Share</button>
-          <button type="button" data-tab="live">Live chat</button>
-          <button type="button" data-tab="support">Mode &amp; support</button>
-          <button type="button" data-tab="tickets">Tickets</button>
-          <button type="button" data-tab="features">Smart features</button>
+          <button type="button" data-tab="setup" class="on" data-i18n="tab.setup">Setup</button>
+          <button type="button" data-tab="train" data-i18n="tab.train">Train</button>
+          <button type="button" data-tab="tools" data-i18n="tab.tools">Search tools</button>
+          <button type="button" data-tab="persona" data-i18n="tab.persona">Persona</button>
+          <button type="button" data-tab="appearance" data-i18n="tab.appearance">Appearance</button>
+          <button type="button" data-tab="model" data-i18n="tab.model">Model</button>
+          <button type="button" data-tab="convert" data-i18n="tab.convert">Convert</button>
+          <button type="button" data-tab="transcripts" data-i18n="tab.transcripts">Transcripts</button>
+          <button type="button" data-tab="analytics" data-i18n="tab.analytics">Analytics</button>
+          <button type="button" data-tab="leads" data-i18n="tab.leads">Leads</button>
+          <button type="button" data-tab="share" data-i18n="tab.share">Share</button>
+          <button type="button" data-tab="live" data-i18n="tab.live">Live chat</button>
+          <button type="button" data-tab="support" data-i18n="tab.support">Mode &amp; support</button>
+          <button type="button" data-tab="tickets" data-i18n="tab.tickets">Tickets</button>
+          <button type="button" data-tab="features" data-i18n="tab.features">Smart features</button>
         </nav>
 
         <section class="panel glass" data-panel="setup">
@@ -898,6 +902,7 @@
     <p class="muted tiny">Type to filter. Enter to jump. Esc to close.</p>
   </dialog>
   <script src="/dashboard/app.js"></script>
+  <script src="/dashboard/i18n.js"></script>
   <script src="/dashboard/commandPalette.js"></script>
   <script src="/dashboard/live.js"></script>
   <script src="/dashboard/tools.js"></script>
