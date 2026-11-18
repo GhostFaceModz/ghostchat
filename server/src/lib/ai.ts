@@ -9,6 +9,8 @@ export const FREE_OPENROUTER_FALLBACKS = [
   "google/gemma-4-31b-it:free",
   "google/gemma-4-26b-a4b-it:free",
   "nvidia/nemotron-3.5-lightning:free",
+  "qwen/qwen3-8b:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
 ];
 export const FREE_OPENROUTER_FALLBACK = FREE_OPENROUTER_FALLBACKS[0];
 
@@ -24,9 +26,23 @@ export class AiUnavailableError extends Error {
   constructor(message: string, public status?: number) { super(message); }
 }
 
-export const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 25_000;
+export const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 20_000;
 export const AI_MAX_RETRIES = 2;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** After a 402 on a paid OpenRouter model, skip it for a while (credits stay exhausted). */
+const PAID_CREDIT_SKIP_MS = 15 * 60 * 1000;
+let paidCreditSkipUntil = 0;
+
+export function clearPaidCreditSkip(): void {
+  paidCreditSkipUntil = 0;
+}
+function rememberPaidCreditsExhausted(): void {
+  paidCreditSkipUntil = Date.now() + PAID_CREDIT_SKIP_MS;
+}
+function shouldSkipPaidOpenRouter(resolved: ResolvedModel): boolean {
+  return resolved.provider === "openrouter" && !isFreeOpenRouterModel(String(resolved.model)) && Date.now() < paidCreditSkipUntil;
+}
 
 /** Backoff before retry n (0-based): ~0.6s then ~1.8s, honouring Retry-After up to 5s. */
 export function backoffMs(attempt: number, retryAfter?: string | null): number {
@@ -52,6 +68,14 @@ async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, str
   if (tracker) tracker.model = String(resolved.model);
   if (!resolved.apiKey) {
     throw new Error(`No API key is configured for ${resolved.provider}.`);
+  }
+  if (shouldSkipPaidOpenRouter(resolved)) {
+    const next = nextFreeOpenRouter(String(resolved.model), usedFree);
+    if (next) {
+      console.warn(`openrouter paid credits recently exhausted; starting with ${next}`);
+      if (tracker) tracker.model = next;
+      return aiFetch({ ...resolved, model: next }, path, withModel(body, next), stream, fetchImpl, [...usedFree, String(resolved.model)], tracker);
+    }
   }
   let lastStatus: number | undefined;
   for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
@@ -86,12 +110,14 @@ async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, str
       || (res.status === 429 && freeModel && attempt >= AI_MAX_RETRIES)
     );
     if (canSwitchFree) {
+      if (res.status === 402 && !isFreeOpenRouterModel(String(resolved.model))) rememberPaidCreditsExhausted();
       const next = nextFreeOpenRouter(String(resolved.model), usedFree);
       if (next) {
         console.warn(`openrouter ${res.status} on ${resolved.model}; retrying with ${next}`);
         if (tracker) tracker.model = next;
         return aiFetch({ ...resolved, model: next }, path, withModel(body, next), stream, fetchImpl, [...usedFree, String(resolved.model)], tracker);
       }
+      console.error(`openrouter ${res.status} on ${resolved.model}; no free fallback left`);
     }
     if (isRetryable(res.status) && attempt < AI_MAX_RETRIES) { await sleep(backoffMs(attempt, res.headers.get("retry-after"))); continue; }
     if (isRetryable(res.status)) throw new AiUnavailableError(`${resolved.provider} request failed (${res.status}): ${text.slice(0, 200)}`, res.status);
@@ -140,7 +166,7 @@ async function resolveForRequest(opts?: {
   };
 }
 
-export const _test = { aiFetch, resolveForRequest };
+export const _test = { aiFetch, resolveForRequest, nextFreeOpenRouter, clearPaidCreditSkip, rememberPaidCreditsExhausted: rememberPaidCreditsExhausted };
 
 export async function embedTexts(texts: string[], kind: "query" | "passage" = "passage"): Promise<number[][]> {
   if (!texts.length) return [];
@@ -180,21 +206,36 @@ export async function completeChat(
   const { resolved, usage } = await resolveForRequest(opts);
   const tracker = { model: resolved.model };
   if (opts?.usage) { opts.usage.provider = usage.provider; opts.usage.model = usage.model; opts.usage.credits = usage.credits; }
-  const res = await aiFetch(resolved, "/chat/completions", {
-    model: resolved.model,
-    messages,
-    temperature: opts?.temperature ?? 0.3,
-    max_tokens: opts?.maxTokens ?? 700,
-    ...(opts?.json ? { response_format: { type: "json_object" } } : {}),
-    // Utility calls (intent, picks) skip "thinking": faster, cheaper, and the JSON never gets cut off by reasoning tokens.
-    ...(opts?.fast && resolved.provider === "openrouter" ? { reasoning: { enabled: false } } : {}),
-  }, false, fetch, [], tracker);
-  if (opts?.usage) {
-    opts.usage.model = tracker.model;
-    opts.usage.credits = modelCreditCost(usage.provider, tracker.model);
+  const used: string[] = [];
+  let current = resolved;
+  for (let hop = 0; hop < FREE_OPENROUTER_FALLBACKS.length + 2; hop++) {
+    const res = await aiFetch(current, "/chat/completions", {
+      model: current.model,
+      messages,
+      temperature: opts?.temperature ?? 0.3,
+      max_tokens: opts?.maxTokens ?? 700,
+      ...(opts?.json ? { response_format: { type: "json_object" } } : {}),
+      // Utility calls (intent, picks) skip "thinking": faster, cheaper, and the JSON never gets cut off by reasoning tokens.
+      ...(opts?.fast && current.provider === "openrouter" ? { reasoning: { enabled: false } } : {}),
+    }, false, fetch, used, tracker);
+    if (opts?.usage) {
+      opts.usage.model = tracker.model;
+      opts.usage.credits = modelCreditCost(usage.provider, tracker.model);
+    }
+    const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const text = json.choices?.[0]?.message?.content?.trim() ?? "";
+    if (text) {
+      if (used.length) console.warn(`openrouter answered with ${tracker.model} after empty replies from ${used.join(", ")}`);
+      return text;
+    }
+    console.warn(`openrouter empty reply from ${tracker.model}`);
+    used.push(String(current.model));
+    const next = current.provider === "openrouter" ? nextFreeOpenRouter(String(current.model), used) : undefined;
+    if (!next) break;
+    current = { ...current, model: next };
+    tracker.model = next;
   }
-  const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  return json.choices?.[0]?.message?.content?.trim() ?? "";
+  throw new AiUnavailableError(`${resolved.provider} returned an empty reply`);
 }
 
 export async function* streamChat(
