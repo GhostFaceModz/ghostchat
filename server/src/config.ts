@@ -150,11 +150,22 @@ export function oauthMode(provider: OAuthProvider): OAuthMode {
   return null;
 }
 
-/** Supabase Auth authorize URL; Supabase sends the user back to /auth/callback with a session. */
-export function supabaseAuthorizeUrl(provider: OAuthProvider): string {
+/**
+ * Supabase Auth authorize URL. The shared project (also used by GhostGames and GhostFlix)
+ * has Site URL set to GhostGames, so redirect_to MUST be on the Auth allow list or
+ * Discord/Google sign-in falls back there. Required allow-list entries (add only, never
+ * replace the Site URL or remove existing apps):
+ *   https://ghostchat.pro/**
+ *   https://ghostchat.pro/auth/callback
+ */
+export const GHOSTCHAT_AUTH_CALLBACK_PATH = "/auth/callback";
+export function authCallbackUrl(publicUrl = config.publicUrl): string {
+  return `${publicUrl.replace(/\/$/, "")}${GHOSTCHAT_AUTH_CALLBACK_PATH}`;
+}
+export function supabaseAuthorizeUrl(provider: OAuthProvider, publicUrl = config.publicUrl): string {
   const url = new URL(`${config.supabaseUrl.replace(/\/$/, "")}/auth/v1/authorize`);
   url.searchParams.set("provider", provider);
-  url.searchParams.set("redirect_to", `${config.publicUrl}/auth/callback`);
+  url.searchParams.set("redirect_to", authCallbackUrl(publicUrl));
   if (provider === "discord") url.searchParams.set("scopes", "identify email");
   return url.toString();
 }
