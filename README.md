@@ -193,6 +193,7 @@ Still to build:
 - [x] **Team audit log** (workspace actions only — no chat messages or visitor content)
 - [x] **Widget accessibility pass** (focus trap, Escape, aria-modal, restore focus, reduced motion)
 - [x] **WordPress plugin and Shopify snippet** (dashboard download only — no app-store listings)
+- [x] **Mobile PWA inbox** (Add to Home Screen, standalone display, safer mobile thread view)
 - [ ] Server-side TTS / STT beyond the browser voice mode
 
 ## License

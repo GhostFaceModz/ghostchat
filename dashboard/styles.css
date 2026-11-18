@@ -475,3 +475,18 @@ body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-ne
 
 .audit-log .item { padding: 8px 0; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
 .audit-log .item .who { font-size: 12px; color: var(--muted); }
+
+@media (display-mode: standalone) {
+  body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  #inbox-view .inbox { min-height: calc(100dvh - 24px); }
+}
+@media (max-width: 760px) {
+  #inbox-view .inbox { min-height: calc(100dvh - 96px); }
+  #inbox-view .inbox.is-thread .inbox-list { display: none; }
+  #inbox-view .inbox.is-thread .inbox-pane { max-height: none; min-height: calc(100dvh - 96px); }
+  #inbox-back { display: inline-flex; }
+  .ip-head { position: sticky; top: 0; background: var(--glass); padding-top: 6px; z-index: 2; }
+  .ip-reply { position: sticky; bottom: 0; padding-bottom: calc(8px + env(safe-area-inset-bottom)); background: var(--bg); }
+}
+#inbox-back { display: none; }
+.inbox-head { flex-wrap: wrap; align-items: center; }

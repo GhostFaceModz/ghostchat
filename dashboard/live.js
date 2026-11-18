@@ -69,6 +69,7 @@
   async function openConversation(siteId, sessionId) {
     live.open = { key: siteId + ":" + sessionId, siteId, sessionId };
     $$("#inbox-view .inbox-item").forEach((b) => b.classList.toggle("on", b.dataset.site + ":" + b.dataset.session === live.open.key));
+    document.querySelector("#inbox-view .inbox")?.classList.add("is-thread");
     await renderConversation(true);
   }
 
@@ -95,7 +96,7 @@
       ? `<button type="button" class="btn small" id="inbox-handback">🤖 Hand back to AI</button><button type="button" class="btn ghost small" id="inbox-close">Close</button>${copilotBtn}`
       : `<button type="button" class="btn primary small" id="inbox-take">🧑 Take over</button>${copilotBtn}`;
     const nameField = agentNameFieldHtml();
-    pane.innerHTML = `<div class="ip-head"><div><b>${esc(d.site.name)}</b> · visitor ${esc(o.sessionId.slice(-6))} ${pill}${c && c.page_url ? `<div class="muted tiny ip-url">${esc(c.page_url)}</div>` : ""}</div><div class="row">${actions}</div></div>
+    pane.innerHTML = `<div class="ip-head"><button type="button" class="btn tiny ghost" id="inbox-back">← Inbox</button><div><b>${esc(d.site.name)}</b> · visitor ${esc(o.sessionId.slice(-6))} ${pill}${c && c.page_url ? `<div class="muted tiny ip-url">${esc(c.page_url)}</div>` : ""}</div><div class="row">${actions}</div></div>
       <div class="ip-msgs" id="inbox-msgs">${msgs || "<p class='muted'>No messages yet.</p>"}</div>
       <form class="ip-reply" id="inbox-form">${nameField}<textarea id="inbox-reply" rows="2" placeholder="${status === "human" || status === "waiting" ? "Reply to the visitor…" : "Type to take over and reply…"}"></textarea><button class="btn primary" type="submit">Send</button></form>`;
     const ta = $("#inbox-reply");
@@ -103,6 +104,12 @@
     const box = $("#inbox-msgs");
     if (scroll || box.scrollHeight - box.scrollTop < box.clientHeight + 120) box.scrollTop = box.scrollHeight;
     $("#inbox-take")?.addEventListener("click", takeOver);
+    $("#inbox-back")?.addEventListener("click", () => {
+      live.open = null;
+      document.querySelector("#inbox-view .inbox")?.classList.remove("is-thread");
+      pane.innerHTML = "<div class=\"inbox-empty muted\">Pick a conversation to read the transcript, reply, take over or hand it back to the AI.</div>";
+      $$("#inbox-view .inbox-item").forEach((b) => b.classList.remove("on"));
+    });
     $("#inbox-copilot")?.addEventListener("click", async () => {
       const btn = $("#inbox-copilot");
       btn.disabled = true; btn.textContent = "Thinking…";
