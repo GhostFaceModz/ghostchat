@@ -78,12 +78,12 @@ textarea { resize: vertical; }
 /* ---------- Auth ---------- */
 .auth { min-height: 100svh; display: grid; grid-template-columns: 1.05fr 1fr; position: relative; z-index: 1; }
 .auth-art { padding: 36px clamp(28px, 4vw, 56px); display: flex; flex-direction: column; justify-content: space-between; gap: 30px; border-right: 1px solid var(--line); background: linear-gradient(180deg, rgba(20, 14, 40, .4), rgba(10, 7, 20, .2)); }
-.auth-art-body img { width: 100%; max-width: 560px; height: auto; border-radius: 24px; border: 1px solid var(--line-2); box-shadow: 0 40px 80px -30px #8f6cff66; animation: float 7s ease-in-out infinite; }
+.auth-art-body img, .auth-art-body img.auth-mascot { width: 100%; max-width: 420px; height: auto; object-fit: contain; object-position: center; border-radius: 24px; border: 1px solid var(--line-2); box-shadow: 0 40px 80px -30px #8f6cff66; background: #070610; animation: float 7s ease-in-out infinite; }
 .auth-art-body h2 { font-size: clamp(30px, 3.6vw, 48px); margin: 34px 0 18px; }
 .auth-art-body ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; color: #ddd6f5; }
 .auth-art-body li::before { content: "✓"; color: var(--violet-2); margin-right: 10px; }
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-.auth-side { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 36px 20px calc(28px + env(safe-area-inset-bottom)); gap: 18px; }
+.auth-side { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 36px 20px calc(96px + env(safe-area-inset-bottom)); gap: 18px; }
 .auth-mobile-brand { display: none; }
 .auth-card { width: min(440px, 100%); padding: clamp(26px, 4vw, 38px); border-radius: 28px; }
 .auth-card h1 { font-size: clamp(24px, 3vw, 30px); }
@@ -107,7 +107,7 @@ textarea { resize: vertical; }
 .pw-toggle { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: rgba(255, 255, 255, .06); color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600; padding: 6px 10px; border-radius: 9px; cursor: pointer; }
 .switch { text-align: center; margin: 18px 0 0; color: var(--muted); font-size: 14px; }
 .switch a { font-weight: 600; }
-.legal { text-align: center; max-width: 400px; }
+.legal { text-align: center; max-width: 400px; color: #cfc9e6; position: relative; z-index: 2; }
 
 /* ---------- App shell ---------- */
 .app { min-height: 100svh; display: grid; grid-template-columns: 264px minmax(0, 1fr); position: relative; z-index: 1; }
