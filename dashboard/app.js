@@ -1950,3 +1950,34 @@ boot();
     }
   } catch {}
 })();
+
+async function downloadKnowledge(format) {
+  if (!state.site) return;
+  const headers = { authorization: "Bearer " + state.token };
+  if (state.workspaceId) headers["x-ghostchat-workspace"] = state.workspaceId;
+  const res = await fetch("/api/sites/" + state.site.id + "/knowledge-export?format=" + encodeURIComponent(format), { headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Could not export knowledge.");
+  }
+  const blob = await res.blob();
+  const dispo = res.headers.get("content-disposition") || "";
+  const match = /filename="([^"]+)"/.exec(dispo);
+  const name = match ? match[1] : "ghostchat-knowledge." + format;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+$("#export-json")?.addEventListener("click", async () => {
+  try { await downloadKnowledge("json"); toast("JSON export downloaded."); }
+  catch (e) { toast(e.message); }
+});
+$("#export-csv")?.addEventListener("click", async () => {
+  try { await downloadKnowledge("csv"); toast("CSV export downloaded."); }
+  catch (e) { toast(e.message); }
+});
