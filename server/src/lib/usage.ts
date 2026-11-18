@@ -1,6 +1,7 @@
 import { PLAN_LIMITS, type Plan } from "../config.js";
 import { getDb } from "./supabase.js";
 import type { Site } from "../types.js";
+import { DEMO_SITE_KEY } from "./demoSite.js";
 import { countStagingUploads } from "./staging.js";
 
 function startOfUtcMonth(): string {
@@ -193,7 +194,10 @@ export async function getOwnerPlan(ownerId: string): Promise<Plan> {
 
 // ---- Per-site daily cap: a tenth of the monthly allowance per day, at least 25. ----
 const dailyCounts = new Map<string, number>();
+/** Official ghostchat.pro demo bot only — customer plan caps are unchanged. */
+export const DEMO_DAILY_CAP = 300;
 export function dailyCap(site: Site): number {
+  if (site.site_key === DEMO_SITE_KEY) return DEMO_DAILY_CAP;
   return Math.max(25, Math.ceil(messageLimit(site) / 10));
 }
 function dailyMemoryHit(site: Site, now: Date): { ok: boolean; used: number; cap: number } {

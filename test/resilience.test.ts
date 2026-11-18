@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { backoffMs, isRetryable, _test, AiUnavailableError, FREE_OPENROUTER_FALLBACK, FREE_OPENROUTER_FALLBACKS, clearPaidCreditSkip } from "../server/src/lib/ai.ts";
 import { chatRateLimit } from "../server/src/routes/chat.ts";
-import { dailyCapCheck, dailyCap } from "../server/src/lib/usage.ts";
+import { dailyCapCheck, dailyCap, DEMO_DAILY_CAP } from "../server/src/lib/usage.ts";
+import { DEMO_SITE_KEY } from "../server/src/lib/demoSite.ts";
 import { HUMAN_REQUEST } from "../server/src/lib/guardrails.ts";
 import { selectCards } from "../server/src/lib/cards.ts";
 
@@ -52,6 +53,13 @@ test("daily cap follows the plan allowance", () => {
   for (let i = 0; i < cap; i++) assert.ok(dailyCapCheck(site).ok);
   assert.equal(dailyCapCheck(site).ok, false);
   assert.equal(dailyCap({ plan: "business" } as never), 2500);
+});
+
+test("official demo site gets a higher daily cap; other free sites stay at the plan cap", () => {
+  assert.equal(DEMO_DAILY_CAP, 300);
+  assert.equal(dailyCap({ plan: "free", site_key: DEMO_SITE_KEY } as never), 300);
+  assert.equal(dailyCap({ plan: "free", site_key: "gc_someone_else" } as never), 25);
+  assert.equal(dailyCap({ plan: "pro", site_key: DEMO_SITE_KEY } as never), 300, "demo cap is by site key, not plan");
 });
 
 test("human follow-up form only when handoff is due", () => {

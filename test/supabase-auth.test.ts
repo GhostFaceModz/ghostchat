@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { profileFromSupabaseUser } from "../server/src/lib/oauth.js";
-import { supabaseAuthorizeUrl } from "../server/src/config.js";
+import { authCallbackUrl, supabaseAuthorizeUrl } from "../server/src/config.js";
 
 test("Discord identity from Supabase maps to the Discord user id, email, global name and avatar", () => {
   const p = profileFromSupabaseUser({
@@ -59,4 +59,13 @@ test("unverified provider emails are flagged so they can't claim an existing acc
     identities: [{ provider: "google", id: "7", identity_data: { sub: "7", email_verified: true } }],
   });
   assert.equal(ok.emailVerified, true);
+});
+
+test("Discord authorize URL carries the exact ghostchat.pro callback", () => {
+  assert.equal(authCallbackUrl("https://ghostchat.pro"), "https://ghostchat.pro/auth/callback");
+  assert.equal(authCallbackUrl("https://ghostchat.pro/"), "https://ghostchat.pro/auth/callback");
+  const u = new URL(supabaseAuthorizeUrl("discord", "https://ghostchat.pro"));
+  assert.equal(u.searchParams.get("provider"), "discord");
+  assert.equal(u.searchParams.get("redirect_to"), "https://ghostchat.pro/auth/callback");
+  assert.match(u.searchParams.get("scopes") || "", /identify/);
 });
