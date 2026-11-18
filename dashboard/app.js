@@ -1541,3 +1541,38 @@ $("#workspace-select")?.addEventListener("change", async (ev) => {
 });
 
 boot();
+
+
+(function registerPwa() {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/dashboard-sw.js").catch(function () {});
+  }
+  try {
+    if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone) {
+      document.documentElement.setAttribute("data-standalone", "true");
+    }
+  } catch {}
+  const btn = $("#pwa-install");
+  const hint = $("#pwa-hint");
+  let deferred = null;
+  window.addEventListener("beforeinstallprompt", (ev) => {
+    ev.preventDefault();
+    deferred = ev;
+    if (btn) btn.hidden = false;
+  });
+  btn?.addEventListener("click", async () => {
+    if (!deferred) return;
+    deferred.prompt();
+    await deferred.userChoice.catch(() => {});
+    deferred = null;
+    btn.hidden = true;
+  });
+  try {
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+    if (hint && ios && !standalone) {
+      hint.hidden = false;
+      hint.textContent = "On iPhone: tap Share, then Add to Home Screen, to open the inbox like an app.";
+    }
+  } catch {}
+})();
