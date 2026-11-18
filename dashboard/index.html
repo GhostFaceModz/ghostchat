@@ -163,6 +163,8 @@
           <div id="acct-plan"></div>
           <div id="acct-upgrades" class="plan-grid"></div>
           <div class="topups" id="acct-topups"></div>
+          <div id="acct-auto-recharge"></div>
+          <div id="acct-byok"></div>
           <p class="cancel-line" id="acct-cancel-line" hidden><button type="button" class="linklike" id="acct-cancel">Cancel subscription</button></p>
           <p class="muted tiny" id="acct-cancel-note" hidden></p>
         </section>
@@ -401,7 +403,7 @@
 
         <section class="panel glass hidden" data-panel="model">
           <h3>Chat model</h3>
-          <p class="muted">Pick any provider that has a key configured on the server. If that key is missing, the bot falls back to Grok (xAI).</p>
+          <p class="muted">Recommended is the cheap or free default. Auto stays on that default and only uses a stronger 1-credit model for hard questions. Dearer models cost 2, 3 or 5 credits per reply. On Pro and Business you can paste your own API key.</p>
           <form id="model-form" class="stack">
             <label>Provider
               <select name="chat_provider" id="chat-provider"></select>

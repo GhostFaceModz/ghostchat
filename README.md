@@ -31,11 +31,11 @@ The widget also picks up theme, greeting, starter questions, branding, booking, 
 - Email + password, **Discord**, and **Google** sign-in
 - Train from a site crawl (`sitemap.xml` plus internal links, per-plan page caps), linked PDFs and docs (`.docx`, `.rtf`, `.txt`, `.md`), structured product feeds (schema.org, Shopify `/products.json`, WooCommerce Store API), pasted FAQs, and Notion pages. JavaScript-rendered pages are skipped on the free Render instance (Chromium does not fit 512MB RAM; a hosted browser would be about $25/month).
 - Persona, templates, theme, voice toggle
-- Per-site **model picker** (only providers with a key are enabled)
+- Per-site **model picker** with a cheap/free Recommended default, an Auto route, and 1/2/3/5 credit costs. Pro and Business can bring their own OpenRouter or OpenAI key (encrypted at rest, never logged)
 - Booking URL and conversion cards
 - Transcripts, analytics (full analytics on Pro+), unanswered-question teach loop, auto FAQ drafts for approval, leads with transcripts
 - Shareable chat link + QR
-- Plan & billing (Whop checkout links; the webhook URL is below under *Whop webhook*)
+- Plan & billing (Whop monthly or yearly: Pro £9 / £90, Business £29 / £290; £5 / £15 top-ups; optional auto-recharge with a cap; BYOK on Pro and Business)
 - Sign-in at `/login`, sign-up at `/signup`; Discord/Google buttons show a "Soon" state until their env vars are set
 
 ### Marketing site

@@ -61,8 +61,8 @@ test("widget cache is long, and longer when versioned", () => {
 
 test("landing page plans mention live chat and top-ups, and FAQ explains helpful mode", () => {
   const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
-  assert.match(html, /Live human handoff \(Discord or dashboard inbox\)/);
-  assert.match(html, /£5<\/b> for 1,000 messages/);
+  assert.match(html, /Live human handoff \(Discord, Telegram or dashboard inbox\)/);
+  assert.match(html, /£5<\/b> for 1,000 credits/);
   assert.match(html, /£15<\/b> for 5,000/);
   assert.match(html, /default <b>Helpful<\/b> mode/);
   assert.match(html, /Switch a bot to <b>Strict<\/b>/);

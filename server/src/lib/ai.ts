@@ -1,4 +1,7 @@
-import { EMBEDDING_DIMENSIONS, planChatChoice, resolveChatModel, resolveEmbeddingModel, type ResolvedModel } from "./models.js";
+import { EMBEDDING_DIMENSIONS, planChatChoice, resolveChatModel, resolveEmbeddingModel, isProviderEnabled, type ProviderId, type ResolvedModel } from "./models.js";
+import { loadOwnerKeyMap, isByokPlan } from "./byok.js";
+import { isAutoModel, pickAutoRoute } from "./autoRoute.js";
+import { modelCreditCost } from "./credits.js";
 
 /** Used when the default OpenRouter model returns 402 (no credits) or a free model is rate-limited. These do not cost money. */
 export const FREE_OPENROUTER_FALLBACKS = [
@@ -45,7 +48,8 @@ function withModel(body: unknown, model: string): unknown {
   return body;
 }
 
-async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, stream = false, fetchImpl: typeof fetch = fetch, usedFree: string[] = []): Promise<Response> {
+async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, stream = false, fetchImpl: typeof fetch = fetch, usedFree: string[] = [], tracker?: { model: string }): Promise<Response> {
+  if (tracker) tracker.model = String(resolved.model);
   if (!resolved.apiKey) {
     throw new Error(`No API key is configured for ${resolved.provider}.`);
   }
@@ -85,7 +89,8 @@ async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, str
       const next = nextFreeOpenRouter(String(resolved.model), usedFree);
       if (next) {
         console.warn(`openrouter ${res.status} on ${resolved.model}; retrying with ${next}`);
-        return aiFetch({ ...resolved, model: next }, path, withModel(body, next), stream, fetchImpl, [...usedFree, String(resolved.model)]);
+        if (tracker) tracker.model = next;
+        return aiFetch({ ...resolved, model: next }, path, withModel(body, next), stream, fetchImpl, [...usedFree, String(resolved.model)], tracker);
       }
     }
     if (isRetryable(res.status) && attempt < AI_MAX_RETRIES) { await sleep(backoffMs(attempt, res.headers.get("retry-after"))); continue; }
@@ -95,7 +100,47 @@ async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, str
   throw new AiUnavailableError(`${resolved.provider} request failed`, lastStatus);
 }
 
-export const _test = { aiFetch };
+
+export type ChatUsage = { provider: string; model: string; credits: number };
+
+type SiteModelOpts = {
+  plan?: string | null;
+  owner_id?: string | null;
+  chat_provider?: string | null;
+  chat_model?: string | null;
+};
+
+async function resolveForRequest(opts?: {
+  primary?: boolean;
+  hard?: boolean;
+  site?: SiteModelOpts;
+}): Promise<{ resolved: ResolvedModel; usage: ChatUsage }> {
+  const site = opts?.site;
+  const keys = site?.owner_id && isByokPlan(site.plan) ? await loadOwnerKeyMap(site.owner_id) : {};
+  let choice = planChatChoice(site, opts?.primary);
+  if (isAutoModel(choice?.chat_model)) {
+    const available: Partial<Record<string, boolean>> = {};
+    for (const id of ["openrouter", "openai", "gemini", "grok"] as ProviderId[]) {
+      available[id] = isProviderEnabled(id, keys);
+    }
+    const picked = pickAutoRoute(available, {
+      hard: Boolean(opts?.hard),
+      allowPremiumEscalate: isByokPlan(site?.plan),
+    });
+    choice = { chat_provider: picked.chat_provider, chat_model: picked.chat_model };
+  }
+  const resolved = resolveChatModel(choice, keys);
+  return {
+    resolved,
+    usage: {
+      provider: String(resolved.provider),
+      model: resolved.model,
+      credits: modelCreditCost(String(resolved.provider), resolved.model),
+    },
+  };
+}
+
+export const _test = { aiFetch, resolveForRequest };
 
 export async function embedTexts(texts: string[], kind: "query" | "passage" = "passage"): Promise<number[][]> {
   if (!texts.length) return [];
@@ -130,9 +175,11 @@ export async function embedTexts(texts: string[], kind: "query" | "passage" = "p
 
 export async function completeChat(
   messages: ChatMessage[],
-  opts?: { maxTokens?: number; temperature?: number; json?: boolean; fast?: boolean; primary?: boolean; site?: { plan?: string | null; chat_provider?: string | null; chat_model?: string | null } },
+  opts?: { maxTokens?: number; temperature?: number; json?: boolean; fast?: boolean; primary?: boolean; hard?: boolean; site?: SiteModelOpts; usage?: ChatUsage },
 ): Promise<string> {
-  const resolved = resolveChatModel(planChatChoice(opts?.site, opts?.primary));
+  const { resolved, usage } = await resolveForRequest(opts);
+  const tracker = { model: resolved.model };
+  if (opts?.usage) { opts.usage.provider = usage.provider; opts.usage.model = usage.model; opts.usage.credits = usage.credits; }
   const res = await aiFetch(resolved, "/chat/completions", {
     model: resolved.model,
     messages,
@@ -141,16 +188,22 @@ export async function completeChat(
     ...(opts?.json ? { response_format: { type: "json_object" } } : {}),
     // Utility calls (intent, picks) skip "thinking": faster, cheaper, and the JSON never gets cut off by reasoning tokens.
     ...(opts?.fast && resolved.provider === "openrouter" ? { reasoning: { enabled: false } } : {}),
-  });
+  }, false, fetch, [], tracker);
+  if (opts?.usage) {
+    opts.usage.model = tracker.model;
+    opts.usage.credits = modelCreditCost(usage.provider, tracker.model);
+  }
   const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
   return json.choices?.[0]?.message?.content?.trim() ?? "";
 }
 
 export async function* streamChat(
   messages: ChatMessage[],
-  opts?: { maxTokens?: number; temperature?: number; primary?: boolean; site?: { plan?: string | null; chat_provider?: string | null; chat_model?: string | null } },
+  opts?: { maxTokens?: number; temperature?: number; primary?: boolean; hard?: boolean; site?: SiteModelOpts; usage?: ChatUsage },
 ): AsyncGenerator<string> {
-  const resolved = resolveChatModel(planChatChoice(opts?.site, opts?.primary));
+  const { resolved, usage } = await resolveForRequest(opts);
+  const tracker = { model: resolved.model };
+  if (opts?.usage) { opts.usage.provider = usage.provider; opts.usage.model = usage.model; opts.usage.credits = usage.credits; }
   const res = await aiFetch(
     resolved,
     "/chat/completions",
@@ -162,7 +215,14 @@ export async function* streamChat(
       stream: true,
     },
     true,
+    fetch,
+    [],
+    tracker,
   );
+  if (opts?.usage) {
+    opts.usage.model = tracker.model;
+    opts.usage.credits = modelCreditCost(usage.provider, tracker.model);
+  }
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
