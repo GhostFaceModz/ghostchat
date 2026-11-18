@@ -19,6 +19,7 @@ import { importNotionPage } from "../lib/notion.js";
 import { detectBookingProvider, normalizeCards } from "../lib/cards.js";
 import { analyticsLevel, getOwnerPlan, maxCards } from "../lib/usage.js";
 import { computeAnalytics, type LogRow } from "../lib/analytics.js";
+import { resolveTopicTags, topicBreakdown } from "../lib/topicTags.js";
 import { SCHEDULES } from "../lib/recrawl.js";
 import { normalizeGreetings } from "../lib/greetings.js";
 import { normalizeChatForm } from "../lib/forms.js";
@@ -711,8 +712,22 @@ sitesRouter.get("/:id/logs", async (req, res) => {
   if (!site) return res.status(404).json({ error: "Site not found." });
   const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
   const q = String(req.query.q || "").replace(/[%_\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  const tag = String(req.query.tag || "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 40);
   const db = getDb();
-  if (q.length >= 2) {
+  const LOG_COLS = "id, session_id, role, message, sources, was_unsure, feedback, page_url, created_at, topic_tags";
+  const annotate = (rows: Array<Record<string, unknown>>) => rows.map((row) => ({
+    ...row,
+    topic_tags: row.role === "user" ? resolveTopicTags(String(row.message || ""), row.topic_tags as string[] | null) : [],
+  }));
+  const { data: recentUsers } = await db
+    .from("ghostchat_logs")
+    .select("session_id, role, message, topic_tags")
+    .eq("site_id", site.id)
+    .eq("role", "user")
+    .order("created_at", { ascending: false })
+    .limit(1500);
+  const topics = topicBreakdown((recentUsers ?? []) as Array<{ session_id: string; role: string; message: string; topic_tags?: string[] | null }>).map((t) => t.tag);
+  if (q.length >= 2 && !tag) {
     const { data: hits, error: hitErr } = await db
       .from("ghostchat_logs")
       .select("session_id")
@@ -722,25 +737,52 @@ sitesRouter.get("/:id/logs", async (req, res) => {
       .limit(200);
     if (hitErr) return res.status(500).json({ error: "Could not search transcripts." });
     const sessions = [...new Set((hits ?? []).map((h: { session_id: string }) => h.session_id).filter(Boolean))].slice(0, 40);
-    if (!sessions.length) return res.json({ logs: [], q });
+    if (!sessions.length) return res.json({ logs: [], q, topics });
     const { data, error } = await db
       .from("ghostchat_logs")
-      .select("id, session_id, role, message, sources, was_unsure, feedback, created_at")
+      .select(LOG_COLS)
       .eq("site_id", site.id)
       .in("session_id", sessions)
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) return res.status(500).json({ error: "Could not load transcripts." });
-    return res.json({ logs: data ?? [], q });
+    return res.json({ logs: annotate((data ?? []) as Array<Record<string, unknown>>), q, topics });
+  }
+  if (q.length >= 2 || tag) {
+    const { data: hits, error: hitErr } = await db
+      .from("ghostchat_logs")
+      .select("session_id, role, message, topic_tags")
+      .eq("site_id", site.id)
+      .order("created_at", { ascending: false })
+      .limit(1500);
+    if (hitErr) return res.status(500).json({ error: "Could not search transcripts." });
+    const rows = (hits ?? []) as Array<{ session_id: string; role: string; message: string; topic_tags?: string[] | null }>;
+    const byQ = new Set(rows.filter((h) => q.length >= 2 && String(h.message || "").toLowerCase().includes(q.toLowerCase())).map((h) => h.session_id));
+    const byTag = new Set(rows.filter((h) => tag && h.role === "user" && resolveTopicTags(h.message, h.topic_tags).includes(tag)).map((h) => h.session_id));
+    const sessions = [...new Set(rows.map((h) => h.session_id).filter((id) => {
+      if (q.length >= 2 && !byQ.has(id)) return false;
+      if (tag && !byTag.has(id)) return false;
+      return true;
+    }))].slice(0, 40);
+    if (!sessions.length) return res.json({ logs: [], q, tag: tag || undefined, topics });
+    const { data, error } = await db
+      .from("ghostchat_logs")
+      .select(LOG_COLS)
+      .eq("site_id", site.id)
+      .in("session_id", sessions)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) return res.status(500).json({ error: "Could not load transcripts." });
+    return res.json({ logs: annotate((data ?? []) as Array<Record<string, unknown>>), q, tag: tag || undefined, topics });
   }
   const { data, error } = await db
     .from("ghostchat_logs")
-    .select("id, session_id, role, message, sources, was_unsure, feedback, created_at")
+    .select(LOG_COLS)
     .eq("site_id", site.id)
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) return res.status(500).json({ error: "Could not load transcripts." });
-  res.json({ logs: data ?? [] });
+  res.json({ logs: annotate((data ?? []) as Array<Record<string, unknown>>), topics });
 });
 
 sitesRouter.get("/:id/leads", async (req, res) => {
@@ -762,7 +804,7 @@ sitesRouter.get("/:id/analytics", async (req, res) => {
   const db = getDb();
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
   const [{ data: logs, error }, { data: leads }, { data: csat }, { data: tickets }] = await Promise.all([
-    db.from("ghostchat_logs").select("id, session_id, role, message, was_unsure, feedback, page_url, created_at, lang")
+    db.from("ghostchat_logs").select("id, session_id, role, message, was_unsure, feedback, page_url, created_at, lang, topic_tags")
       .eq("site_id", site.id).gte("created_at", since).order("created_at", { ascending: false }).limit(3000),
     db.from("ghostchat_leads").select("session_id").eq("site_id", site.id).gte("created_at", since).limit(2000),
     db.from("ghostchat_csat").select("rating").eq("site_id", site.id).gte("created_at", since).limit(2000),

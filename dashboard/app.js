@@ -1023,22 +1023,70 @@ $("#log-search")?.addEventListener("submit", (ev) => {
   ev.preventDefault();
   loadLogs();
 });
+$("#log-topic")?.addEventListener("change", () => loadLogs());
+$("#log-list")?.addEventListener("click", (ev) => {
+  const btn = ev.target.closest("[data-topic]");
+  if (!btn) return;
+  const sel = $("#log-topic");
+  if (sel) {
+    const tag = btn.getAttribute("data-topic") || "";
+    if (![...sel.options].some((o) => o.value === tag)) {
+      sel.insertAdjacentHTML("beforeend", "<option value='" + escapeHtml(tag) + "'>" + escapeHtml(tag) + "</option>");
+    }
+    sel.value = tag;
+  }
+  loadLogs();
+});
+
+function openTranscriptsByTopic(tag) {
+  state.logTopic = tag || "";
+  const sel = $("#log-topic");
+  if (sel) {
+    if (tag && ![...sel.options].some((o) => o.value === tag)) {
+      sel.insertAdjacentHTML("beforeend", "<option value='" + escapeHtml(tag) + "'>" + escapeHtml(tag) + "</option>");
+    }
+    sel.value = tag || "";
+  }
+  const tab = $("#tabs button[data-tab='transcripts']");
+  if (tab) tab.click();
+  else loadLogs();
+}
+
+function fillLogTopics(topics, selected) {
+  const sel = $("#log-topic");
+  if (!sel) return;
+  const all = (window.GhostChatI18n && window.GhostChatI18n.t("logs.allTopics")) || "All topics";
+  const current = selected != null ? selected : sel.value;
+  const tags = Array.from(new Set([current, ...(topics || [])].filter(Boolean)));
+  sel.innerHTML = "<option value=''>" + escapeHtml(all) + "</option>" + tags.map((t) => "<option value='" + escapeHtml(t) + "'>" + escapeHtml(t) + "</option>").join("");
+  sel.value = current || "";
+}
 
 async function loadLogs() {
   if (!state.site) return;
   const q = String($("#log-q")?.value || "").trim();
-  const path = "/api/sites/" + state.site.id + "/logs" + (q.length >= 2 ? "?q=" + encodeURIComponent(q) : "");
-  const { logs } = await req(path);
+  const tag = String($("#log-topic")?.value || state.logTopic || "").trim();
+  if (state.logTopic) state.logTopic = "";
+  const params = new URLSearchParams();
+  if (q.length >= 2) params.set("q", q);
+  if (tag) params.set("tag", tag);
+  const path = "/api/sites/" + state.site.id + "/logs" + (params.toString() ? "?" + params.toString() : "");
+  const { logs, topics } = await req(path);
+  fillLogTopics(topics || [], tag);
   const status = $("#log-search-status");
-  if (status) status.textContent = q.length >= 2 ? ((logs.length ? logs.length + " messages in matching conversations" : "No conversations matched.") + " for “" + q + "”") : "";
+  const bits = [];
+  if (q.length >= 2) bits.push("“" + q + "”");
+  if (tag) bits.push("topic “" + tag + "”");
+  if (status) status.textContent = bits.length ? ((logs.length ? logs.length + " messages in matching conversations" : "No conversations matched.") + " for " + bits.join(" and ")) : "";
   const box = $("#log-list");
-  box.innerHTML = logs.length ? "" : (q.length >= 2 ? "<p class='muted'>No conversations matched that search.</p>" : "<p class='muted'>No conversations yet.</p>");
+  box.innerHTML = logs.length ? "" : (bits.length ? "<p class='muted'>No conversations matched that search.</p>" : "<p class='muted'>No conversations yet.</p>");
   logs.forEach((l) => {
     const item = document.createElement("div");
     item.className = "log";
     const when = new Date(l.created_at).toLocaleString();
+    const pills = (l.topic_tags || []).map((t) => "<button type='button' class='topic-pill' data-topic='" + escapeHtml(t) + "'>" + escapeHtml(t) + "</button>").join("");
     const extra = [l.was_unsure ? "unsure" : "", l.feedback || "", l.page_url || ""].filter(Boolean).join(" · ");
-    item.innerHTML = "<div class='who'>" + escapeHtml(l.role) + " · " + escapeHtml(when) + (extra ? " · " + escapeHtml(extra) : "") + "</div><div>" + escapeHtml(l.message) + "</div>";
+    item.innerHTML = "<div class='who'>" + escapeHtml(l.role) + " · " + escapeHtml(when) + (extra ? " · " + escapeHtml(extra) : "") + pills + "</div><div>" + escapeHtml(l.message) + "</div>";
     if (l.role === "assistant") {
       const fix = document.createElement("button");
       fix.type = "button"; fix.className = "btn tiny ghost fix-btn"; fix.textContent = "Fix this answer";
@@ -1084,6 +1132,13 @@ async function loadAnalytics() {
     <div class="chart-card"><h3>Busiest hours <span class="muted tiny">${escapeHtml(a.timeZone || "")}${a.peakHour != null ? " · peak " + String(a.peakHour).padStart(2, "0") + ":00" : ""}</span></h3>${barChart(hours, hourLabels, { label: "Questions by hour", dense: true, highlight: a.peakHour, short: (l, i) => (i % 3 === 0 ? String(i) : "") })}</div>
     <div><h3>Top questions</h3><ul class="hbars">${q}</ul></div>
     ${(() => {
+      const topics = a.topics || [];
+      if (!topics.length) return "";
+      const max = Math.max(1, ...topics.map((x) => x.conversations || x.messages || 0));
+      const items = topics.map((x) => "<li><button type='button' class='topic-chip' data-open-topic='" + escapeHtml(x.tag) + "'><b>" + escapeHtml(x.tag) + "</b> <span class='muted tiny'>×" + (x.conversations || 0) + "</span></button></li>").join("");
+      return "<div><h3>" + escapeHtml((window.GhostChatI18n && window.GhostChatI18n.t("logs.topics")) || "Topics") + "</h3><p class='muted tiny'>" + escapeHtml((window.GhostChatI18n && window.GhostChatI18n.t("logs.topicsNote")) || "Automatic tags from visitor questions. Click one to filter transcripts.") + "</p><ul class='topic-list'>" + items + "</ul></div>";
+    })()}
+    ${(() => {
       const groups = (a.unansweredClusters || []).filter((c) => c.count >= 2);
       if (!groups.length) return "";
       const items = groups.map((c) => {
@@ -1112,6 +1167,9 @@ async function loadAnalytics() {
   loadCorrections();
   loadFaqDrafts();
   bindTeachForm();
+  box.querySelectorAll("[data-open-topic]").forEach((btn) => {
+    btn.addEventListener("click", () => openTranscriptsByTopic(btn.getAttribute("data-open-topic")));
+  });
 }
 
 // ---- "Fix this answer" ----
