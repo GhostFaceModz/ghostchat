@@ -710,8 +710,27 @@ async function loadDocs() {
   });
   loadPreviewAndStaging();
   loadEvalSet();
+  loadCoverageMap();
 }
 
+
+
+async function loadCoverageMap() {
+  if (!state.site) return;
+  const box = $("#coverage-body");
+  if (!box) return;
+  try {
+    const { coverage: c } = await req("/api/sites/" + state.site.id + "/coverage");
+    const pct = c.coverage == null ? "—" : c.coverage + "%";
+    const unused = (c.unused || []).slice(0, 8).map((u) => "<li>" + escapeHtml(u.title || u.url) + (u.title && u.url && u.title !== u.url ? " <span class='muted tiny'>" + escapeHtml(u.url) + "</span>" : "") + "</li>").join("") || "<li class='muted'>Every trained page has been cited, or there isn't enough chat history yet.</li>";
+    const gaps = (c.gaps || []).slice(0, 8).map((g) => "<li>" + escapeHtml(g.url) + " <span class='muted'>×" + g.questions + "</span></li>").join("") || "<li class='muted'>No visitor pages outside your training in the last 30 days.</li>";
+    box.innerHTML = "<p><b>" + pct + "</b> of trained pages were cited in answers · " + (c.cited || 0) + " of " + (c.trained || 0) + " pages with a URL</p>"
+      + "<div class='coverage-cols'><div><h5>Trained but never cited</h5><ul>" + unused + "</ul></div>"
+      + "<div><h5>Visitor pages missing from training</h5><ul>" + gaps + "</ul></div></div>";
+  } catch {
+    box.innerHTML = "<p class='muted tiny'>Could not load the coverage map.</p>";
+  }
+}
 
 function previewUrlList(items, limit) {
   return (items || []).slice(0, limit || 12).map((e) => "<li>" + escapeHtml((e.title || e.url || "") + (e.title && e.url ? " — " + e.url : "")) + "</li>").join("");
