@@ -3,16 +3,16 @@ import { loadOwnerKeyMap, isByokPlan } from "./byok.js";
 import { isAutoModel, pickAutoRoute } from "./autoRoute.js";
 import { modelCreditCost } from "./credits.js";
 
-/** Used when the default OpenRouter model returns 402 (no credits) or a free model is rate-limited. These do not cost money. */
-export const FREE_OPENROUTER_FALLBACKS = [
-  "openrouter/free",
-  "google/gemma-4-31b-it:free",
-  "google/gemma-4-26b-a4b-it:free",
-  "nvidia/nemotron-3.5-lightning:free",
-  "qwen/qwen3-8b:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
-];
-export const FREE_OPENROUTER_FALLBACK = FREE_OPENROUTER_FALLBACKS[0];
+import {
+  FREE_MODEL_TIMEOUT_MS,
+  availableFreeModels,
+  currentFreePoolIds,
+  nextFreeInPool,
+  recordPoolFailure,
+  recordPoolSuccess,
+  type PoolFailureReason,
+} from "./freeModelPool.js";
+export { FREE_OPENROUTER_FALLBACK, FREE_OPENROUTER_FALLBACKS, poolHealth, startFreeModelPool, refreshFreeModelPool } from "./freeModelPool.js";
 
 export function isFreeOpenRouterModel(model: string): boolean {
   return model.endsWith(":free") || model === "openrouter/free";
@@ -28,6 +28,9 @@ export class AiUnavailableError extends Error {
 
 export const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 20_000;
 export const AI_MAX_RETRIES = 2;
+export function chatTimeoutMs(model: string): number {
+  return isFreeOpenRouterModel(model) ? FREE_MODEL_TIMEOUT_MS : AI_TIMEOUT_MS;
+}
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** After a 402 on a paid OpenRouter model, skip it for a while (credits stay exhausted). */
@@ -55,8 +58,7 @@ export function isRetryable(status: number): boolean {
 }
 
 function nextFreeOpenRouter(current: string, used: string[]): string | undefined {
-  const skip = new Set([...used, current]);
-  return FREE_OPENROUTER_FALLBACKS.find((m) => !skip.has(m));
+  return nextFreeInPool(current, used);
 }
 
 function withModel(body: unknown, model: string): unknown {
@@ -64,24 +66,27 @@ function withModel(body: unknown, model: string): unknown {
   return body;
 }
 
-async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, stream = false, fetchImpl: typeof fetch = fetch, usedFree: string[] = [], tracker?: { model: string }): Promise<Response> {
+async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, stream = false, fetchImpl: typeof fetch = fetch, usedFree: string[] = [], tracker?: { model: string }, allowSwitch = true): Promise<Response> {
   if (tracker) tracker.model = String(resolved.model);
   if (!resolved.apiKey) {
     throw new Error(`No API key is configured for ${resolved.provider}.`);
   }
-  if (shouldSkipPaidOpenRouter(resolved)) {
-    const next = nextFreeOpenRouter(String(resolved.model), usedFree);
+  if (allowSwitch && shouldSkipPaidOpenRouter(resolved)) {
+    const next = nextFreeOpenRouter(String(resolved.model), usedFree) || availableFreeModels(usedFree)[0];
     if (next) {
       console.warn(`openrouter paid credits recently exhausted; starting with ${next}`);
       if (tracker) tracker.model = next;
-      return aiFetch({ ...resolved, model: next }, path, withModel(body, next), stream, fetchImpl, [...usedFree, String(resolved.model)], tracker);
+      return aiFetch({ ...resolved, model: next }, path, withModel(body, next), stream, fetchImpl, [...usedFree, String(resolved.model)], tracker, allowSwitch);
     }
   }
+  const freeModel = isFreeOpenRouterModel(String(resolved.model));
+  const timeoutMs = chatTimeoutMs(String(resolved.model));
+  // Free models: switch immediately (short timeout, no multi-retry on the same dying model).
+  const maxAttempts = freeModel ? 0 : AI_MAX_RETRIES;
   let lastStatus: number | undefined;
-  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
-    // Timeout covers connecting and the first response; streams get an idle timeout in streamChat.
+  for (let attempt = 0; attempt <= maxAttempts; attempt++) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     let res: Response;
     try {
       res = await fetchImpl(`${resolved.baseUrl}${path}`, {
@@ -93,8 +98,17 @@ async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, str
     } catch (err) {
       clearTimeout(timer);
       lastStatus = undefined;
-      if (attempt < AI_MAX_RETRIES) { await sleep(backoffMs(attempt)); continue; }
-      throw new AiUnavailableError(`${resolved.provider} request failed: ${(err as Error).name === "AbortError" ? "timed out" : (err as Error).message}`);
+      const timedOut = (err as Error).name === "AbortError";
+      const reason: PoolFailureReason = timedOut ? "timeout" : "error";
+      if (freeModel) recordPoolFailure(String(resolved.model), reason);
+      const next = allowSwitch && resolved.provider === "openrouter" ? nextFreeOpenRouter(String(resolved.model), usedFree) : undefined;
+      if (next) {
+        console.warn(`openrouter ${reason} on ${resolved.model}; retrying with ${next}`);
+        if (tracker) tracker.model = next;
+        return aiFetch({ ...resolved, model: next }, path, withModel(body, next), stream, fetchImpl, [...usedFree, String(resolved.model)], tracker, allowSwitch);
+      }
+      if (!freeModel && attempt < maxAttempts) { await sleep(backoffMs(attempt)); continue; }
+      throw new AiUnavailableError(`${resolved.provider} request failed: ${timedOut ? "timed out" : (err as Error).message}`);
     }
     clearTimeout(timer);
     if (res.ok) {
@@ -103,23 +117,28 @@ async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, str
     }
     lastStatus = res.status;
     const text = await res.text().catch(() => "");
-    const freeModel = isFreeOpenRouterModel(String(resolved.model));
-    const canSwitchFree = resolved.provider === "openrouter" && (
+    const isFree = isFreeOpenRouterModel(String(resolved.model));
+    if (res.status === 402 && !isFree) rememberPaidCreditsExhausted();
+    if (isFree && (res.status === 429 || res.status === 404 || res.status === 400 || res.status === 402 || res.status >= 500)) {
+      const reason: PoolFailureReason = res.status === 429 ? "429" : res.status === 404 ? "404" : res.status === 400 ? "400" : res.status === 402 ? "402" : "error";
+      recordPoolFailure(String(resolved.model), reason);
+    }
+    const canSwitchFree = allowSwitch && resolved.provider === "openrouter" && (
       res.status === 402
-      || ((res.status === 404 || res.status === 400) && freeModel)
-      || (res.status === 429 && freeModel && attempt >= AI_MAX_RETRIES)
+      || ((res.status === 404 || res.status === 400) && isFree)
+      || (res.status === 429 && isFree)
+      || (res.status >= 500 && isFree)
     );
     if (canSwitchFree) {
-      if (res.status === 402 && !isFreeOpenRouterModel(String(resolved.model))) rememberPaidCreditsExhausted();
       const next = nextFreeOpenRouter(String(resolved.model), usedFree);
       if (next) {
         console.warn(`openrouter ${res.status} on ${resolved.model}; retrying with ${next}`);
         if (tracker) tracker.model = next;
-        return aiFetch({ ...resolved, model: next }, path, withModel(body, next), stream, fetchImpl, [...usedFree, String(resolved.model)], tracker);
+        return aiFetch({ ...resolved, model: next }, path, withModel(body, next), stream, fetchImpl, [...usedFree, String(resolved.model)], tracker, allowSwitch);
       }
       console.error(`openrouter ${res.status} on ${resolved.model}; no free fallback left`);
     }
-    if (isRetryable(res.status) && attempt < AI_MAX_RETRIES) { await sleep(backoffMs(attempt, res.headers.get("retry-after"))); continue; }
+    if (!isFree && isRetryable(res.status) && attempt < maxAttempts) { await sleep(backoffMs(attempt, res.headers.get("retry-after"))); continue; }
     if (isRetryable(res.status)) throw new AiUnavailableError(`${resolved.provider} request failed (${res.status}): ${text.slice(0, 200)}`, res.status);
     throw new Error(`${resolved.provider} request failed (${res.status}): ${text.slice(0, 400)}`);
   }
@@ -166,7 +185,7 @@ async function resolveForRequest(opts?: {
   };
 }
 
-export const _test = { aiFetch, resolveForRequest, nextFreeOpenRouter, clearPaidCreditSkip, rememberPaidCreditsExhausted: rememberPaidCreditsExhausted };
+export const _test = { aiFetch, resolveForRequest, nextFreeOpenRouter, clearPaidCreditSkip, rememberPaidCreditsExhausted: rememberPaidCreditsExhausted, raceFreeCompletions };
 
 export async function embedTexts(texts: string[], kind: "query" | "passage" = "passage"): Promise<number[][]> {
   if (!texts.length) return [];
@@ -199,6 +218,48 @@ export async function embedTexts(texts: string[], kind: "query" | "passage" = "p
   return vectors;
 }
 
+function chatBody(model: string, messages: ChatMessage[], opts?: { maxTokens?: number; temperature?: number; json?: boolean; fast?: boolean }, stream = false): unknown {
+  return {
+    model,
+    messages,
+    temperature: opts?.temperature ?? 0.3,
+    max_tokens: opts?.maxTokens ?? 700,
+    ...(opts?.json ? { response_format: { type: "json_object" } } : {}),
+    ...(opts?.fast ? { reasoning: { enabled: false } } : {}),
+    ...(stream ? { stream: true } : {}),
+  };
+}
+
+function readAssistantText(json: { choices?: Array<{ message?: { content?: string } }> }): string {
+  return json.choices?.[0]?.message?.content?.trim() ?? "";
+}
+
+/** Race the two best available free models; the first non-empty reply wins. */
+export async function raceFreeCompletions(
+  resolved: ResolvedModel,
+  models: [string, string],
+  messages: ChatMessage[],
+  opts: { maxTokens?: number; temperature?: number; json?: boolean; fast?: boolean } | undefined,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ model: string; text: string } | null> {
+  const tryOne = async (model: string) => {
+    const tracker = { model };
+    const res = await aiFetch({ ...resolved, model }, "/chat/completions", chatBody(model, messages, opts), false, fetchImpl, models.filter((m) => m !== model), tracker, false);
+    const text = readAssistantText(await res.json() as { choices?: Array<{ message?: { content?: string } }> });
+    if (!text) {
+      recordPoolFailure(tracker.model, "empty");
+      throw new AiUnavailableError(`empty reply from ${tracker.model}`);
+    }
+    recordPoolSuccess(tracker.model);
+    return { model: tracker.model, text };
+  };
+  const results = await Promise.allSettled([tryOne(models[0]), tryOne(models[1])]);
+  for (const r of results) {
+    if (r.status === "fulfilled") return r.value;
+  }
+  return null;
+}
+
 export async function completeChat(
   messages: ChatMessage[],
   opts?: { maxTokens?: number; temperature?: number; json?: boolean; fast?: boolean; primary?: boolean; hard?: boolean; site?: SiteModelOpts; usage?: ChatUsage },
@@ -206,31 +267,42 @@ export async function completeChat(
   const { resolved, usage } = await resolveForRequest(opts);
   const tracker = { model: resolved.model };
   if (opts?.usage) { opts.usage.provider = usage.provider; opts.usage.model = usage.model; opts.usage.credits = usage.credits; }
+
+  const onFreePath = resolved.provider === "openrouter" && (isFreeOpenRouterModel(resolved.model) || shouldSkipPaidOpenRouter(resolved));
+  if (onFreePath) {
+    const avail = availableFreeModels();
+    if (avail.length >= 2 && !opts?.fast) {
+      const raced = await raceFreeCompletions(resolved, [avail[0], avail[1]], messages, opts, fetch);
+      if (raced) {
+        tracker.model = raced.model;
+        if (opts?.usage) {
+          opts.usage.model = raced.model;
+          opts.usage.credits = modelCreditCost(usage.provider, raced.model);
+        }
+        return raced.text;
+      }
+    }
+  }
+
   const used: string[] = [];
   let current = resolved;
-  for (let hop = 0; hop < FREE_OPENROUTER_FALLBACKS.length + 2; hop++) {
-    const res = await aiFetch(current, "/chat/completions", {
-      model: current.model,
-      messages,
-      temperature: opts?.temperature ?? 0.3,
-      max_tokens: opts?.maxTokens ?? 700,
-      ...(opts?.json ? { response_format: { type: "json_object" } } : {}),
-      // Utility calls (intent, picks) skip "thinking": faster, cheaper, and the JSON never gets cut off by reasoning tokens.
-      ...(opts?.fast && current.provider === "openrouter" ? { reasoning: { enabled: false } } : {}),
-    }, false, fetch, used, tracker);
+  const hops = currentFreePoolIds().length + 2;
+  for (let hop = 0; hop < hops; hop++) {
+    const res = await aiFetch(current, "/chat/completions", chatBody(current.model, messages, opts), false, fetch, used, tracker);
     if (opts?.usage) {
       opts.usage.model = tracker.model;
       opts.usage.credits = modelCreditCost(usage.provider, tracker.model);
     }
-    const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    const text = json.choices?.[0]?.message?.content?.trim() ?? "";
+    const text = readAssistantText(await res.json() as { choices?: Array<{ message?: { content?: string } }> });
     if (text) {
-      if (used.length) console.warn(`openrouter answered with ${tracker.model} after empty replies from ${used.join(", ")}`);
+      if (isFreeOpenRouterModel(tracker.model)) recordPoolSuccess(tracker.model);
+      else console.log(`openrouter answered with ${tracker.model}`);
       return text;
     }
     console.warn(`openrouter empty reply from ${tracker.model}`);
-    used.push(String(current.model));
-    const next = current.provider === "openrouter" ? nextFreeOpenRouter(String(current.model), used) : undefined;
+    if (isFreeOpenRouterModel(tracker.model)) recordPoolFailure(tracker.model, "empty");
+    used.push(String(tracker.model));
+    const next = current.provider === "openrouter" ? nextFreeOpenRouter(String(tracker.model), used) : undefined;
     if (!next) break;
     current = { ...current, model: next };
     tracker.model = next;
