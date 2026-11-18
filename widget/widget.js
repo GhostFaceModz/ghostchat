@@ -195,8 +195,14 @@
     ".gc-root[data-side='left'] .gc-launcher, .gc-root[data-side='left'] .gc-teaser { right: auto; left: calc(var(--gc-offset-left, 22px) + env(safe-area-inset-left, 0px)); }",
     ".gc-root[data-side='left'] .gc-panel { right: auto; left: max(12px, calc(var(--gc-offset-left, 22px) + env(safe-area-inset-left, 0px))); transform-origin: calc(var(--gc-size) / 2) calc(100% + 14px); }",
     ".gc-launcher .gc-label { display: none; font: 650 13px/1 'Instrument Sans', 'Segoe UI', system-ui, sans-serif; white-space: nowrap; padding-right: 10px; }",
-    ".gc-launcher[data-icon]:not([data-icon='ghost']):not([data-icon='custom']) .gc-li-ghost img { display: none; }",
-    ".gc-launcher[data-icon]:not([data-icon='ghost']):not([data-icon='custom']) .gc-li-ghost svg { display: block; }",
+    ".gc-launcher:not([data-v3])[data-icon]:not([data-icon='ghost']):not([data-icon='custom']) .gc-li-ghost img { display: none; }",
+    ".gc-launcher:not([data-v3])[data-icon]:not([data-icon='ghost']):not([data-icon='custom']) .gc-li-ghost svg { display: block; }",
+    ".gc-launcher[data-v3] { background: transparent; box-shadow: none; overflow: visible; }",
+    ".gc-launcher[data-v3] .gc-ring, .gc-launcher[data-v3] .gc-core, .gc-launcher[data-v3]::after { display: none; }",
+    ".gc-launcher[data-v3] .gc-li-ghost img { display: block; width: 100%; height: 100%; object-fit: contain; }",
+    ".gc-launcher[data-v3] .gc-li-ghost svg { display: none; }",
+    ".gc-launcher[data-v3-pill] { width: calc(var(--gc-size) * 2.75); height: var(--gc-size); border-radius: 999px; }",
+    ".gc-launcher[data-v3-pill] .gc-label { display: none; }",
     ".gc-launcher[data-icon='custom'] .gc-li-ghost img { display: block; } .gc-launcher[data-icon='custom'] .gc-li-ghost svg { display: none; }",
     ".gc-launcher[data-style='solid'] { background: var(--gc-primary); box-shadow: 0 8px 22px color-mix(in srgb, var(--gc-primary) 45%, transparent); }",
     ".gc-launcher[data-style='solid'] .gc-ring, .gc-launcher[data-style='solid'] .gc-core, .gc-launcher[data-style='outline'] .gc-ring, .gc-launcher[data-style='outline'] .gc-core, .gc-launcher[data-style='glass'] .gc-ring { display: none; }",
@@ -1693,6 +1699,14 @@
     if (key) return t(key);
     return value;
   }
+  var V3_ICONS = { "jewel-headset": 1, "ghost-headset": 1, "chat-typing": 1, "sparkle-chat": 1, "ghost-mark": 1, "message-check": 1 };
+  var V3_STYLES = { jewel: 1, "glass-shine": 1, "gradient-shine": 1, "outline-glow": 1, "pill-support": 1 };
+  var V3_ICON_ALIAS = { ghost: "ghost-mark", headset: "jewel-headset", chat: "chat-typing", sparkle: "sparkle-chat", question: "jewel-headset" };
+  function v3LauncherFile(icon, style) {
+    var i = V3_ICONS[icon] ? icon : (V3_ICON_ALIAS[icon] || "ghost-mark");
+    var s = V3_STYLES[style] ? style : "jewel";
+    return i + "--" + s + ".svg";
+  }
   function applyLauncher(opts) {
     var L = opts || {};
     var icon = L.icon || "ghost";
@@ -1716,16 +1730,27 @@
     var img = launcher.querySelector(".gc-li-ghost img");
     var holder = launcher.querySelector(".gc-li-ghost");
     var svgSlot = holder && holder.querySelector("svg");
-    if (icon === "custom" && L.custom_icon) {
-      if (img) img.src = L.custom_icon;
-      launcher.removeAttribute("data-img");
-    } else if (icon === "ghost") {
-      if (img) img.src = API_BASE + "/img/ghostchat-mascot.webp";
-      if (svgSlot) svgSlot.outerHTML = ICONS.ghost;
+    var useV3 = !!(V3_STYLES[style] || V3_ICONS[icon]);
+    if (useV3 && !(icon === "custom" && L.custom_icon)) {
+      launcher.setAttribute("data-v3", "1");
+      if (style === "pill-support") launcher.setAttribute("data-v3-pill", "1");
+      else launcher.removeAttribute("data-v3-pill");
+      if (img) img.src = API_BASE + "/launcher/v3/" + v3LauncherFile(icon, style);
       launcher.removeAttribute("data-img");
     } else {
-      if (svgSlot) svgSlot.outerHTML = ICONS[icon] || ICONS.ghost;
-      launcher.setAttribute("data-img", "off");
+      launcher.removeAttribute("data-v3");
+      launcher.removeAttribute("data-v3-pill");
+      if (icon === "custom" && L.custom_icon) {
+        if (img) img.src = L.custom_icon;
+        launcher.removeAttribute("data-img");
+      } else if (icon === "ghost") {
+        if (img) img.src = API_BASE + "/img/ghostchat-mascot.webp";
+        if (svgSlot) svgSlot.outerHTML = ICONS.ghost;
+        launcher.removeAttribute("data-img");
+      } else {
+        if (svgSlot) svgSlot.outerHTML = ICONS[icon] || ICONS.ghost;
+        launcher.setAttribute("data-img", "off");
+      }
     }
     var lab = launcher.querySelector(".gc-label");
     if (lab) lab.textContent = label;

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Launcher v3 preview · GhostChat</title>
+  <style>
+    :root { --bg: #0b0714; --ink: #f5f3ff; --muted: #b7a8d9; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.45 Inter, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+    main { max-width: 980px; margin: 0 auto; padding: 48px 24px 160px; }
+    h1 { font: 800 32px/1.1 Inter, sans-serif; margin: 0 0 8px; }
+    .lede { color: var(--muted); margin: 0 0 28px; max-width: 640px; }
+    h2 { font: 700 18px/1.2 Inter, sans-serif; margin: 28px 0 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end; }
+    .tile { display: grid; gap: 8px; justify-items: center; color: var(--muted); font-size: 12px; }
+    .orb { width: 80px; height: 80px; }
+    .orb img, .pill img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .pill { width: 220px; height: 80px; }
+    .stage { position: relative; height: 280px; border-radius: 20px; background: radial-gradient(1200px 280px at 80% 100%, #2a1650, #12091f 60%); border: 1px solid rgba(255,255,255,.08); overflow: hidden; }
+    .stage p { margin: 24px; color: var(--muted); max-width: 46ch; }
+    #live-bubble { position: absolute; right: 22px; bottom: 18px; width: 56px; height: 56px; border: 0; background: transparent; padding: 0; }
+    #live-bubble.pill { width: 154px; height: 56px; }
+    #live-bubble img { width: 100%; height: 100%; object-fit: contain; }
+    .picks { display: flex; flex-wrap: wrap; gap: 8px; }
+    .picks button { appearance: none; border: 1px solid rgba(255,255,255,.12); background: #160d28; color: var(--ink); border-radius: 12px; padding: 6px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font: 650 12px/1 inherit; }
+    .picks button.on { border-color: #8b5cf6; background: #2a1848; }
+    .picks button img { width: 36px; height: 36px; object-fit: contain; }
+    .picks button[data-style="pill-support"] img { width: 64px; height: 32px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>New launcher designs</h1>
+    <p class="lede">Approved jewel-orb icons and bubble styles. The current Ghost + gradient bubble stays the default on every existing site until an owner picks one of these in Appearance.</p>
+
+    <h2>Icons (jewel orb)</h2>
+    <div class="row" id="icons"></div>
+
+    <h2>Styles</h2>
+    <div class="row" id="styles"></div>
+
+    <h2>Try a combination</h2>
+    <div class="picks" id="icon-picks"></div>
+    <div class="picks" id="style-picks" style="margin-top:10px"></div>
+    <div class="stage" style="margin-top:16px">
+      <p>This is how the new bubble looks on a page. Shine, breathe and hover lift follow the approved motion, and pause when the visitor prefers reduced motion.</p>
+      <div id="live-bubble"><img alt="Launcher preview" id="live-img" /></div>
+    </div>
+  </main>
+  <script>
+    const ICONS = [
+      ["jewel-headset", "Headset"],
+      ["ghost-headset", "Ghost + headset"],
+      ["chat-typing", "Chat typing"],
+      ["sparkle-chat", "Sparkle chat"],
+      ["ghost-mark", "Ghost mark"],
+      ["message-check", "Message + check"]
+    ];
+    const STYLES = [
+      ["jewel", "Jewel orb"],
+      ["glass-shine", "Glass shine"],
+      ["gradient-shine", "Gradient shine"],
+      ["outline-glow", "Outline glow"],
+      ["pill-support", "Support pill"]
+    ];
+    let icon = "ghost-headset";
+    let style = "gradient-shine";
+    function src() { return "/launcher/v3/" + icon + "--" + style + ".svg"; }
+    function render() {
+      const img = document.getElementById("live-img");
+      img.src = src();
+      document.getElementById("live-bubble").className = style === "pill-support" ? "pill" : "";
+      document.querySelectorAll("[data-icon]").forEach((b) => b.classList.toggle("on", b.dataset.icon === icon));
+      document.querySelectorAll("[data-style]").forEach((b) => b.classList.toggle("on", b.dataset.style === style));
+    }
+    document.getElementById("icons").innerHTML = ICONS.map(([id, label]) =>
+      `<div class="tile"><div class="orb"><img alt="${label}" src="/launcher/v3/${id}--jewel.svg" /></div>${label}</div>`
+    ).join("");
+    document.getElementById("styles").innerHTML = STYLES.map(([id, label]) =>
+      `<div class="tile"><div class="${id === "pill-support" ? "pill" : "orb"}"><img alt="${label}" src="/launcher/v3/ghost-mark--${id}.svg" /></div>${label}</div>`
+    ).join("");
+    document.getElementById("icon-picks").innerHTML = ICONS.map(([id, label]) =>
+      `<button type="button" data-icon="${id}"><img alt="" src="/launcher/v3/previews/${id}.png" />${label}</button>`
+    ).join("");
+    document.getElementById("style-picks").innerHTML = STYLES.map(([id, label]) =>
+      `<button type="button" data-style="${id}"><img alt="" src="/launcher/v3/previews/${id}.png" />${label}</button>`
+    ).join("");
+    document.getElementById("icon-picks").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-icon]"); if (!b) return; icon = b.dataset.icon; render();
+    });
+    document.getElementById("style-picks").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-style]"); if (!b) return; style = b.dataset.style; render();
+    });
+    render();
+  </script>
+</body>
+</html>

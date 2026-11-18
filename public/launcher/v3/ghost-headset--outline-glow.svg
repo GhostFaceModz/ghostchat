@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -10 84 84" width="84" height="84" role="img" aria-label="GhostChat — ghost-headset · outline-glow" overflow="visible">
+  <title>GhostChat — ghost-headset · outline-glow</title>
+<defs>
+    
+    <radialGradient id="ghostheadsetoutlineglowcore" cx="32%" cy="22%" r="78%" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#EDE6FF"/>
+      <stop offset="12%" stop-color="#C9B8FF"/>
+      <stop offset="30%" stop-color="#A07CFF"/>
+      <stop offset="52%" stop-color="#8F6CFF"/>
+      <stop offset="74%" stop-color="#6236D6"/>
+      <stop offset="100%" stop-color="#241050"/>
+    </radialGradient>
+    <radialGradient id="ghostheadsetoutlineglowcoreShade" cx="50%" cy="100%" r="62%" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#1A0840" stop-opacity="0.32"/>
+      <stop offset="55%" stop-color="#1A0840" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ghostheadsetoutlineglowglassSheen" x1="16" y1="0" x2="52" y2="38" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.42"/>
+      <stop offset="36%" stop-color="#FFFFFF" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="ghostheadsetoutlineglowspec" cx="34%" cy="28%" r="38%" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="55%" stop-color="#FFFFFF" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    
+    <linearGradient id="ghostheadsetoutlineglowctaFill" x1="8" y1="2" x2="58" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#C9B8FF"/>
+      <stop offset="32%" stop-color="#8F6CFF"/>
+      <stop offset="64%" stop-color="#C05BFF"/>
+      <stop offset="100%" stop-color="#FF6AD5"/>
+    </linearGradient>
+    <linearGradient id="ghostheadsetoutlineglowctaShade" x1="32" y1="14" x2="32" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#3A0A4A" stop-opacity="0.26"/>
+    </linearGradient>
+    <linearGradient id="ghostheadsetoutlineglowglassFill" x1="16" y1="0" x2="50" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.52"/>
+      <stop offset="28%" stop-color="#EDE8FF" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#1C1238" stop-opacity="0.62"/>
+    </linearGradient>
+    <linearGradient id="ghostheadsetoutlineglowglassEdge" x1="10" y1="2" x2="54" y2="62" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.88"/>
+      <stop offset="42%" stop-color="#EDE8FF" stop-opacity="0.38"/>
+      <stop offset="100%" stop-color="#8F6CFF" stop-opacity="0.45"/>
+    </linearGradient>
+    <linearGradient id="ghostheadsetoutlineglowoutlineFill" x1="32" y1="0" x2="32" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22184A"/>
+      <stop offset="100%" stop-color="#0E0A1C"/>
+    </linearGradient>
+    <conicGradient id="ghostheadsetoutlineglowbezel" cx="32" cy="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#B49CFF"/>
+      <stop offset="14%" stop-color="#FF6AD5"/>
+      <stop offset="26%" stop-color="#36C8FF"/>
+      <stop offset="34%" stop-color="#F5C04A"/>
+      <stop offset="44%" stop-color="#36C8FF"/>
+      <stop offset="60%" stop-color="#8F6CFF"/>
+      <stop offset="78%" stop-color="#FF6AD5"/>
+      <stop offset="100%" stop-color="#B49CFF"/>
+    </conicGradient>
+    <linearGradient id="ghostheadsetoutlineglowshineGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="38%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.34"/>
+      <stop offset="62%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="ghostheadsetoutlineglowambient" cx="50%" cy="48%" r="50%" gradientUnits="objectBoundingBox">
+      <stop offset="36%" stop-color="#8F6CFF" stop-opacity="0.36"/>
+      <stop offset="64%" stop-color="#C06BFF" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#8F6CFF" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="ghostheadsetoutlineglowcoreClip"><circle cx="32" cy="32" r="27.4"/></clipPath>
+    <clipPath id="ghostheadsetoutlineglowfaceClip"><circle cx="32" cy="32" r="31"/></clipPath>
+    <filter id="ghostheadsetoutlineglowsoftShadow" x="-35%" y="-25%" width="170%" height="180%">
+      <feDropShadow dx="0" dy="3.4" stdDeviation="2.15" flood-color="#6B3FE0" flood-opacity="0.44"/>
+    </filter>
+    <filter id="ghostheadsetoutlineglowcontact" x="-40%" y="-20%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.6"/>
+    </filter>
+    <filter id="ghostheadsetoutlineglowoutlineGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="2.4" flood-color="#8F6CFF" flood-opacity="0.70"/>
+    </filter>
+    <clipPath id="ghostheadsetoutlineglowpillClip"><rect x="6" y="8" width="164" height="48" rx="24"/></clipPath>
+    <linearGradient id="ghostheadsetoutlineglowpillFill" x1="6" y1="8" x2="170" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#C9B8FF"/>
+      <stop offset="38%" stop-color="#8F6CFF"/>
+      <stop offset="70%" stop-color="#C05BFF"/>
+      <stop offset="100%" stop-color="#FF6AD5"/>
+    </linearGradient>
+    <filter id="ghostheadsetoutlineglowpillShadow" x="-20%" y="-40%" width="140%" height="200%">
+      <feDropShadow dx="0" dy="3.2" stdDeviation="2.4" flood-color="#8F6CFF" flood-opacity="0.42"/>
+    </filter>
+  </defs>
+  <style><![CDATA[
+  svg { overflow: visible; }
+  .glow { transform-origin: 32px 32px; animation: glowPulse 5.2s ease-in-out infinite; }
+  .bezel { transform-origin: 32px 32px; animation: bezelSpin 26s linear infinite; }
+  .launcher { transform-origin: 32px 32px; animation: breathe 5.2s ease-in-out infinite; transition: transform 280ms cubic-bezier(.34,1.35,.5,1); }
+  svg:hover .launcher { animation: none; transform: translateY(-2.4px) scale(1.05); }
+  svg:hover .glow { animation: none; opacity: 0.9; }
+  @keyframes breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.018); }
+  }
+  @keyframes glowPulse {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 0.88; }
+  }
+  @keyframes bezelSpin { to { transform: rotate(360deg); } }
+  @keyframes shineSweep {
+    0%, 58% { transform: translateX(-80px); }
+    86%, 100% { transform: translateX(80px); }
+  }
+  .shine { animation: shineSweep 4.8s cubic-bezier(.45,0,.2,1) infinite; }
+  .pill-glow { transform-origin: 88px 32px; animation: glowPulse 5.2s ease-in-out infinite; }
+  .pill-launcher { transform-origin: 88px 32px; animation: breathe 5.2s ease-in-out infinite; transition: transform 280ms cubic-bezier(.34,1.35,.5,1); }
+  svg:hover .pill-launcher { animation: none; transform: translateY(-2.2px) scale(1.035); }
+  .pill-shine { animation: shineSweep 4.8s cubic-bezier(.45,0,.2,1) infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .glow, .bezel, .launcher, .shine, .pill-glow, .pill-launcher, .pill-shine { animation: none !important; }
+  }
+]]></style>
+  <circle class="glow" cx="32" cy="32" r="36.4" fill="url(#ghostheadsetoutlineglowambient)"/>
+  <g class="launcher">
+    <circle cx="32" cy="32" r="30.2" fill="url(#ghostheadsetoutlineglowoutlineFill)" filter="url(#ghostheadsetoutlineglowoutlineGlow)"/>
+    <g class="bezel">
+      <circle cx="32" cy="32" r="30.2" fill="none" stroke="url(#ghostheadsetoutlineglowbezel)" stroke-width="1.55"/>
+    </g>
+    <circle cx="32" cy="32" r="28.6" fill="none" stroke="#FFFFFF" stroke-width="0.7" opacity="0.22"/>
+    <g clip-path="url(#ghostheadsetoutlineglowcoreClip)">
+      <circle cx="22.5" cy="18.5" r="16" fill="url(#ghostheadsetoutlineglowspec)"/>
+    </g>
+    <path d="M14.2 16.2C18.6 10.4 25.6 8.0 32 8.0C38.4 8.0 45.4 10.4 49.8 16.2"
+          fill="none" stroke="#FFFFFF" stroke-width="1.05" stroke-linecap="round" opacity="0.28"/>
+    
+      <g clip-path="url(#ghostheadsetoutlineglowcoreClip)">
+        <g class="shine" style="transform:translateX(-80px)">
+          <g transform="rotate(28 32 32)">
+            <rect x="2" y="-22" width="28" height="108" fill="url(#ghostheadsetoutlineglowshineGrad)"/>
+          </g>
+        </g>
+      </g>
+    <g transform="translate(32 32) scale(1.22) translate(-12 -12)"><g transform="translate(0 0.05)">
+      <g transform="translate(12 12.15) scale(0.86) translate(-12 -12.15)">
+        <path fill="#FFFFFF" fill-rule="evenodd" d="M12 2.6c-4.3 0-7.4 3.2-7.4 7.5v9.6c0 .9 1 1.4 1.7.8l1.5-1.2 1.6 1.4c.5.4 1.2.4 1.7 0L12 19.3l1.9 1.4c.5.4 1.2.4 1.7 0l1.6-1.4 1.5 1.2c.7.6 1.7.1 1.7-.8v-9.6c0-4.3-3.1-7.5-7.4-7.5ZM9.3 9.4a1.35 1.6 0 1 0 0 3.2 1.35 1.6 0 0 0 0-3.2Zm5.4 0a1.35 1.6 0 1 0 0 3.2 1.35 1.6 0 0 0 0-3.2Z"/>
+      </g>
+      <g fill="none" stroke="#FFFFFF" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6.35 12.55c0-4.55 2.55-7.15 5.65-7.15s5.65 2.6 5.65 7.15"/>
+        <path d="M18.85 15.55c1.85 1.0 1.7 3.95-.28 4.95"/>
+        <circle cx="18.1" cy="20.7" r="1.08"/>
+      </g>
+      <rect x="4.95" y="11.15" width="2.85" height="5.5" rx="1.42" fill="#FFFFFF"/>
+      <rect x="16.2" y="11.15" width="2.85" height="5.5" rx="1.42" fill="#FFFFFF"/>
+    </g></g>
+  </g>
+
+</svg>

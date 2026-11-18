@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { FREE_LAUNCHER_ICONS, FREE_LAUNCHER_STYLES, sanitizeCustomIcon, sanitizeLauncher } from "../server/src/lib/launcher.ts";
+import { FREE_LAUNCHER_ICONS, FREE_LAUNCHER_STYLES, defaultLauncher, sanitizeCustomIcon, sanitizeLauncher, usesV3Launcher, v3LauncherFile } from "../server/src/lib/launcher.ts";
 import { DEFAULT_HEADER_SUBTITLE, DEFAULT_HEADER_TITLE, HEADER_SUBTITLE_PRESETS, HEADER_TITLE_PRESETS, sanitizeHeader } from "../server/src/lib/widgetHeader.ts";
 
-test("free launchers are limited to 3 icons and 2 styles; paid get the full set", () => {
-  assert.deepEqual([...FREE_LAUNCHER_ICONS], ["ghost", "chat", "question"]);
-  assert.deepEqual([...FREE_LAUNCHER_STYLES], ["solid", "gradient"]);
+test("free launchers stay limited; paid get the full set including v3", () => {
+  assert.deepEqual([...FREE_LAUNCHER_ICONS], ["ghost", "chat", "question", "ghost-mark", "jewel-headset"]);
+  assert.deepEqual([...FREE_LAUNCHER_STYLES], ["solid", "gradient", "jewel"]);
   const free = sanitizeLauncher({ icon: "headset", style: "neon", size: "lg", side: "left", offset: 40, custom_icon: "data:image/png;base64,aaa" }, "free");
   assert.equal(free.icon, "ghost");
   assert.equal(free.style, "gradient");
@@ -62,10 +62,57 @@ test("dashboard Appearance and the widget expose launcher and header customisati
   assert.match(app, /currentHeaderValues/);
   assert.match(app, /updateAppearancePreview/);
   assert.match(widget, /function applyLauncher/);
+  assert.match(app, /V3_LAUNCHER_ICONS/);
+  assert.match(app, /launcher\/v3\/previews/);
   assert.match(widget, /cfg.header/);
   assert.match(widget, /htHelpCenter/);
   assert.match(routes, /header: sanitizeHeader/);
   assert.equal((i18n.match(/"appearance.header":/g) || []).length, 8);
   assert.equal((i18n.match(/"appearance.launcher":/g) || []).length, 8);
   assert.equal((i18n.match(/"appearance.headerNoteBusiness":/g) || []).length, 8);
+});
+
+test("the live default launcher stays ghost + gradient for new and empty sites", () => {
+  assert.deepEqual(defaultLauncher(), { icon: "ghost", style: "gradient", size: "md", side: "right", offset: 22, label: "Chat", custom_icon: null });
+  const empty = sanitizeLauncher(undefined, "business");
+  assert.equal(empty.icon, "ghost");
+  assert.equal(empty.style, "gradient");
+  const existingGlass = sanitizeLauncher({ icon: "chat", style: "glass" }, "pro");
+  assert.equal(existingGlass.icon, "chat");
+  assert.equal(existingGlass.style, "glass", "classic glass is unchanged and not remapped to glass-shine");
+});
+
+test("v3 jewel icons are allowed on Free; animated shine styles are paid-only", () => {
+  const mark = sanitizeLauncher({ icon: "ghost-mark", style: "jewel" }, "free");
+  assert.equal(mark.icon, "ghost-mark");
+  assert.equal(mark.style, "jewel");
+  const headset = sanitizeLauncher({ icon: "jewel-headset", style: "jewel" }, "free");
+  assert.equal(headset.icon, "jewel-headset");
+  const blockedIcon = sanitizeLauncher({ icon: "chat-typing", style: "jewel" }, "free");
+  assert.equal(blockedIcon.icon, "ghost");
+  const blockedStyle = sanitizeLauncher({ icon: "ghost-mark", style: "gradient-shine" }, "free");
+  assert.equal(blockedStyle.style, "gradient");
+  const pro = sanitizeLauncher({ icon: "message-check", style: "pill-support" }, "pro");
+  assert.equal(pro.icon, "message-check");
+  assert.equal(pro.style, "pill-support");
+  assert.equal(v3LauncherFile("ghost-mark", "gradient-shine"), "ghost-mark--gradient-shine.svg");
+  assert.equal(v3LauncherFile("ghost", "jewel"), "ghost-mark--jewel.svg");
+  assert.equal(usesV3Launcher("ghost", "gradient"), false);
+  assert.equal(usesV3Launcher("ghost-mark", "gradient"), true);
+});
+
+test("v3 launcher assets exist, stay out of widget.js, and respect reduced motion", () => {
+  const dir = new URL("../public/launcher/v3/", import.meta.url);
+  const widget = readFileSync(new URL("../widget/widget.js", import.meta.url), "utf8");
+  assert.match(widget, /function v3LauncherFile/);
+  assert.match(widget, /\/launcher\/v3\//);
+  assert.doesNotMatch(widget, /05ghostmarkcore/);
+  assert.ok(widget.length < 180_000, "widget.js should stay small and lazy-load the selected SVG");
+  const needed = ["ghost-mark--jewel.svg", "jewel-headset--jewel.svg", "ghost-headset--gradient-shine.svg", "chat-typing--glass-shine.svg", "sparkle-chat--outline-glow.svg", "message-check--pill-support.svg"];
+  for (const name of needed) {
+    const svg = readFileSync(new URL(name, dir), "utf8");
+    assert.match(svg, /prefers-reduced-motion/);
+    assert.match(svg, /@keyframes breathe/);
+    assert.match(svg, /@keyframes shineSweep/);
+  }
 });
