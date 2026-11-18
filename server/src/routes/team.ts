@@ -4,6 +4,7 @@ import { acceptInvite, countSeatsUsed, inviteMember, listMembers, lookupInvite, 
 import { getOwnerPlan } from "../lib/usage.js";
 import { mailerConfigured, sendMail } from "../lib/mailer.js";
 import { auditFromReq, listAudit } from "../lib/audit.js";
+import { normalizeCreditCap, setMemberCreditCap } from "../lib/agentCredits.js";
 
 export const teamRouter = Router();
 
@@ -53,6 +54,18 @@ teamRouter.post("/invites", async (req, res) => {
   } catch (err) {
     const e = err as Error & { status?: number };
     res.status(e.status || 500).json({ error: e.message || "Could not invite that teammate." });
+  }
+});
+
+teamRouter.patch("/:id", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  try {
+    const member = await setMemberCreditCap(workspaceId(req), req.params.id, normalizeCreditCap(req.body?.credit_cap));
+    auditFromReq(req, "team.credit_cap", { targetType: "member", targetId: member.id, meta: { email: member.email, credit_cap: member.credit_cap } }).catch(() => {});
+    res.json({ member });
+  } catch (err) {
+    const e = err as Error & { status?: number };
+    res.status(e.status || 500).json({ error: e.message || "Could not update that cap." });
   }
 });
 

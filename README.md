@@ -203,6 +203,7 @@ Still to build:
 - [x] **Workspace canned replies** (shared saved replies in the inbox and tickets)
 - [x] **Inbox keyboard shortcuts** (j/k, Enter, Esc, t to take over)
 - [x] **FAQ CSV import** (question/answer rows become training sources, including the faq source type)
+- [x] **Per-agent credit caps** (monthly inbox/email copilot limits for teammates, not the visitor widget)
 - [ ] Server-side TTS / STT beyond the browser voice mode
 
 ## License

@@ -4,6 +4,7 @@ import { getDb } from "../lib/supabase.js";
 import { acceptInbound, disableEmailChannel, enableEmailChannel, getThread, inboundAddress, inboundWebhookUrl, listThreads, loadSiteByInboundToken, parseInbound, sendThreadReply } from "../lib/emailChannel.js";
 import { canUseEmailChannel, canUseCopilot } from "../lib/team.js";
 import { suggestEmailReply, suggestInboxReply } from "../lib/copilot.js";
+import { consumeDashboardCredit } from "../lib/agentCredits.js";
 import { clientIp, rateLimitAsync } from "../lib/rateLimit.js";
 import type { Site } from "../types.js";
 import type { Plan } from "../config.js";
@@ -73,6 +74,10 @@ emailOwnerRouter.post("/:id/email-channel/threads/:tid/suggest", async (req, res
   const site = await loadOwned(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   if (!canUseCopilot(site.plan as Plan)) return res.status(402).json({ error: "Inbox copilot is a Business feature." });
+  try { await consumeDashboardCredit(req); } catch (err) {
+    const status = (err as Error & { status?: number }).status ?? 500;
+    return res.status(status).json({ error: (err as Error).message });
+  }
   const packed = await getThread(site.id, req.params.tid);
   if (!packed) return res.status(404).json({ error: "Thread not found." });
   const lastIn = [...packed.messages].reverse().find((m: { direction: string; body: string }) => m.direction === "in");
@@ -85,6 +90,10 @@ emailOwnerRouter.post("/:id/inbox/suggest", async (req, res) => {
   const site = await loadOwned(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   if (!canUseCopilot(site.plan as Plan)) return res.status(402).json({ error: "Inbox copilot is a Business feature." });
+  try { await consumeDashboardCredit(req); } catch (err) {
+    const status = (err as Error & { status?: number }).status ?? 500;
+    return res.status(status).json({ error: (err as Error).message });
+  }
   const sessionId = String(req.body?.sessionId || "").trim();
   if (!sessionId) return res.status(400).json({ error: "A session is required." });
   const suggestion = await suggestInboxReply(site, sessionId);

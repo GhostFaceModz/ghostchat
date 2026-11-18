@@ -16,6 +16,9 @@ export type TeamMember = {
   member_id: string | null;
   created_at: string;
   accepted_at: string | null;
+  credit_cap?: number | null;
+  credits_used?: number;
+  credits_period?: string | null;
 };
 
 export function seatsFor(plan: Plan): number {
@@ -67,7 +70,7 @@ export async function countSeatsUsed(workspaceId: string): Promise<number> {
 export async function listMembers(workspaceId: string): Promise<TeamMember[]> {
   const { data, error } = await getDb()
     .from("ghostchat_team_members")
-    .select("id, workspace_id, email, role, status, member_id, created_at, accepted_at")
+    .select("id, workspace_id, email, role, status, member_id, created_at, accepted_at, credit_cap, credits_used, credits_period")
     .eq("workspace_id", workspaceId)
     .neq("status", "revoked")
     .order("created_at", { ascending: true });
