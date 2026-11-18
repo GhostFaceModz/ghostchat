@@ -80,7 +80,15 @@
     box.hidden = false;
     box.innerHTML = `<p class="muted">Loading…</p>`;
     const { ticket: t } = await req(`/api/sites/${site().id}/tickets/${id}`);
-    const canned = support().canned;
+    const seen = new Set();
+    const canned = [];
+    for (const c of [...(state.workspaceCanned || []), ...(support().canned || [])]) {
+      const key = (c.title || "").toLowerCase();
+      if (!c.text || seen.has(key)) continue;
+      seen.add(key);
+      canned.push(c);
+    }
+
     const d = t.details || {};
     box.innerHTML = `<div class="tk-head"><h4>#${t.number} ${esc(t.subject || "Support request")}</h4><button type="button" class="btn ghost small" data-close aria-label="Close ticket view">✕</button></div>
       <p class="muted tiny">${esc(t.name || "")} ${t.email ? `&lt;<a href="mailto:${esc(t.email)}?subject=${encodeURIComponent("Re: #" + t.number + " " + (t.subject || "Your support request"))}">${esc(t.email)}</a>&gt;` : ""}${d.order ? ` · Order ${esc(d.order)}` : ""} · opened ${when(t.created_at)}</p>

@@ -5,7 +5,7 @@
     const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
     return s < 60 ? "just now" : s < 3600 ? Math.round(s / 60) + "m ago" : s < 86400 ? Math.round(s / 3600) + "h ago" : Math.round(s / 86400) + "d ago";
   };
-  const live = { overview: null, open: null, timer: null, inboxTimer: null, lastCount: -1 };
+  const live = { overview: null, open: null, timer: null, inboxTimer: null, lastCount: -1, canned: [], focus: -1 };
 
   // ---------------- Inbox ----------------
   function hideInbox() {
@@ -20,11 +20,27 @@
     ["#site-view", "#empty-state", "#billing-view", "#account-view"].forEach((s) => $(s)?.classList.add("hidden"));
     $$("#site-list button").forEach((b) => b.classList.remove("on"));
     $("#inbox-view").classList.remove("hidden");
+    loadInboxCanned();
     await refreshInbox();
     clearInterval(live.inboxTimer);
     live.inboxTimer = setInterval(refreshInbox, 5000);
   }
   $("#open-inbox").addEventListener("click", showInbox);
+
+
+  async function loadInboxCanned() {
+    try {
+      const { replies } = await req("/api/auth/canned");
+      live.canned = replies || [];
+      if (state) state.workspaceCanned = live.canned;
+    } catch { live.canned = live.canned || []; }
+  }
+
+  function inboxCannedHtml() {
+    const list = live.canned || [];
+    if (!list.length) return "";
+    return `<label class="tiny inbox-canned">Insert canned reply <select id="inbox-canned"><option value="">Choose…</option>${list.map((c, i) => `<option value="${i}">${esc(c.title)}</option>`).join("")}</select></label>`;
+  }
 
   function item(c) {
     const status = c.status === "human" ? "<span class='st human'>You're live</span>" : c.status === "waiting" ? "<span class='st waiting'>Waiting for you</span>" : c.status === "bot" ? "<span class='st'>Back with AI</span>" : "<span class='st'>AI</span>";
@@ -46,7 +62,56 @@
     $("#inbox-recent").innerHTML = data.recent.length ? data.recent.map(item).join("") : "<p class='muted tiny'>No recent chats.</p>";
     $("#inbox-updated").textContent = "Updated " + new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
     $$("#inbox-view .inbox-item").forEach((b) => b.addEventListener("click", () => openConversation(b.dataset.site, b.dataset.session)));
+    if (live.focus >= 0) highlightInboxFocus();
   }
+
+  function inboxItems() { return $$("#inbox-view .inbox-item"); }
+  function isTypingTarget(el) {
+    if (!el) return false;
+    const tag = (el.tagName || "").toLowerCase();
+    return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
+  }
+  function highlightInboxFocus() {
+    const items = inboxItems();
+    items.forEach((b, i) => b.classList.toggle("kb-on", i === live.focus));
+    const on = items[live.focus];
+    if (on) on.scrollIntoView({ block: "nearest" });
+  }
+  function closeInboxThread() {
+    if (!live.open) return;
+    live.open = null;
+    document.querySelector("#inbox-view .inbox")?.classList.remove("is-thread");
+    const pane = $("#inbox-pane");
+    if (pane) pane.innerHTML = "<div class=\"inbox-empty muted\">Pick a conversation to read the transcript, reply, take over or hand it back to the AI.</div>";
+    $$("#inbox-view .inbox-item").forEach((b) => b.classList.remove("on"));
+  }
+  document.addEventListener("keydown", (ev) => {
+    if ($("#inbox-view")?.classList.contains("hidden")) return;
+    if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    const typing = isTypingTarget(ev.target);
+    if (ev.key === "Escape") {
+      ev.preventDefault();
+      if (live.open) closeInboxThread();
+      return;
+    }
+    if (typing) return;
+    const items = inboxItems();
+    if (ev.key === "j" || ev.key === "ArrowDown") {
+      ev.preventDefault();
+      live.focus = Math.min(items.length - 1, (live.focus < 0 ? 0 : live.focus + 1));
+      highlightInboxFocus();
+    } else if (ev.key === "k" || ev.key === "ArrowUp") {
+      ev.preventDefault();
+      live.focus = Math.max(0, (live.focus < 0 ? 0 : live.focus - 1));
+      highlightInboxFocus();
+    } else if (ev.key === "Enter") {
+      const b = items[live.focus] || items[0];
+      if (b) { ev.preventDefault(); openConversation(b.dataset.site, b.dataset.session); }
+    } else if (ev.key === "t") {
+      if (live.open) { ev.preventDefault(); takeOver(); }
+    }
+  });
+
   function setBadge(n) {
     const b = $("#inbox-badge");
     b.hidden = !n; b.textContent = String(n);
@@ -98,9 +163,18 @@
     const nameField = agentNameFieldHtml();
     pane.innerHTML = `<div class="ip-head"><button type="button" class="btn tiny ghost" id="inbox-back">← Inbox</button><div><b>${esc(d.site.name)}</b> · visitor ${esc(o.sessionId.slice(-6))} ${pill}${c && c.page_url ? `<div class="muted tiny ip-url">${esc(c.page_url)}</div>` : ""}</div><div class="row">${actions}</div></div>
       <div class="ip-msgs" id="inbox-msgs">${msgs || "<p class='muted'>No messages yet.</p>"}</div>
-      <form class="ip-reply" id="inbox-form">${nameField}<textarea id="inbox-reply" rows="2" placeholder="${status === "human" || status === "waiting" ? "Reply to the visitor…" : "Type to take over and reply…"}"></textarea><button class="btn primary" type="submit">Send</button></form>`;
+      <form class="ip-reply" id="inbox-form">${nameField}${inboxCannedHtml()}<textarea id="inbox-reply" rows="2" placeholder="${status === "human" || status === "waiting" ? "Reply to the visitor…" : "Type to take over and reply…"}"></textarea><button class="btn primary" type="submit">Send</button></form>
+      <p class="muted tiny inbox-keys">j/k move · Enter open · Esc back · t take over</p>`;
     const ta = $("#inbox-reply");
     ta.value = keepDraft;
+    const cannedSel = $("#inbox-canned");
+    if (cannedSel) cannedSel.addEventListener("change", () => {
+      if (cannedSel.value === "") return;
+      const c = (live.canned || [])[Number(cannedSel.value)];
+      if (c && c.text) ta.value = (ta.value ? ta.value + "\n\n" : "") + c.text;
+      cannedSel.value = "";
+      ta.focus();
+    });
     const box = $("#inbox-msgs");
     if (scroll || box.scrollHeight - box.scrollTop < box.clientHeight + 120) box.scrollTop = box.scrollHeight;
     $("#inbox-take")?.addEventListener("click", takeOver);

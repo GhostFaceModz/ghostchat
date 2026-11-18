@@ -506,3 +506,7 @@ body:not([data-role="owner"]) #new-site, body:not([data-role="owner"]) #empty-ne
 .coverage-box h5 { margin: 0.5rem 0 0.25rem; font-size: 0.9rem; }
 
 .recycle-box { margin: 1.25rem 0 0; }
+
+.inbox-keys { margin: 0.25rem 0 0; }
+.inbox-canned { display:block; margin-bottom: 0.35rem; }
+.inbox-item.kb-on { outline: 2px solid var(--accent, #a78bfa); outline-offset: -2px; }
