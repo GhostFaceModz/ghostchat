@@ -1610,6 +1610,33 @@ $("#acct-canned-save")?.addEventListener("click", async () => {
   }
 });
 
+
+async function loadSlackWebhook() {
+  const form = $("#acct-slack-form");
+  if (!form) return;
+  const status = $("#acct-slack-status");
+  try {
+    const data = await req("/api/auth/slack-webhook");
+    form.url.value = data.url || "";
+    if (status) status.textContent = data.configured ? "A webhook is saved for this workspace." : "No webhook saved.";
+  } catch (e) {
+    if (status) status.textContent = e.message;
+  }
+}
+$("#acct-slack-form")?.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const status = $("#acct-slack-status");
+  try {
+    const data = await req("/api/auth/slack-webhook", { method: "PUT", body: { url: ev.target.url.value } });
+    ev.target.url.value = data.url || "";
+    if (status) status.textContent = data.configured ? "Saved. Waiting chats will notify this Slack webhook." : "Removed.";
+    toast(data.configured ? "Slack webhook saved" : "Slack webhook removed");
+  } catch (e) {
+    if (status) status.textContent = e.message;
+    toast(e.message);
+  }
+});
+
 async function showAccount() {
   state.view = "account";
   ["#site-view", "#empty-state", "#billing-view"].forEach((s) => $(s)?.classList.add("hidden"));
@@ -1637,6 +1664,7 @@ async function showAccount() {
   renderTeam();
   renderDigest();
   renderWorkspaceCanned();
+  loadSlackWebhook();
 }
 
 async function renderAccountBilling() {

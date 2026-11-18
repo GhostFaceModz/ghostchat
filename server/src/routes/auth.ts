@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getDb } from "../lib/supabase.js";
 import { hashPassword, verifyPassword, signToken, sessionTtl, isValidEmail, requireAuth, signOAuthState, verifyOAuthState, readOAuthState, workspaceId, denyIfNotOwner, type AuthedRequest } from "../lib/auth.js";
 import { normalizeCannedReplies } from "../lib/cannedReplies.js";
+import { normalizeSlackWebhookUrl } from "../lib/slackWebhook.js";
 import { listWorkspaces } from "../lib/team.js";
 import { mailerConfigured } from "../lib/mailer.js";
 import { clientIp, rateLimitAsync } from "../lib/rateLimit.js";
@@ -278,6 +279,29 @@ authRouter.put("/canned", requireAuth, async (req, res) => {
     .eq("id", ws);
   if (error) return res.status(500).json({ error: "Could not save canned replies." });
   res.json({ replies });
+});
+
+
+authRouter.get("/slack-webhook", requireAuth, async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const ws = workspaceId(req);
+  const { data, error } = await getDb().from("ghostchat_owners").select("slack_webhook_url").eq("id", ws).maybeSingle();
+  if (error) return res.status(500).json({ error: "Could not load the Slack webhook." });
+  const url = data?.slack_webhook_url || "";
+  res.json({ url, configured: Boolean(url) });
+});
+
+authRouter.put("/slack-webhook", requireAuth, async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const parsed = normalizeSlackWebhookUrl(req.body?.url);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const ws = workspaceId(req);
+  const { error } = await getDb()
+    .from("ghostchat_owners")
+    .update({ slack_webhook_url: parsed.url, updated_at: new Date().toISOString() })
+    .eq("id", ws);
+  if (error) return res.status(500).json({ error: "Could not save the Slack webhook." });
+  res.json({ url: parsed.url || "", configured: Boolean(parsed.url) });
 });
 
 authRouter.patch("/me", requireAuth, async (req, res) => {

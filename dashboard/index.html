@@ -169,6 +169,17 @@
           <p class="muted tiny" id="acct-canned-status"></p>
         </section>
 
+
+        <section class="panel glass acct" id="acct-slack">
+          <h3>Slack alerts</h3>
+          <p class="muted tiny">Paste an incoming webhook URL from your Slack workspace to get a message when a visitor is waiting for a human. GhostChat does not install a Slack app — you create the webhook in Slack and paste it here. Leave the field blank and save to remove it.</p>
+          <form id="acct-slack-form" class="stack">
+            <label>Incoming webhook URL <input name="url" type="url" autocomplete="off" spellcheck="false" placeholder="https://hooks.slack.com/services/…" /></label>
+            <div class="row"><button class="btn primary" type="submit">Save Slack webhook</button></div>
+            <p class="muted tiny" id="acct-slack-status"></p>
+          </form>
+        </section>
+
         <section class="panel glass acct">
           <h3>Sign-in methods</h3>
           <ul class="methods" id="acct-methods"></ul>
