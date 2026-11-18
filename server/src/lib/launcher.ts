@@ -1,16 +1,32 @@
 /**
  * Widget launcher (floating bubble) options, with plan gating.
- * Free: 3 icons and 2 styles. Pro/Business: full set, custom icon, size and position.
+ * Classic icons/styles stay as they were. v3 jewel icons and styles are extras.
+ * Free: classic 3 icons + 2 styles, plus the jewel orb with ghost mark or headset.
+ * Pro/Business: full set, custom icon, size and position, animated shine styles.
  */
 import type { Plan } from "../types.js";
 
-export const LAUNCHER_ICONS = ["ghost", "chat", "headset", "question", "sparkle"] as const;
-export const LAUNCHER_STYLES = ["solid", "outline", "gradient", "glass", "neon", "rounded-square", "pill"] as const;
+export const CLASSIC_LAUNCHER_ICONS = ["ghost", "chat", "headset", "question", "sparkle"] as const;
+export const V3_LAUNCHER_ICONS = ["jewel-headset", "ghost-headset", "chat-typing", "sparkle-chat", "ghost-mark", "message-check"] as const;
+export const LAUNCHER_ICONS = [...CLASSIC_LAUNCHER_ICONS, ...V3_LAUNCHER_ICONS] as const;
+
+export const CLASSIC_LAUNCHER_STYLES = ["solid", "outline", "gradient", "glass", "neon", "rounded-square", "pill"] as const;
+export const V3_LAUNCHER_STYLES = ["jewel", "glass-shine", "gradient-shine", "outline-glow", "pill-support"] as const;
+export const LAUNCHER_STYLES = [...CLASSIC_LAUNCHER_STYLES, ...V3_LAUNCHER_STYLES] as const;
+
 export const LAUNCHER_SIZES = ["sm", "md", "lg"] as const;
 export const LAUNCHER_SIDES = ["right", "left"] as const;
 
-export const FREE_LAUNCHER_ICONS = ["ghost", "chat", "question"] as const;
-export const FREE_LAUNCHER_STYLES = ["solid", "gradient"] as const;
+export const FREE_LAUNCHER_ICONS = ["ghost", "chat", "question", "ghost-mark", "jewel-headset"] as const;
+export const FREE_LAUNCHER_STYLES = ["solid", "gradient", "jewel"] as const;
+
+export const V3_ICON_ALIAS: Record<string, (typeof V3_LAUNCHER_ICONS)[number]> = {
+  ghost: "ghost-mark",
+  headset: "jewel-headset",
+  chat: "chat-typing",
+  sparkle: "sparkle-chat",
+  question: "jewel-headset",
+};
 
 export type LauncherIcon = (typeof LAUNCHER_ICONS)[number] | "custom";
 export type LauncherStyle = (typeof LAUNCHER_STYLES)[number];
@@ -30,8 +46,33 @@ export type Launcher = {
 const MAX_CUSTOM = 80_000;
 const CUSTOM_RE = /^data:image\/(png|jpe?g|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=\s]+$/i;
 
+/** The live default for every site, new and existing, unless the owner picks something else. */
 export function defaultLauncher(): Launcher {
   return { icon: "ghost", style: "gradient", size: "md", side: "right", offset: 22, label: "Chat", custom_icon: null };
+}
+
+export function isV3LauncherIcon(value: unknown): value is (typeof V3_LAUNCHER_ICONS)[number] {
+  return (V3_LAUNCHER_ICONS as readonly string[]).includes(String(value || ""));
+}
+
+export function isV3LauncherStyle(value: unknown): value is (typeof V3_LAUNCHER_STYLES)[number] {
+  return (V3_LAUNCHER_STYLES as readonly string[]).includes(String(value || ""));
+}
+
+export function usesV3Launcher(icon: string, style: string): boolean {
+  return isV3LauncherStyle(style) || isV3LauncherIcon(icon);
+}
+
+export function mapToV3Icon(icon: string): (typeof V3_LAUNCHER_ICONS)[number] {
+  if (isV3LauncherIcon(icon)) return icon;
+  return V3_ICON_ALIAS[icon] || "ghost-mark";
+}
+
+/** Filename under /launcher/v3/ for the selected icon + style pair. */
+export function v3LauncherFile(icon: string, style: string): string {
+  const i = mapToV3Icon(icon);
+  const s = isV3LauncherStyle(style) ? style : "jewel";
+  return `${i}--${s}.svg`;
 }
 
 export function launcherLimits(plan: Plan | string) {

@@ -389,10 +389,25 @@ const LAUNCHER_ICON_SVG = {
   sparkle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 13.7 9 19.5 10.8 13.7 12.6 12 18.4 10.3 12.6 4.5 10.8 10.3 9Z"/><path d="M18.2 4.5 18.8 6.4 20.7 7 18.8 7.6 18.2 9.5 17.6 7.6 15.7 7 17.6 6.4Z"/></svg>',
   custom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>'
 };
-const FREE_LAUNCHER_ICONS = ["ghost", "chat", "question"];
-const FREE_LAUNCHER_STYLES = ["solid", "gradient"];
-const ALL_LAUNCHER_ICONS = ["ghost", "chat", "headset", "question", "sparkle", "custom"];
-const ALL_LAUNCHER_STYLES = ["solid", "outline", "gradient", "glass", "neon", "rounded-square", "pill"];
+const V3_LAUNCHER_ICONS = ["jewel-headset", "ghost-headset", "chat-typing", "sparkle-chat", "ghost-mark", "message-check"];
+const V3_LAUNCHER_STYLES = ["jewel", "glass-shine", "gradient-shine", "outline-glow", "pill-support"];
+const V3_ICON_ALIAS = { ghost: "ghost-mark", headset: "jewel-headset", chat: "chat-typing", sparkle: "sparkle-chat", question: "jewel-headset" };
+const FREE_LAUNCHER_ICONS = ["ghost", "chat", "question", "ghost-mark", "jewel-headset"];
+const FREE_LAUNCHER_STYLES = ["solid", "gradient", "jewel"];
+const ALL_LAUNCHER_ICONS = ["ghost", "chat", "headset", "question", "sparkle", "jewel-headset", "ghost-headset", "chat-typing", "sparkle-chat", "ghost-mark", "message-check", "custom"];
+const ALL_LAUNCHER_STYLES = ["solid", "outline", "gradient", "glass", "neon", "rounded-square", "pill", "jewel", "glass-shine", "gradient-shine", "outline-glow", "pill-support"];
+const LAUNCHER_LABELS = {
+  ghost: "Ghost (default)", chat: "Chat", headset: "Headset", question: "Question", sparkle: "Sparkle", custom: "Custom upload",
+  "jewel-headset": "Headset (jewel)", "ghost-headset": "Ghost + headset", "chat-typing": "Chat typing", "sparkle-chat": "Sparkle chat", "ghost-mark": "Ghost mark", "message-check": "Message + check",
+  solid: "Solid", outline: "Outline", gradient: "Gradient (default)", glass: "Glass", neon: "Neon", "rounded-square": "Rounded square", pill: "Pill",
+  jewel: "Jewel orb", "glass-shine": "Glass shine", "gradient-shine": "Gradient shine", "outline-glow": "Outline glow", "pill-support": "Support pill"
+};
+function v3LauncherFile(icon, style) {
+  const i = V3_LAUNCHER_ICONS.includes(icon) ? icon : (V3_ICON_ALIAS[icon] || "ghost-mark");
+  const s = V3_LAUNCHER_STYLES.includes(style) ? style : "jewel";
+  return i + "--" + s + ".svg";
+}
+function usesV3Launcher(icon, style) { return V3_LAUNCHER_STYLES.includes(style) || V3_LAUNCHER_ICONS.includes(icon); }
 
 function appearancePlan() { return (state.site && state.site.plan) || "free"; }
 function isPaidAppearance() { const p = appearancePlan(); return p === "pro" || p === "business"; }
@@ -465,9 +480,14 @@ function renderLauncherPicks() {
   if (!form) return;
   if (icons) {
     icons.innerHTML = ALL_LAUNCHER_ICONS.map((id) => {
-      const locked = !paid && !FREE_LAUNCHER_ICONS.includes(id) && id !== "custom" || (!paid && id === "custom");
+      const locked = !paid && !FREE_LAUNCHER_ICONS.includes(id);
       const on = form.launcher_icon.value === id ? " on" : "";
-      return "<button type='button' class='" + on + "' data-launcher-icon='" + id + "'" + (locked ? " disabled" : "") + " title='" + id + (locked ? " (Pro)" : "") + "'>" + (LAUNCHER_ICON_SVG[id] || "") + "</button>";
+      const label = LAUNCHER_LABELS[id] || id;
+      const thumb = V3_LAUNCHER_ICONS.includes(id)
+        ? "<img alt='' src='/launcher/v3/previews/" + id + ".png' width='36' height='36' />"
+        : (LAUNCHER_ICON_SVG[id] || "");
+      const klass = " " + (V3_LAUNCHER_ICONS.includes(id) ? "v3" : "classic") + on;
+      return "<button type='button' class='" + klass.trim() + "' data-launcher-icon='" + id + "'" + (locked ? " disabled" : "") + " title='" + label + (locked ? " (Pro)" : "") + "'>" + thumb + "</button>";
     }).join("");
     icons.querySelectorAll("[data-launcher-icon]").forEach((b) => b.addEventListener("click", () => {
       if (b.disabled) return;
@@ -480,7 +500,12 @@ function renderLauncherPicks() {
     styles.innerHTML = ALL_LAUNCHER_STYLES.map((id) => {
       const locked = !paid && !FREE_LAUNCHER_STYLES.includes(id);
       const on = form.launcher_style.value === id ? " on" : "";
-      return "<button type='button' class='" + on + "' data-launcher-style='" + id + "'" + (locked ? " disabled" : "") + " title='" + id + (locked ? " (Pro)" : "") + "'>" + id.replace("-", " ") + "</button>";
+      const label = LAUNCHER_LABELS[id] || id;
+      const thumb = V3_LAUNCHER_STYLES.includes(id)
+        ? "<img alt='' src='/launcher/v3/previews/" + id + ".png' />" + "<span>" + label + "</span>"
+        : label;
+      const klass = (V3_LAUNCHER_STYLES.includes(id) ? "v3" : "classic") + on;
+      return "<button type='button' class='" + klass + "' data-launcher-style='" + id + "'" + (locked ? " disabled" : "") + " title='" + label + (locked ? " (Pro)" : "") + "'>" + thumb + "</button>";
     }).join("");
     styles.querySelectorAll("[data-launcher-style]").forEach((b) => b.addEventListener("click", () => {
       if (b.disabled) return;
@@ -524,12 +549,23 @@ function updateAppearancePreview() {
   stage.dataset.mode = form.mode ? form.mode.value : "dark";
   bubble.dataset.style = style;
   bubble.dataset.icon = icon;
-  bubble.style.background = (form.primary && form.primary.value) || "#8b5cf6";
-  if (style === "gradient" || style === "neon" || style === "solid" || style === "pill") bubble.style.background = (form.primary && form.primary.value) || "#8b5cf6";
   const ico = $("#lp-ico");
-  if (ico) {
-    if (icon === "custom" && form.launcher_custom_icon.value) ico.innerHTML = "<img alt='' src='" + form.launcher_custom_icon.value.replace(/'/g, "") + "' width='28' height='28' />";
-    else ico.innerHTML = LAUNCHER_ICON_SVG[icon] || LAUNCHER_ICON_SVG.ghost;
+  if (usesV3Launcher(icon, style) && !(icon === "custom" && form.launcher_custom_icon.value)) {
+    bubble.classList.add("v3");
+    if (style === "pill-support") bubble.classList.add("v3-pill");
+    else bubble.classList.remove("v3-pill");
+    bubble.style.background = "transparent";
+    bubble.style.boxShadow = "none";
+    if (ico) ico.innerHTML = "<img alt='' src='/launcher/v3/" + v3LauncherFile(icon, style) + "' />";
+  } else {
+    bubble.classList.remove("v3", "v3-pill");
+    bubble.style.background = (form.primary && form.primary.value) || "#8b5cf6";
+    bubble.style.boxShadow = "";
+    if (style === "gradient" || style === "neon" || style === "solid" || style === "pill") bubble.style.background = (form.primary && form.primary.value) || "#8b5cf6";
+    if (ico) {
+      if (icon === "custom" && form.launcher_custom_icon.value) ico.innerHTML = "<img alt='' src='" + form.launcher_custom_icon.value.replace(/'/g, "") + "' width='28' height='28' />";
+      else ico.innerHTML = LAUNCHER_ICON_SVG[icon] || LAUNCHER_ICON_SVG.ghost;
+    }
   }
   if ($("#lp-lab")) $("#lp-lab").textContent = form.launcher_label ? form.launcher_label.value : "Chat";
 }
