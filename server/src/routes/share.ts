@@ -1,10 +1,9 @@
 import { Router } from "express";
-import fs from "node:fs";
-import path from "node:path";
 import { getDb } from "../lib/supabase.js";
 import { effectiveBranding } from "../lib/usage.js";
 import { botCardSvg, esc, hexColor, render } from "../lib/og.js";
-import { rateLimit, clientIp } from "../lib/rateLimit.js";
+import { rateLimitAsync, clientIp } from "../lib/rateLimit.js";
+import { widgetSrc } from "../lib/widgetAsset.js";
 import type { Site } from "../types.js";
 
 const KEY = /^[A-Za-z0-9_-]{4,64}$/;
@@ -27,7 +26,7 @@ export function shareRouter(repoRoot: string): Router {
   /** Per-bot link-preview card: "Chat with <bot>" in the bot's colour. */
   r.get("/og/:file", async (req, res) => {
     const key = String(req.params.file || "").replace(/\.png$/i, "");
-    const rl = rateLimit(`og:${clientIp(req)}`, 60, 60_000);
+    const rl = await rateLimitAsync(`og:${clientIp(req)}`, 60, 60_000);
     if (!rl.ok) return res.status(429).end();
     try {
       const site = await loadShareSite(key);
@@ -113,27 +112,14 @@ export function shareRouter(repoRoot: string): Router {
     <button class="go" type="button" onclick="var h=document.querySelector('#ghostchat-host');var l=h&&h.shadowRoot&&h.shadowRoot.querySelector('.gc-launcher');if(l&&h.shadowRoot.querySelector('.gc-root').getAttribute('data-open')!=='true')l.click();">Start chatting</button>
     ${site && effectiveBranding(site as unknown as Site) ? `<small>Powered by <a href="${BASE}/?ref=share">GhostChat</a></small>` : ""}
   </main>
-  ${site ? `<script src="/widget.js" data-id="${esc(key)}" data-open="true" data-share="true"></script>` : ""}
+  ${site ? `<script src="${widgetSrc(BASE)}" data-id="${esc(key)}" data-open="true" data-share="true"></script>` : ""}
 </body>
 </html>`);
   });
 
-  // Per-page preview text for routes that reuse another page's HTML (e.g. /pricing serves the landing page).
-  const landing = (() => { let html: string | null = null; return () => (html ??= fs.readFileSync(path.join(repoRoot, "public", "index.html"), "utf8")); })();
+  void repoRoot;
   r.get("/pricing", (_req, res) => {
-    const t = "GhostChat pricing — free to start, upgrade when you grow";
-    const d = "Start free. Pro and Business add more messages, live human handoff, your own branding and analytics. Cancel anytime.";
-    let html = landing()
-      .replace(/<title>[^<]*<\/title>/, `<title>Pricing · GhostChat</title>`)
-      .replace(/(<meta name="description" content=")[^"]*/, `$1${esc(d)}`)
-      .replace(/(<meta property="og:title" content=")[^"]*/, `$1${esc(t)}`)
-      .replace(/(<meta name="twitter:title" content=")[^"]*/, `$1${esc(t)}`)
-      .replace(/(<meta property="og:description" content=")[^"]*/, `$1${esc(d)}`)
-      .replace(/(<meta name="twitter:description" content=")[^"]*/, `$1${esc(d)}`)
-      .replace(/(<meta property="og:url" content=")[^"]*/, `$1${BASE}/pricing`)
-      .replace(/(<link rel="canonical" href=")[^"]*/, `$1${BASE}/pricing`);
-    res.setHeader("content-type", "text/html; charset=utf-8");
-    res.send(html);
+    res.redirect(302, `${BASE}/#plans`);
   });
   return r;
 }

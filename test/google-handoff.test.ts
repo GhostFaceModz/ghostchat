@@ -10,7 +10,7 @@ import {
   safeReturnPath,
   _resetGoogleHandoffs,
 } from "../server/src/lib/googleHandoff.js";
-import { signOAuthState, readOAuthState, verifyOAuthState } from "../server/src/lib/auth.js";
+import { signOAuthState, readOAuthState, verifyOAuthState, signToken } from "../server/src/lib/auth.js";
 
 const PUBLIC = "https://ghostchat.pro";
 const ONRENDER = "https://ghostchat-nfoc.onrender.com";
@@ -130,7 +130,9 @@ test("finish endpoint redeems a valid ticket then rejects reuse", async () => {
   const { default: express } = await import("express");
   const { authRouter } = await import("../server/src/routes/auth.js");
   _resetGoogleHandoffs();
-  const ticket = createGoogleHandoff("session-live-token", "/dashboard");
+  process.env.SESSION_SECRET ||= "test-session-secret-for-tickets-32bytes!!";
+  const session = signToken({ id: "00000000-0000-0000-0000-000000000099", email: "zane@example.com", name: "Zane" });
+  const ticket = createGoogleHandoff(session, "/dashboard");
   const app = express();
   app.use("/api/auth", authRouter);
   const server = await new Promise((resolve) => {
@@ -142,8 +144,10 @@ test("finish endpoint redeems a valid ticket then rejects reuse", async () => {
     assert.equal(first.status, 302);
     const loc = new URL(first.headers.get("location") || "http://invalid");
     assert.equal(loc.pathname, "/dashboard");
-    assert.equal(loc.searchParams.get("token"), "session-live-token");
+    assert.equal(loc.searchParams.get("token"), null);
     assert.equal(loc.searchParams.get("auth_error"), null);
+    assert.match(loc.hash, /^#gc_code=/);
+    assert.ok(loc.hash.length > 20);
     const second = await fetch(`http://127.0.0.1:${port}/api/auth/google/finish?t=${encodeURIComponent(ticket)}`, { redirect: "manual" });
     assert.equal(second.status, 302);
     const loc2 = new URL(second.headers.get("location") || "http://invalid");

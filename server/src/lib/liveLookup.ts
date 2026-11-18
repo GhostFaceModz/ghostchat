@@ -8,7 +8,7 @@ import { assertPublicHttpUrl } from "./ssrf.js";
 import { extractText, inScope, type CrawledPage, type CrawlScope } from "./crawl.js";
 import { chunkText } from "./chunk.js";
 import { embedTexts } from "./ai.js";
-import { rateLimit } from "./rateLimit.js";
+import { rateLimitAsync } from "./rateLimit.js";
 import { similarityThreshold } from "./chat.js";
 import type { RetrievedChunk, Site } from "../types.js";
 
@@ -161,9 +161,9 @@ async function sitemapUrls(origin: URL, host: string, custom: string | undefined
 }
 
 /** Per-site and per-visitor limits so lookups can't be abused to hammer a site. */
-export function lookupAllowed(siteId: string, sessionId: string): boolean {
-  if (!rateLimit(`lookup:sid:${siteId}:${sessionId}`, 4, 10 * 60_000).ok) return false;
-  return rateLimit(`lookup:site:${siteId}`, 20, 60_000).ok && rateLimit(`lookup:site:h:${siteId}`, 200, HOUR).ok;
+export async function lookupAllowed(siteId: string, sessionId: string): Promise<boolean> {
+  if (!(await rateLimitAsync(`lookup:sid:${siteId}:${sessionId}`, 4, 10 * 60_000)).ok) return false;
+  return (await rateLimitAsync(`lookup:site:${siteId}`, 20, 60_000)).ok && (await rateLimitAsync(`lookup:site:h:${siteId}`, 200, HOUR)).ok;
 }
 
 /** Should we look the question up live? Only when the index has nothing confident. */

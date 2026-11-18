@@ -190,7 +190,7 @@
     wzStep = n;
     wz.querySelectorAll("[data-step]").forEach((s) => (s.hidden = Number(s.dataset.step) !== n));
     wz.querySelectorAll(".wz-steps i").forEach((d, i) => d.classList.toggle("on", i < n));
-    if (n === 4) $("#wz-snippet").value = `<script src="${(window.GHOSTCHAT_PUBLIC_ORIGIN || "https://ghostchat.pro")}/widget.js" data-id="${wzSite.site_key}"></script>`;
+    if (n === 4) $("#wz-snippet").value = `<script src="${typeof widgetScriptUrl === "function" ? widgetScriptUrl(window.GHOSTCHAT_PUBLIC_ORIGIN) : (window.GHOSTCHAT_PUBLIC_ORIGIN || "https://ghostchat.pro") + "/widget.js"}" data-id="${wzSite.site_key}"></script>`;
     if (n === 5) $("#wz-chat").src = "/c/" + encodeURIComponent(wzSite.site_key);
   }
   function openWizard() { wzSite = null; $("#wz-site").reset(); $("#wz-err").hidden = true; go(1); wz.showModal(); }

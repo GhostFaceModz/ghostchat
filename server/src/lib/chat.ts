@@ -311,7 +311,7 @@ export function preflightMessage(site: Site, message: string): { blocked: boolea
 
 /** Live site lookup (feature 11): fetch fresh pages from the owner's site when the index can't answer. */
 async function runLookup(site: Site, sessionId: string, message: string, onEvent?: (e: Record<string, unknown>) => void): Promise<RetrievedChunk[] | null> {
-  if (site.live_lookup === false || !site.url || !lookupAllowed(site.id, sessionId)) return null;
+  if (site.live_lookup === false || !site.url || !(await lookupAllowed(site.id, sessionId))) return null;
   onEvent?.({ type: "status", status: "checking" });
   const t0 = Date.now();
   const found = await liveLookup(site, message).catch(() => null);

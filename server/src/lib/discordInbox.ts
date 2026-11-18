@@ -58,6 +58,7 @@ export function inboxComponents(convId: string, state: ClaimState, opts: { claim
       type: 1,
       components: [
         btn(convId, "claim", claimLabel, 3, claimed || ended, "🙋"),
+        btn(convId, "close", "End chat", 4, ended),
         btn(convId, "transcript", "View transcript", 2, false, "📄"),
         btn(convId, "closethread", "Close ticket", 4, ended),
       ],

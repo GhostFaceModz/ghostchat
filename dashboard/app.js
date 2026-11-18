@@ -15,6 +15,12 @@ const PUBLIC_ORIGIN = (function () {
 window.GHOSTCHAT_PUBLIC_ORIGIN = PUBLIC_ORIGIN;
 
 // Session token: localStorage when "Remember me" is on (about 30 days), sessionStorage otherwise.
+function widgetScriptUrl(origin) {
+  const base = (origin || PUBLIC_ORIGIN || "https://ghostchat.pro").replace(/\/$/, "");
+  const v = window.GHOSTCHAT_WIDGET_V || "dev";
+  return base + "/widget.js?v=" + encodeURIComponent(v);
+}
+
 const tokenStore = {
   get() { try { return localStorage.getItem("gc_token") || sessionStorage.getItem("gc_token") || ""; } catch { return ""; } },
   set(t, remember = true) {
@@ -103,14 +109,24 @@ function showOwner(owner) {
 
 async function boot() {
   const params = new URLSearchParams(location.search);
-  const token = params.get("token");
   const authError = params.get("auth_error");
-  if (token) {
-    state.token = token;
-    tokenStore.set(token, true);
-    params.delete("token");
-    const next = params.toString();
-    history.replaceState({}, "", location.pathname + (next ? "?" + next : ""));
+  // Short-lived OAuth code arrives in the URL fragment, never as a session token in the query string.
+  const hashParams = new URLSearchParams((location.hash || "").replace(/^#/, ""));
+  const authCode = hashParams.get("gc_code") || params.get("auth_code");
+  if (authCode) {
+    try {
+      const res = await fetch("/api/auth/exchange", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: authCode }) });
+      const data = await res.json();
+      if (res.ok && data.token) {
+        state.token = data.token;
+        tokenStore.set(data.token, data.remember !== false);
+      }
+    } catch { /* fall through to the sign-in form */ }
+    hashParams.delete("gc_code");
+    params.delete("auth_code");
+    const qs = params.toString();
+    const restHash = hashParams.toString();
+    history.replaceState({}, "", location.pathname + (qs ? "?" + qs : "") + (restHash ? "#" + restHash : ""));
   }
   setAuthMode(authMode);
   loadTemplates();
@@ -241,7 +257,7 @@ function renderSite() {
   $("#usage-bar i").style.width = Math.min(100, Math.round((used / limit) * 100)) + "%";
   renderUsageBanner(s);
   $("#site-key").value = s.site_key;
-  const snippet = `<script src="${PUBLIC_ORIGIN}/widget.js" data-id="${s.site_key}"></script>`;
+  const snippet = `<script src="${widgetScriptUrl(PUBLIC_ORIGIN)}" data-id="${s.site_key}"></script>`;
   $("#embed").value = snippet;
   $("#open-demo").href = "/demo?key=" + encodeURIComponent(s.site_key);
   const share = PUBLIC_ORIGIN + "/c/" + encodeURIComponent(s.site_key);

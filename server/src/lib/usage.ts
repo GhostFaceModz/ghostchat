@@ -75,21 +75,14 @@ export async function incrementMessages(siteId: string): Promise<void> {
   const db = getDb();
   const { data, error } = await db
     .from("ghostchat_sites")
-    .select("messages_this_period, owner_id, plan, usage_alert_level")
+    .select("owner_id, plan, messages_this_period")
     .eq("id", siteId)
     .single();
   if (error) throw error;
-  const used = (data?.messages_this_period ?? 0) + 1;
   const limit = messageLimit(data as unknown as Site);
-  const level = alertLevel(used, limit);
-  await db
-    .from("ghostchat_sites")
-    .update({
-      messages_this_period: used,
-      ...(level > (data?.usage_alert_level ?? 0) ? { usage_alert_level: level } : {}),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", siteId);
+  const { data: usedRaw, error: incErr } = await db.rpc("ghostchat_increment_messages", { p_site: siteId, p_limit: limit });
+  if (incErr) throw incErr;
+  const used = Number(usedRaw ?? (data?.messages_this_period ?? 0) + 1);
   // Past the allowance, each message uses one top-up credit (if any; otherwise it's within the grace).
   if (used > limit && data?.owner_id) {
     await db.rpc("ghostchat_use_credit", { p_owner: data.owner_id });
@@ -97,20 +90,8 @@ export async function incrementMessages(siteId: string): Promise<void> {
 }
 
 export async function incrementLeads(siteId: string): Promise<void> {
-  const db = getDb();
-  const { data, error } = await db
-    .from("ghostchat_sites")
-    .select("leads_this_period")
-    .eq("id", siteId)
-    .single();
+  const { error } = await getDb().rpc("ghostchat_increment_leads", { p_site: siteId });
   if (error) throw error;
-  await db
-    .from("ghostchat_sites")
-    .update({
-      leads_this_period: (data?.leads_this_period ?? 0) + 1,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", siteId);
 }
 
 export async function countOwnerSites(ownerId: string): Promise<number> {
@@ -183,12 +164,12 @@ export async function getOwnerPlan(ownerId: string): Promise<Plan> {
   return plan && plan in PLAN_LIMITS ? plan : "free";
 }
 
-// ---- Per-site daily cap (in memory): a tenth of the monthly allowance per day, at least 25. ----
+// ---- Per-site daily cap: a tenth of the monthly allowance per day, at least 25. ----
 const dailyCounts = new Map<string, number>();
 export function dailyCap(site: Site): number {
   return Math.max(25, Math.ceil(messageLimit(site) / 10));
 }
-export function dailyCapCheck(site: Site, now = new Date()): { ok: boolean; used: number; cap: number } {
+function dailyMemoryHit(site: Site, now: Date): { ok: boolean; used: number; cap: number } {
   const day = now.toISOString().slice(0, 10);
   const key = `${site.id}:${day}`;
   if (dailyCounts.size > 5000) for (const k of dailyCounts.keys()) if (!k.endsWith(day)) dailyCounts.delete(k);
@@ -197,4 +178,22 @@ export function dailyCapCheck(site: Site, now = new Date()): { ok: boolean; used
   if (used >= cap) return { ok: false, used, cap };
   dailyCounts.set(key, used + 1);
   return { ok: true, used: used + 1, cap };
+}
+/** Sync memory check (tests / fallback). Prefer dailyCapCheckAsync in request handlers. */
+export function dailyCapCheck(site: Site, now = new Date()): { ok: boolean; used: number; cap: number } {
+  return dailyMemoryHit(site, now);
+}
+export async function dailyCapCheckAsync(site: Site, now = new Date()): Promise<{ ok: boolean; used: number; cap: number }> {
+  if (process.env.NODE_ENV === "test" && process.env.RATE_LIMIT_DB !== "1") return dailyMemoryHit(site, now);
+  const cap = dailyCap(site);
+  const day = now.toISOString().slice(0, 10);
+  try {
+    const { data, error } = await getDb().rpc("ghostchat_daily_hit", { p_site: site.id, p_day: day });
+    if (error) return dailyMemoryHit(site, now);
+    const used = Number(data ?? 0);
+    if (used > cap) return { ok: false, used, cap };
+    return { ok: true, used, cap };
+  } catch {
+    return dailyMemoryHit(site, now);
+  }
 }

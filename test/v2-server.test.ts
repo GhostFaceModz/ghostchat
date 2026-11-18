@@ -64,9 +64,9 @@ test("live lookup: only when the index has nothing confident, owner toggle and c
   assert.equal(needsLookup({}, [c(0.9, "correction:1")]), false);
 });
 
-test("live lookup: per-visitor rate limit", () => {
+test("live lookup: per-visitor rate limit", async () => {
   let ok = 0;
-  for (let i = 0; i < 6; i++) if (lookupAllowed("rl-site", "rl-visitor")) ok++;
+  for (let i = 0; i < 6; i++) if (await lookupAllowed("rl-site", "rl-visitor")) ok++;
   assert.equal(ok, 4);
 });
 

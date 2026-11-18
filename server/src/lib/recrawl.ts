@@ -68,6 +68,6 @@ export async function runDueRecrawls(opts: { maxSites?: number; budgetMs?: numbe
 export function startRecrawlScheduler(): void {
   if (String(process.env.RECRAWL_SCHEDULER || "").toLowerCase() === "off" || process.env.NODE_ENV === "test") return;
   const tick = () => runDueRecrawls().then((r) => { if ((r as { results: unknown[] }).results.length) console.log("auto re-crawl:", JSON.stringify(r)); }).catch((e) => console.error("auto re-crawl failed:", (e as Error).message));
-  setTimeout(tick, 3 * 60_000).unref();
+  setTimeout(tick, 15_000).unref();
   setInterval(tick, 60 * 60_000).unref();
 }

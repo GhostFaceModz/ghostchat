@@ -36,10 +36,10 @@ test("backoff and retryable statuses", () => {
   assert.ok(backoffMs(1) > backoffMs(0) * 1.5);
 });
 
-test("chat rate limit: 6 per minute per visitor, friendly message", () => {
+test("chat rate limit: 6 per minute per visitor, friendly message", async () => {
   const ip = "203.0.113." + Math.floor(Math.random() * 200);
-  for (let i = 0; i < 6; i++) assert.equal(chatRateLimit(ip, "gc_t", "s1"), null);
-  const r = chatRateLimit(ip, "gc_t", "s1");
+  for (let i = 0; i < 6; i++) assert.equal(await chatRateLimit(ip, "gc_t", "s1"), null);
+  const r = await chatRateLimit(ip, "gc_t", "s1");
   assert.ok(r && /slow down/i.test(r.message) && r.retryAfterSec > 0);
 });
 

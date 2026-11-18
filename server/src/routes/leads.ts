@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { getDb } from "../lib/supabase.js";
 import { isValidEmail } from "../lib/auth.js";
-import { clientIp, rateLimit } from "../lib/rateLimit.js";
+import { clientIp, rateLimitAsync } from "../lib/rateLimit.js";
 import { incrementLeads, assertCanCaptureLead } from "../lib/usage.js";
 import { redactPii } from "../lib/pii.js";
 import { chatForm, SUPPORT_FORM_FIELDS, submissionNotes, validateSubmission } from "../lib/forms.js";
@@ -24,7 +24,7 @@ leadsRouter.post("/", async (req, res) => {
   if (!isValidEmail(email)) return res.status(400).json({ error: "Enter a valid email address." });
 
   const ip = clientIp(req);
-  const rl = rateLimit(`lead:${siteKey}:${ip}`, 8, 30 * 60 * 1000);
+  const rl = await rateLimitAsync(`lead:${siteKey}:${ip}`, 8, 30 * 60 * 1000);
   if (!rl.ok) return res.status(429).json({ error: "Too many submissions. Try again shortly." });
 
   const { data: site, error: siteErr } = await getDb()
