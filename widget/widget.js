@@ -41,6 +41,7 @@
     name: "GhostChat",
     starters: [],
     showBranding: true,
+    aiDisclosure: "This chat uses AI.",
     openSiteLinks: "same_tab",
     siteHosts: [],
     sessionId: null,
@@ -287,6 +288,8 @@
     ".gc-brand a:hover, .gc-brand a:focus-visible { opacity: 1; color: var(--gc-text); outline: none; }",
     ".gc-brand b { font-weight: 700; color: var(--gc-text); }",
     ".gc-brand svg { width: 12px; height: 12px; }",
+    ".gc-disclose { padding: 0 14px 8px; font-size: 10.5px; line-height: 1.35; color: var(--gc-muted); opacity: .82; }",
+    ".gc-disclose[hidden] { display: none; }",
     ".gc-brand .gc-add { opacity: .9; padding: 5px 9px; border-radius: 999px; border: 1px solid var(--gc-line); background: linear-gradient(135deg, color-mix(in srgb, var(--gc-primary) 14%, transparent), transparent); }",
     ".gc-brand .gc-add:hover { border-color: var(--gc-primary); }",
     ".gc-typing { display: flex; gap: 4px; padding: 8px 4px; }",
@@ -463,6 +466,7 @@
   var input = el("textarea", { rows: "1", placeholder: t("ph"), "aria-label": "Your message" });
   var sendBtn = el("button", { class: "gc-send", type: "button", title: "Send", "aria-label": "Send message", html: ICONS.send });
   var composer = el("div", { class: "gc-composer" }, [input, micBtn, sendBtn]);
+  var disclose = el("p", { class: "gc-disclose", text: "This chat uses AI." });
   var brand = el("div", { class: "gc-brand" });
   var memNote = el("div", { class: "gc-mem", hidden: "hidden" });
   panel.appendChild(head);
@@ -471,6 +475,7 @@
   panel.appendChild(endBar);
   panel.appendChild(composer);
   panel.appendChild(memNote);
+  panel.appendChild(disclose);
   panel.appendChild(brand);
   var modal = el("div", { class: "gc-modal" });
   var modalBox = el("div", { class: "gc-modal-box", role: "dialog", "aria-modal": "true", "aria-label": "Booking calendar" });
@@ -571,6 +576,16 @@
 
     state.thinking = on;
     root.setAttribute("data-thinking", on ? "true" : "false");
+  }
+  function setDisclosure() {
+    var text = String(state.aiDisclosure || "").trim();
+    if (text) {
+      disclose.textContent = text;
+      disclose.hidden = false;
+    } else {
+      disclose.textContent = "";
+      disclose.hidden = true;
+    }
   }
   function setBranding() {
     if (state.showBranding) {
@@ -1612,6 +1627,7 @@
       if (cfg.theme.accent && /^#[0-9a-f]{3,8}$/i.test(cfg.theme.accent)) root.style.setProperty("--gc-accent", cfg.theme.accent);
     }
     if (typeof cfg.showBranding === "boolean") state.showBranding = cfg.showBranding;
+    if (typeof cfg.aiDisclosure === "string") state.aiDisclosure = cfg.aiDisclosure;
     if (typeof cfg.voiceEnabled === "boolean") state.voice = cfg.voiceEnabled;
     if (typeof cfg.readAloudEnabled === "boolean") state.readAloud = cfg.readAloudEnabled;
     if (cfg.bookingUrl) state.bookingUrl = cfg.bookingUrl;
@@ -1643,6 +1659,7 @@
     root.style.setProperty("--gc-primary", state.primary);
     soundBtn.setAttribute("aria-pressed", state.sound ? "true" : "false");
     setBranding();
+    setDisclosure();
   }
 
   applyConfig({ greeting: state.greeting, showBranding: true });

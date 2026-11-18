@@ -224,3 +224,18 @@ export async function dailyCapCheckAsync(site: Site, now = new Date()): Promise<
     return dailyMemoryHit(site, now);
   }
 }
+
+export const DEFAULT_AI_DISCLOSURE = "This chat uses AI.";
+
+/** Custom widget disclosure line. Free plans always show at least the default. */
+export function effectiveDisclosure(site: Pick<Site, "plan" | "ai_disclosure">): string {
+  const raw = String(site.ai_disclosure ?? DEFAULT_AI_DISCLOSURE).replace(/\s+/g, " ").trim().slice(0, 120);
+  if (raw) return raw;
+  const limits = PLAN_LIMITS[site.plan as Plan] ?? PLAN_LIMITS.free;
+  if (limits.brandingRequired) return DEFAULT_AI_DISCLOSURE;
+  return "";
+}
+
+export function sanitizeDisclosure(value: string, plan: Plan): string {
+  return effectiveDisclosure({ plan, ai_disclosure: String(value ?? "") });
+}

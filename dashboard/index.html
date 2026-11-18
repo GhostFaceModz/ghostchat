@@ -547,6 +547,10 @@
             <label class="check"><input name="voice_enabled" type="checkbox" /> Enable voice mode <span class="pill">Pro</span> (mic button + auto read-aloud in the browser; hidden where unsupported)</label>
             <label class="check"><input name="show_branding" type="checkbox" /> Show “Powered by GhostChat” and “Add to your website” in the chat panel</label>
             <p class="muted tiny" id="branding-note">Free plan always shows the badge. Pro and Business can remove it.</p>
+            <label><span data-i18n="appearance.disclosure">AI disclosure line</span>
+              <input name="ai_disclosure" maxlength="120" placeholder="This chat uses AI." />
+            </label>
+            <p class="muted tiny" data-i18n="appearance.disclosureNote">Shown at the bottom of the chat. On the Free plan it can’t be hidden — Pro and Business can clear the field to hide it.</p>
             <button type="submit" class="btn primary">Save appearance</button>
           </form>
         </section>
