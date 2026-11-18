@@ -622,7 +622,30 @@ sitesRouter.get("/:id/logs", async (req, res) => {
   const site = await loadOwnedSite(req, req.params.id);
   if (!site) return res.status(404).json({ error: "Site not found." });
   const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
-  const { data, error } = await getDb()
+  const q = String(req.query.q || "").replace(/[%_\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  const db = getDb();
+  if (q.length >= 2) {
+    const { data: hits, error: hitErr } = await db
+      .from("ghostchat_logs")
+      .select("session_id")
+      .eq("site_id", site.id)
+      .ilike("message", "%" + q + "%")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (hitErr) return res.status(500).json({ error: "Could not search transcripts." });
+    const sessions = [...new Set((hits ?? []).map((h: { session_id: string }) => h.session_id).filter(Boolean))].slice(0, 40);
+    if (!sessions.length) return res.json({ logs: [], q });
+    const { data, error } = await db
+      .from("ghostchat_logs")
+      .select("id, session_id, role, message, sources, was_unsure, feedback, created_at")
+      .eq("site_id", site.id)
+      .in("session_id", sessions)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) return res.status(500).json({ error: "Could not load transcripts." });
+    return res.json({ logs: data ?? [], q });
+  }
+  const { data, error } = await db
     .from("ghostchat_logs")
     .select("id, session_id, role, message, sources, was_unsure, feedback, created_at")
     .eq("site_id", site.id)
@@ -674,6 +697,7 @@ sitesRouter.get("/:id/analytics", async (req, res) => {
       ...a,
       questionsByPage: full ? [...pages.entries()].sort((x, y) => y[1] - x[1]).slice(0, 15).map(([url, count]) => ({ url, count })) : [],
       lowConfidence: full ? a.lowConfidence : a.lowConfidence.slice(0, 3),
+      unansweredClusters: full ? a.unansweredClusters : (a.unansweredClusters || []).filter((c) => c.count >= 2).slice(0, 1),
       unanswered: a.lowConfidence.filter((x) => x.reason === "unsure").slice(0, 25).map((x) => ({ id: x.logId, message: x.question || x.answer, created_at: x.created_at })),
       totals: { ...a.totals, leads: fresh.leads_this_period, messagesThisPeriod: fresh.messages_this_period, messageLimit: messageLimit(fresh), plan: fresh.plan },
       level,

@@ -821,11 +821,20 @@ async function runEvalSet(staging) {
   }
 }
 
+$("#log-search")?.addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  loadLogs();
+});
+
 async function loadLogs() {
   if (!state.site) return;
-  const { logs } = await req("/api/sites/" + state.site.id + "/logs");
+  const q = String($("#log-q")?.value || "").trim();
+  const path = "/api/sites/" + state.site.id + "/logs" + (q.length >= 2 ? "?q=" + encodeURIComponent(q) : "");
+  const { logs } = await req(path);
+  const status = $("#log-search-status");
+  if (status) status.textContent = q.length >= 2 ? ((logs.length ? logs.length + " messages in matching conversations" : "No conversations matched.") + " for “" + q + "”") : "";
   const box = $("#log-list");
-  box.innerHTML = logs.length ? "" : "<p class='muted'>No conversations yet.</p>";
+  box.innerHTML = logs.length ? "" : (q.length >= 2 ? "<p class='muted'>No conversations matched that search.</p>" : "<p class='muted'>No conversations yet.</p>");
   logs.forEach((l) => {
     const item = document.createElement("div");
     item.className = "log";
@@ -876,6 +885,17 @@ async function loadAnalytics() {
     <div class="chart-card"><h3>Questions per day <span class="muted tiny">last 14 days</span></h3>${barChart(days.map((d) => d.count), days.map((d) => d.date), { label: "Questions per day", short: (l) => l.slice(8) })}</div>
     <div class="chart-card"><h3>Busiest hours <span class="muted tiny">${escapeHtml(a.timeZone || "")}${a.peakHour != null ? " · peak " + String(a.peakHour).padStart(2, "0") + ":00" : ""}</span></h3>${barChart(hours, hourLabels, { label: "Questions by hour", dense: true, highlight: a.peakHour, short: (l, i) => (i % 3 === 0 ? String(i) : "") })}</div>
     <div><h3>Top questions</h3><ul class="hbars">${q}</ul></div>
+    ${(() => {
+      const groups = (a.unansweredClusters || []).filter((c) => c.count >= 2);
+      if (!groups.length) return "";
+      const items = groups.map((c) => {
+        const examples = (c.questions || []).slice(0, 3).map((q) => escapeHtml(q)).join(" · ");
+        const fixId = (c.logIds || [])[0] || "";
+        const q = (c.questions || [])[0] || c.label || "";
+        return "<li class='cluster'><div><b>" + escapeHtml(c.label) + "</b> <span class='muted tiny'>×" + c.count + " similar</span><p class='muted'>" + examples + "</p></div><button type='button' class='btn small' data-fix='" + escapeHtml(fixId) + "' data-q='" + escapeHtml(q) + "'>Fix this answer</button></li>";
+      }).join("");
+      return "<div><h3>Similar unanswered questions</h3><p class='muted tiny'>These visitor questions look like the same gap in your training. Fix one and it helps the rest.</p><ul class='lowc-list cluster-list'>" + items + "</ul></div>";
+    })()}
     <div><h3>Unanswered questions</h3><p class="muted tiny">Type the right answer once and it becomes a source the bot will use next time. Low-confidence and 👎 replies are listed here too.</p><ul class="lowc-list">${low}</ul>${(a.lowConfidence || []).length > 6 ? `<button type="button" class="btn ghost small" id="lowc-all">Show all ${a.lowConfidence.length}</button>` : ""}
       <form id="teach-form" class="stack tight" style="margin-top:1rem">
         <label>Teach an answer <input name="question" required placeholder="Visitor question"></label>

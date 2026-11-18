@@ -60,9 +60,11 @@ export function computeAnalytics(input: {
   const conversations = sessions.size;
   const csat = (input.csat || []).filter((n) => n >= 1 && n <= 5);
   const peak = hours.reduce((best, n, h) => (n > hours[best] ? h : best), 0);
+  const unansweredClusters = clusterUnanswered(lowConfidence.filter((x) => x.reason === "unsure"));
   return {
     topQuestions: [...questions.values()].sort((a, b) => b.count - a.count).slice(0, 10),
     lowConfidence: lowConfidence.reverse().slice(0, 30),
+    unansweredClusters,
     conversion: {
       conversations, leads: input.leads, convertedConversations: converted,
       rate: conversations ? Math.round((Math.max(converted, Math.min(input.leads, conversations)) / conversations) * 1000) / 10 : 0,
@@ -76,4 +78,78 @@ export function computeAnalytics(input: {
     tickets: input.tickets ? { open: input.tickets.filter((t) => t.status === "open").length, pending: input.tickets.filter((t) => t.status === "pending").length, solved: input.tickets.filter((t) => t.status === "solved").length } : null,
     totals: { messages: rows.length, assistant },
   };
+}
+
+
+const STOP = new Set([
+  "a","an","the","is","are","am","was","were","be","been","do","does","did","can","could","would","should","will",
+  "i","me","my","we","you","your","it","its","this","that","these","those","to","of","for","in","on","at","by",
+  "with","from","or","and","but","if","not","please","what","whats","which","who","whom","how","when","where",
+  "why","about","any","there","have","has","had",
+]);
+
+export function questionTokens(text: string): string[] {
+  const raw = String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9£$€%]+/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 2 && !STOP.has(t));
+  return [...new Set(raw)].slice(0, 24);
+}
+
+export function tokenOverlap(a: string[], b: string[]): number {
+  if (!a.length || !b.length) return 0;
+  const other = new Set(b);
+  let shared = 0;
+  for (const t of a) if (other.has(t)) shared++;
+  return shared / Math.min(a.length, b.length);
+}
+
+export type UnansweredItem = { logId: string; question: string; created_at: string };
+
+/** Group similar unanswered questions by shared tokens (no embeddings, no model). */
+export function clusterUnanswered(items: UnansweredItem[], minOverlap = 0.5) {
+  type Cluster = { tokens: string[]; questions: string[]; logIds: string[]; latest: string; label: string };
+  const clusters: Cluster[] = [];
+  const sorted = [...items]
+    .filter((x) => String(x.question || "").trim())
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  for (const item of sorted) {
+    const toks = questionTokens(item.question);
+    let best = -1;
+    let bestScore = minOverlap;
+    for (let i = 0; i < clusters.length; i++) {
+      const shared = toks.filter((t) => clusters[i].tokens.includes(t)).length;
+      const score = tokenOverlap(toks, clusters[i].tokens);
+      const short = Math.min(toks.length, clusters[i].tokens.length) <= 2;
+      if (score + 1e-9 >= minOverlap && (shared >= 2 || (short && shared >= 1)) && score >= bestScore) {
+        best = i;
+        bestScore = score;
+      }
+    }
+    if (best >= 0) {
+      const c = clusters[best];
+      if (!c.questions.includes(item.question)) c.questions.push(item.question);
+      c.logIds.push(item.logId);
+      c.tokens = [...new Set([...c.tokens, ...toks])].slice(0, 32);
+    } else {
+      clusters.push({
+        tokens: toks,
+        questions: [item.question],
+        logIds: [item.logId],
+        latest: item.created_at,
+        label: item.question.replace(/\s+/g, " ").trim().slice(0, 120),
+      });
+    }
+  }
+  return clusters
+    .map((c) => ({
+      label: c.label,
+      count: c.logIds.length,
+      questions: c.questions.slice(0, 5),
+      logIds: c.logIds.slice(0, 12),
+      latest: c.latest,
+    }))
+    .sort((a, b) => b.count - a.count || b.latest.localeCompare(a.latest))
+    .slice(0, 15);
 }
