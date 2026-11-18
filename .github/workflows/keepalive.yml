@@ -44,3 +44,6 @@ jobs:
           curl --silent --show-error --max-time 30 -X POST \
             -H "x-cron-secret: $CRON_SECRET" \
             https://ghostchat.pro/api/cron/auto-recharge || true
+          curl --silent --show-error --max-time 30 -X POST \
+            -H "x-cron-secret: $CRON_SECRET" \
+            https://ghostchat.pro/api/cron/digest || true

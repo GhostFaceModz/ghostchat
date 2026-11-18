@@ -68,7 +68,19 @@ export const config = {
   whopTopup5000Id: str("WHOP_TOPUP_5000_ID") || "plan_3rVqDMRXNHvzM",
   notionApiKey: str("NOTION_API_KEY"),
   voiceEnabled: bool("VOICE_ENABLED", true),
+  // Outbound mail is optional. Leave unset to keep digests and email-channel
+  // replies in the dashboard only. No paid provider is required.
+  smtpHost: str("SMTP_HOST"),
+  smtpPort: num("SMTP_PORT", 587),
+  smtpUser: str("SMTP_USER"),
+  smtpPass: str("SMTP_PASS"),
+  smtpSecure: bool("SMTP_SECURE", false),
+  emailFrom: str("EMAIL_FROM"),
+  resendApiKey: str("RESEND_API_KEY"),
+  agentmailApiKey: str("AGENTMAIL_API_KEY"),
+  agentmailInbox: str("AGENTMAIL_INBOX"),
 };
+
 
 export const PLAN_LIMITS = {
   free: {
@@ -80,6 +92,10 @@ export const PLAN_LIMITS = {
     monthlyLeads: 15,
     analytics: "basic" as const,
     maxCards: 3,
+    maxSeats: 1,
+    digest: false,
+    copilot: false,
+    emailChannel: false,
   },
   pro: {
     monthlyMessages: config.proMonthlyMessages,
@@ -90,6 +106,10 @@ export const PLAN_LIMITS = {
     monthlyLeads: 1000,
     analytics: "full" as const,
     maxCards: 20,
+    maxSeats: 2,
+    digest: true,
+    copilot: false,
+    emailChannel: false,
   },
   business: {
     monthlyMessages: config.businessMonthlyMessages,
@@ -100,6 +120,10 @@ export const PLAN_LIMITS = {
     monthlyLeads: 10000,
     analytics: "full" as const,
     maxCards: 50,
+    maxSeats: 5,
+    digest: true,
+    copilot: true,
+    emailChannel: true,
   },
 } as const;
 

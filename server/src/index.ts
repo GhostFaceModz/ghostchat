@@ -24,6 +24,10 @@ import { ticketsRouter } from "./routes/tickets.js";
 import { startIdleSweep, sweepIdleLiveChats, sweepClosedDiscordCards } from "./lib/discordInbox.js";
 import { startRecrawlScheduler, runDueRecrawls } from "./lib/recrawl.js";
 import { promptDueRecharges } from "./lib/autoRecharge.js";
+import { sendWeeklyDigests } from "./lib/digest.js";
+import { teamRouter, teamPublicRouter } from "./routes/team.js";
+import { digestRouter } from "./routes/digest.js";
+import { emailOwnerRouter, emailInboundRouter } from "./routes/email.js";
 import { canonicalRedirect, HSTS_VALUE, PUBLIC_ERROR } from "./lib/httpSecurity.js";
 import { widgetFile, widgetVersion, widgetCacheControl } from "./lib/widgetAsset.js";
 
@@ -72,7 +76,12 @@ app.get("/healthz", (_req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/email/inbound", emailInboundRouter);
+app.use("/api/team", teamPublicRouter);
+app.use("/api/team", requireAuth, teamRouter);
+app.use("/api/digest", requireAuth, digestRouter);
 app.use("/api/sites", requireAuth, ticketsRouter);
+app.use("/api/sites", requireAuth, emailOwnerRouter);
 app.use("/api/sites", requireAuth, sitesRouter);
 app.use("/api/cron", cronRouter);
 app.use("/api/chat", widgetCors, chatRouter);
@@ -163,6 +172,9 @@ function catchUpOnWake() {
   promptDueRecharges()
     .then((r) => { if (r.prompted) console.log("wake auto-recharge:", JSON.stringify(r)); })
     .catch((e) => console.error("wake auto-recharge failed:", (e as Error).message));
+  sendWeeklyDigests()
+    .then((r) => { if (r.stored || r.sent) console.log("wake digest:", JSON.stringify(r)); })
+    .catch((e) => console.error("wake digest failed:", (e as Error).message));
 }
 
 app.listen(config.port, () => {

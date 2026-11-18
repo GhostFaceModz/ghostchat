@@ -89,9 +89,11 @@
       return `<div class="im ${esc(m.role)}">${who ? `<span class="im-who">${esc(who)} · ${esc(new Date(m.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }))}</span>` : ""}<div class="im-b">${esc(m.message)}</div></div>`;
     }).join("") + (d.visitor_typing ? "<div class='im user'><div class='im-b'><i>typing…</i></div></div>" : "");
     const pill = status === "human" ? "<span class='st human'>You're live</span>" : status === "waiting" ? "<span class='st waiting'>Waiting for you</span>" : "<span class='st'>AI is answering</span>";
+    const canCopilot = (state.workspaces || []).some((w) => w.id === state.workspaceId && w.plan === "business") || (state.owner && state.owner.plan === "business" && (!state.workspaceId || state.workspaceId === state.owner.id));
+    const copilotBtn = canCopilot && state.role !== "viewer" ? `<button type="button" class="btn ghost small" id="inbox-copilot">✨ Suggest reply</button>` : "";
     const actions = status === "human" || status === "waiting"
-      ? `<button type="button" class="btn small" id="inbox-handback">🤖 Hand back to AI</button><button type="button" class="btn ghost small" id="inbox-close">Close</button>`
-      : `<button type="button" class="btn primary small" id="inbox-take">🧑 Take over</button>`;
+      ? `<button type="button" class="btn small" id="inbox-handback">🤖 Hand back to AI</button><button type="button" class="btn ghost small" id="inbox-close">Close</button>${copilotBtn}`
+      : `<button type="button" class="btn primary small" id="inbox-take">🧑 Take over</button>${copilotBtn}`;
     const nameField = agentNameFieldHtml();
     pane.innerHTML = `<div class="ip-head"><div><b>${esc(d.site.name)}</b> · visitor ${esc(o.sessionId.slice(-6))} ${pill}${c && c.page_url ? `<div class="muted tiny ip-url">${esc(c.page_url)}</div>` : ""}</div><div class="row">${actions}</div></div>
       <div class="ip-msgs" id="inbox-msgs">${msgs || "<p class='muted'>No messages yet.</p>"}</div>
@@ -101,6 +103,25 @@
     const box = $("#inbox-msgs");
     if (scroll || box.scrollHeight - box.scrollTop < box.clientHeight + 120) box.scrollTop = box.scrollHeight;
     $("#inbox-take")?.addEventListener("click", takeOver);
+    $("#inbox-copilot")?.addEventListener("click", async () => {
+      const btn = $("#inbox-copilot");
+      btn.disabled = true; btn.textContent = "Thinking…";
+      try {
+        const r = await req("/api/sites/" + o.siteId + "/inbox/suggest", { method: "POST", body: { sessionId: o.sessionId } });
+        const s = r.suggestion || {};
+        if (s.reply) ta.value = s.reply;
+        let box = $("#inbox-copilot-box");
+        if (!box) {
+          box = document.createElement("div");
+          box.id = "inbox-copilot-box";
+          box.className = "copilot-box";
+          $("#inbox-form")?.parentNode?.insertBefore(box, $("#inbox-form"));
+        }
+        box.innerHTML = "<p class='muted tiny'><b>Suggested</b> " + (s.summary ? esc(s.summary) : "") + "</p>";
+        toast("Suggested reply ready");
+      } catch (e) { toast(e.message); }
+      finally { btn.disabled = false; btn.textContent = "✨ Suggest reply"; }
+    });
     $("#inbox-handback")?.addEventListener("click", async () => { await req(`/api/live/owner/inbox/${c.id}/handback`, { method: "POST" }).catch((e) => toast(e.message)); toast("Handed back to the AI. The visitor can leave a review."); renderConversation(true); refreshInbox(); });
     $("#inbox-close")?.addEventListener("click", async () => { await req(`/api/live/owner/inbox/${c.id}/close`, { method: "POST" }).catch((e) => toast(e.message)); toast("Chat closed. The visitor can leave a review."); renderConversation(true); refreshInbox(); });
     let lastTyping = 0;
@@ -161,6 +182,64 @@
   }
 
   // ---------------- Per-bot settings ----------------
+
+  async function renderEmailChannel() {
+    const box = $("#email-channel");
+    if (!box || !state.site) return;
+    try {
+      const d = await req("/api/sites/" + state.site.id + "/email-channel");
+      if (!d.allowed) {
+        box.innerHTML = "<h3>Visitor email</h3><p class='muted tiny'>A shared email inbox is a Business feature. Upgrade to let visitors email you and draft replies with the bot.</p>";
+        return;
+      }
+      const threads = (d.threads || []).map((th) => "<button type='button' class='inbox-item' data-thread='"+esc(th.id)+"'><span class='ii-top'><b>"+esc(th.visitor_email)+"</b></span><span class='ii-prev'>"+esc(th.subject||"")+"</span></button>").join("") || "<p class='muted tiny'>No visitor emails yet.</p>";
+      const setup = d.enabled
+        ? "<p class='muted tiny'>Forward or POST incoming mail to this webhook. Replies are drafted for you; nothing is sent until you click Send.</p><p class='tiny'><code>"+esc(d.webhookUrl)+"</code></p>"
+          + (state.role==="owner"?"<button type='button' class='btn ghost tiny' id='email-off'>Turn off</button>":"")
+        : (state.role==="owner"?"<p class='muted tiny'>Turn this on to receive visitor email into this inbox. You'll get a webhook URL to point a free forwarder at. Replies stay as drafts until a mail key is configured.</p><button type='button' class='btn primary small' id='email-on'>Enable email channel</button>":"<p class='muted tiny'>The owner hasn't enabled the visitor email channel.</p>");
+      box.innerHTML = "<h3>Visitor email</h3>"+setup+"<div id='email-threads'>"+threads+"</div><div id='email-thread-pane'></div>";
+      $("#email-on")?.addEventListener("click", async () => {
+        try { await req("/api/sites/" + state.site.id + "/email-channel", { method: "POST" }); toast("Email channel on"); renderEmailChannel(); }
+        catch (e) { toast(e.message); }
+      });
+      $("#email-off")?.addEventListener("click", async () => {
+        try { await req("/api/sites/" + state.site.id + "/email-channel", { method: "DELETE" }); toast("Email channel off"); renderEmailChannel(); }
+        catch (e) { toast(e.message); }
+      });
+      box.querySelectorAll("[data-thread]").forEach((b) => b.addEventListener("click", () => openEmailThread(b.getAttribute("data-thread"))));
+    } catch (e) {
+      box.innerHTML = "<h3>Visitor email</h3><p class='muted'>"+esc(e.message)+"</p>";
+    }
+  }
+
+  async function openEmailThread(tid) {
+    const pane = $("#email-thread-pane");
+    if (!pane) return;
+    try {
+      const d = await req("/api/sites/" + state.site.id + "/email-channel/threads/" + tid);
+      const msgs = (d.messages || []).map((m) => "<div class='im "+esc(m.direction)+"'><span class='im-who'>"+esc(m.direction==="in"?"Visitor":m.direction==="draft"?"Draft":"You")+"</span><div class='im-b'>"+esc(m.body)+"</div></div>").join("");
+      const lastDraft = [...(d.messages||[])].reverse().find((m) => m.direction==="draft");
+      const canSend = state.role !== "viewer";
+      pane.innerHTML = msgs + (canSend ? "<form id='email-reply-form' class='ip-reply'><textarea id='email-reply' rows='4'>"+esc(lastDraft?lastDraft.body:"")+"</textarea><div class='row'><button class='btn ghost' type='button' id='email-suggest'>✨ Draft reply</button><button class='btn primary' type='submit'>Send</button></div></form>" : "");
+      $("#email-suggest")?.addEventListener("click", async () => {
+        try {
+          const r = await req("/api/sites/" + state.site.id + "/email-channel/threads/" + tid + "/suggest", { method: "POST" });
+          if (r.suggestion && r.suggestion.reply) $("#email-reply").value = r.suggestion.reply;
+        } catch (e) { toast(e.message); }
+      });
+      $("#email-reply-form")?.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const text = $("#email-reply").value.trim();
+        if (!text) return;
+        try {
+          const r = await req("/api/sites/" + state.site.id + "/email-channel/threads/" + tid + "/reply", { method: "POST", body: { text } });
+          toast(r.ok ? "Sent" : (r.error || "Saved as draft"));
+          openEmailThread(tid);
+        } catch (e) { toast(e.message); }
+      });
+    } catch (e) { toast(e.message); }
+  }
+
   async function loadOverview() {
     live.overview = await req("/api/live/owner/overview");
     return live.overview;
@@ -194,6 +273,7 @@
     [...f.elements].forEach((el) => { el.disabled = locked; });
     updatePreview();
     renderChannels();
+    renderEmailChannel();
   }
   function updatePreview() {
     const f = $("#live-form");

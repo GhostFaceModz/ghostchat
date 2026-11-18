@@ -177,13 +177,15 @@ Still to build:
 - [ ] **Smart escalation** — open a ticket or email automatically (in-chat capture with transcript is live)
 - [ ] **Order / status lookups** — call the owner’s API
 - [ ] **Brand-voice cloning** from writing samples
-- [ ] **Owner co-pilot weekly digest**
+- [x] **Weekly owner digest** (unanswered questions, leads, CSAT, usage)
 - [ ] **Visual analytics heatmap** (page-level counts are live)
 - [ ] **Template marketplace** (three built-in templates are live)
 - [ ] **Slack / Discord / WhatsApp** visitor connectors
 - [ ] **Multi-language** replies and dashboard
 - [ ] **A/B tests**
-- [ ] **Team seats** and roles
+- [x] **Team seats** and roles (Pro 2, Business 5)
+- [x] **Inbox copilot** (Business, cheap/free model)
+- [x] **Visitor email channel** (Business; outbound mail optional)
 - [ ] Server-side TTS / STT beyond the browser voice mode
 
 ## License

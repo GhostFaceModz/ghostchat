@@ -1,7 +1,7 @@
 import { Router, type Request } from "express";
 import { getDb } from "../lib/supabase.js";
 import { config } from "../config.js";
-import type { AuthedRequest } from "../lib/auth.js";
+import { workspaceId as requestWorkspaceId, denyIfViewer, denyIfNotOwner, type AuthedRequest } from "../lib/auth.js";
 import { clientIp, rateLimitAsync } from "../lib/rateLimit.js";
 import {
   LIVE_PLANS, channelWebhookSecret, encryptSecret, findRelay, getConversation, getConversationById, isTyping,
@@ -17,7 +17,12 @@ import { applyTimeout, handleClaimComponent, supportName, GCL } from "../lib/dis
 import { conversationForAgentChannel, deliverAgentReply } from "../lib/discordInbox.js";
 import type { Site } from "../types.js";
 
-const ownerOf = (req: Request) => (req as unknown as AuthedRequest).owner;
+const ownerOf = (req: Request) => {
+  const a = req as unknown as AuthedRequest;
+  return { ...a.owner, id: requestWorkspaceId(req) };
+};
+const actorOf = (req: Request) => (req as unknown as AuthedRequest).owner;
+
 const LINK_TTL_MS = 30 * 60_000;
 const tgNameWait = new Map<string, { convId: string; action: string }>();
 
@@ -120,6 +125,7 @@ liveOwnerRouter.get("/overview", async (req, res) => {
 });
 
 liveOwnerRouter.patch("/settings/:siteId", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const owner = ownerOf(req);
   const site = await loadSite(req.params.siteId);
   if (!site || site.owner_id !== owner.id) return res.status(404).json({ error: "Bot not found." });
@@ -138,6 +144,7 @@ async function upsertChannel(ownerId: string, kind: "telegram" | "discord", patc
 
 // Telegram: shared bot (one-click /start link) or the owner's own BotFather token.
 liveOwnerRouter.post("/channels/telegram", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const owner = ownerOf(req);
   const code = newLinkCode();
   const expires = new Date(Date.now() + LINK_TTL_MS).toISOString();
@@ -162,6 +169,7 @@ liveOwnerRouter.post("/channels/telegram", async (req, res) => {
 
 // Discord: owner adds GhostBot with the invite, then runs /ghostchat link <code> in the channel to use.
 liveOwnerRouter.post("/channels/discord", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const owner = ownerOf(req);
   const code = newLinkCode();
   const ch = await upsertChannel(owner.id, "discord", { status: "pending", link_code: code, link_expires_at: new Date(Date.now() + LINK_TTL_MS).toISOString(), last_error: null });
@@ -177,6 +185,7 @@ liveOwnerRouter.get("/channels/discord/channels", async (req, res) => {
 });
 
 liveOwnerRouter.post("/channels/discord/channel", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const ch = (await ownerChannels(ownerOf(req).id)).find((c) => c.kind === "discord");
   const guild = String(ch?.config?.guild_id || "");
   if (!ch || !guild) return res.status(400).json({ error: "Link a Discord server first." });
@@ -188,6 +197,7 @@ liveOwnerRouter.post("/channels/discord/channel", async (req, res) => {
 });
 
 liveOwnerRouter.post("/channels/:kind/test", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const ch = (await ownerChannels(ownerOf(req).id)).find((c) => c.kind === req.params.kind);
   if (!ch || ch.status !== "connected") return res.status(400).json({ error: "Connect this channel first." });
   try {
@@ -203,6 +213,7 @@ liveOwnerRouter.post("/channels/:kind/test", async (req, res) => {
 });
 
 liveOwnerRouter.delete("/channels/:kind", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
   const owner = ownerOf(req);
   const ch = (await ownerChannels(owner.id)).find((c) => c.kind === req.params.kind);
   if (ch?.kind === "telegram" && ch.secret_enc) await tg(telegramTokenFor(ch), "deleteWebhook", {}).catch(() => {});
@@ -264,13 +275,15 @@ async function resolveOwnerAgent(req: Request, provided?: string | null, remembe
     discordName: owner.name,
   });
   if (!resolved.needsName && remember && resolved.source === "provided" && resolved.name) {
-    await rememberOwnerAgentName(owner.id, resolved.name);
+    await rememberOwnerAgentName(actorOf(req).id, resolved.name);
+    actorOf(req).agent_display_name = resolved.name;
     owner.agent_display_name = resolved.name;
   }
   return resolved;
 }
 
 liveOwnerRouter.post("/inbox/take", async (req, res) => {
+  if (denyIfViewer(req, res)) return;
   const site = await loadSite(String(req.body?.siteId || ""));
   if (!site || site.owner_id !== ownerOf(req).id) return res.status(404).json({ error: "Not found." });
   if (!LIVE_PLANS.has(site.plan)) return res.status(402).json({ error: "Live chat is a Pro feature.", upgrade: true });
@@ -282,6 +295,7 @@ liveOwnerRouter.post("/inbox/take", async (req, res) => {
 });
 
 liveOwnerRouter.post("/inbox/:id/reply", async (req, res) => {
+  if (denyIfViewer(req, res)) return;
   const conv = await ownedConversation(req);
   if (!conv) return res.status(404).json({ error: "Not found." });
   const text = String(req.body?.text || "").trim();
@@ -292,23 +306,27 @@ liveOwnerRouter.post("/inbox/:id/reply", async (req, res) => {
   res.json({ ok: true, id, agentName: agent.name });
 });
 liveOwnerRouter.post("/inbox/:id/typing", async (req, res) => {
+  if (denyIfViewer(req, res)) return;
   const conv = await ownedConversation(req);
   if (conv) agentTyping(conv);
   res.status(204).end();
 });
 liveOwnerRouter.post("/inbox/:id/takeover", async (req, res) => {
+  if (denyIfViewer(req, res)) return;
   const conv = await ownedConversation(req);
   if (!conv) return res.status(404).json({ error: "Not found." });
   await takeOver(conv);
   res.json({ ok: true });
 });
 liveOwnerRouter.post("/inbox/:id/handback", async (req, res) => {
+  if (denyIfViewer(req, res)) return;
   const conv = await ownedConversation(req);
   if (!conv) return res.status(404).json({ error: "Not found." });
   await handBack(conv, "dashboard");
   res.json({ ok: true });
 });
 liveOwnerRouter.post("/inbox/:id/close", async (req, res) => {
+  if (denyIfViewer(req, res)) return;
   const conv = await ownedConversation(req);
   if (!conv) return res.status(404).json({ error: "Not found." });
   await endLiveChat(conv, "dashboard", "end");
