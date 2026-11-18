@@ -384,6 +384,21 @@
               <button type="submit" class="btn">Save scope</button>
             </form>
           </details>
+          <div id="eval-box" class="eval-box">
+            <h4>Eval set</h4>
+            <p class="muted tiny">Questions the assistant must get right. Run them against published training or the test widget before you publish a recrawl. We check your expected phrases against the sources it would use — this does not call the chat model or use credits.</p>
+            <form id="eval-form" class="stack">
+              <label>Question <input name="question" required placeholder="How much does Pro cost per month?" /></label>
+              <label>Expected phrases (comma or line separated) <input name="expect" placeholder="£9, VAT, Pro" /></label>
+              <button type="submit" class="btn">Add question</button>
+            </form>
+            <div class="row">
+              <button type="button" class="btn primary" id="eval-run">Run against live training</button>
+              <button type="button" class="btn" id="eval-run-staging">Run against the test widget</button>
+            </div>
+            <p class="muted tiny" id="eval-status"></p>
+            <div id="eval-list" class="list"></div>
+          </div>
           <div id="doc-list" class="list"></div>
         </section>
 

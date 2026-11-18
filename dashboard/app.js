@@ -619,6 +619,18 @@ $("#theme-form").addEventListener("submit", async (ev) => {
 });
 
 
+
+$("#eval-form")?.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const fd = new FormData(ev.target);
+  await req("/api/sites/" + state.site.id + "/eval", { method: "POST", body: { question: fd.get("question"), expect: fd.get("expect") } });
+  ev.target.reset();
+  toast("Eval question saved");
+  loadEvalSet();
+});
+$("#eval-run")?.addEventListener("click", () => runEvalSet(false));
+$("#eval-run-staging")?.addEventListener("click", () => runEvalSet(true));
+
 $("#staging-publish")?.addEventListener("click", async () => {
   if (!state.site) return;
   await req("/api/sites/" + state.site.id + "/staging/publish", { method: "POST" });
@@ -697,6 +709,7 @@ async function loadDocs() {
     box.appendChild(item);
   });
   loadPreviewAndStaging();
+  loadEvalSet();
 }
 
 
@@ -758,6 +771,55 @@ async function loadPreviewAndStaging() {
   } catch {}
 }
 
+
+
+async function loadEvalSet() {
+  if (!state.site) return;
+  const box = $("#eval-list");
+  if (!box) return;
+  try {
+    const { questions } = await req("/api/sites/" + state.site.id + "/eval");
+    if (!questions.length) {
+      box.innerHTML = "<p class='muted tiny'>No eval questions yet. Add the phrases a good answer should mention.</p>";
+      return;
+    }
+    box.innerHTML = questions.map((q) => {
+      const expect = q.expect ? "<div class='muted tiny'>Expect: " + escapeHtml(q.expect) + "</div>" : "";
+      return "<div class='item' data-eval='" + escapeHtml(q.id) + "'><strong>" + escapeHtml(q.question) + "</strong>" + expect + "<button type='button' class='btn tiny ghost' data-eval-del='" + escapeHtml(q.id) + "'>Remove</button></div>";
+    }).join("");
+    box.querySelectorAll("[data-eval-del]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await req("/api/sites/" + state.site.id + "/eval/" + btn.getAttribute("data-eval-del"), { method: "DELETE" });
+        loadEvalSet();
+      });
+    });
+  } catch (e) {
+    box.innerHTML = "<p class='muted'>" + escapeHtml(e.message) + "</p>";
+  }
+}
+
+async function runEvalSet(staging) {
+  const status = $("#eval-status");
+  const box = $("#eval-list");
+  if (status) status.textContent = "Running…";
+  try {
+    const report = await req("/api/sites/" + state.site.id + "/eval/run", { method: "POST", body: { staging: staging ? "1" : "" } });
+    if (status) status.textContent = (report.passed || 0) + " of " + (report.total || 0) + " passed" + (staging ? " on the test widget" : " on live training");
+    if (box) {
+      box.innerHTML = (report.results || []).map((r) => {
+        const cls = r.pass ? "item pass" : "item fail";
+        const miss = r.missing && r.missing.length ? "<div class='muted tiny'>Missing: " + escapeHtml(r.missing.join(", ")) + "</div>" : "";
+        const hit = r.matched && r.matched.length ? "<div class='muted tiny'>Found: " + escapeHtml(r.matched.join(", ")) + "</div>" : "";
+        const src = (r.sources || []).map((s) => s.title || s.url || "").filter(Boolean).slice(0, 2).join(" · ");
+        return "<div class='" + cls + "'><strong>" + escapeHtml(r.question) + "</strong> · " + (r.pass ? "Pass" : "Fail") + hit + miss + (src ? "<div class='muted tiny'>" + escapeHtml(src) + "</div>" : "") + "</div>";
+      }).join("") || "<p class='muted tiny'>No questions to run.</p>";
+    }
+    toast(status ? status.textContent : "Eval finished");
+  } catch (e) {
+    if (status) status.textContent = e.message;
+    toast(e.message);
+  }
+}
 
 async function loadLogs() {
   if (!state.site) return;

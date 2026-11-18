@@ -29,6 +29,7 @@ import { listFaqDrafts, setFaqDraftStatus } from "../lib/faqDrafts.js";
 import type { Site, Theme } from "../types.js";
 import { checkInstallHealth } from "../lib/widgetHealth.js";
 import { auditFromReq } from "../lib/audit.js";
+import { addEvalQuestion, deleteEvalQuestion, listEvalQuestions, runEvalSet } from "../lib/evalSet.js";
 import { shopifySnippet } from "../lib/integrations.js";
 
 export const sitesRouter = Router();
@@ -338,6 +339,56 @@ sitesRouter.get("/:id/integrations/shopify.liquid", async (req, res) => {
   res.setHeader("content-type", "text/plain; charset=utf-8");
   res.setHeader("content-disposition", "attachment; filename=\"ghostchat.liquid\"");
   res.send(body);
+});
+
+sitesRouter.get("/:id/eval", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    res.json({ questions: await listEvalQuestions(site.id) });
+  } catch {
+    res.status(500).json({ error: "Could not load the eval set." });
+  }
+});
+
+sitesRouter.post("/:id/eval", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const question = await addEvalQuestion(site.id, { question: String(req.body?.question || ""), expect: String(req.body?.expect || "") });
+    auditFromReq(req, "training.eval_add", { targetType: "eval", targetId: question.id, meta: { siteId: site.id } }).catch(() => {});
+    res.status(201).json({ question });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status ?? 400;
+    res.status(status).json({ error: (err as Error).message });
+  }
+});
+
+sitesRouter.delete("/:id/eval/:qid", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    await deleteEvalQuestion(site.id, req.params.qid);
+    auditFromReq(req, "training.eval_delete", { targetType: "eval", targetId: req.params.qid, meta: { siteId: site.id } }).catch(() => {});
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Could not remove that question." });
+  }
+});
+
+sitesRouter.post("/:id/eval/run", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const staging = ["1", "true", "on", "yes"].includes(String(req.body?.staging || req.query.staging || "").toLowerCase());
+    const report = await runEvalSet(site, { staging });
+    auditFromReq(req, "training.eval_run", { targetType: "site", targetId: site.id, meta: { passed: report.passed, total: report.total, staging } }).catch(() => {});
+    res.json(report);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message || "Could not run the eval set." });
+  }
 });
 
 sitesRouter.get("/:id/preview", async (req, res) => {
