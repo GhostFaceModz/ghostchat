@@ -6,6 +6,7 @@ import { chunkText, type TextChunk } from "./chunk.js";
 import { pageChunk, type CrawledPage, type CrawlScope } from "./crawl.js";
 import type { Site } from "../types.js";
 import { currentEmbeddingModel } from "./embeddingSpace.js";
+import { bumpKnowledge } from "./answerCache.js";
 
 export function contentHash(text: string): string {
   return crypto.createHash("sha256").update(text.replace(/\s+/g, " ").trim()).digest("hex").slice(0, 32);
@@ -49,6 +50,7 @@ export async function refreshCounts(siteId: string): Promise<void> {
     db.from("ghostchat_documents").select("id", { count: "exact", head: true }).eq("site_id", siteId).in("source_type", ["crawl", "lookup"]),
   ]);
   await db.from("ghostchat_sites").update({ chunk_count: chunks ?? 0, page_count: docs ?? 0, updated_at: new Date().toISOString() }).eq("id", siteId);
+  await bumpKnowledge(siteId).catch((err) => console.error("knowledge rev:", (err as Error).message));
 }
 
 export function pageChunks(page: CrawledPage, scope?: CrawlScope): TextChunk[] {

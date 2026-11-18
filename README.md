@@ -186,6 +186,7 @@ Still to build:
 - [x] **Team seats** and roles (Pro 2, Business 5)
 - [x] **Inbox copilot** (Business, cheap/free model)
 - [x] **Visitor email channel** (Business; outbound mail optional)
+- [x] **Answer cache** for repeated questions (invalidated when training changes)
 - [ ] Server-side TTS / STT beyond the browser voice mode
 
 ## License
