@@ -296,6 +296,7 @@ async function selectSite(id) {
   if (window.gcRenderTools) window.gcRenderTools();
   if (window.gcSiteChanged) window.gcSiteChanged();
   if (state.tab === "leads") loadLeads();
+  if (state.tab === "share") loadApiKeys();
 }
 
 // ---- Message top-ups ----
@@ -539,6 +540,7 @@ $("#tabs").addEventListener("click", (ev) => {
   if (state.tab === "transcripts") loadLogs();
   if (state.tab === "analytics") loadAnalytics();
   if (state.tab === "leads") loadLeads();
+  if (state.tab === "share") loadApiKeys();
 });
 
 // Getting-started checklist: jump to the matching tab (or the embed snippet).
@@ -2042,4 +2044,44 @@ $("#export-json")?.addEventListener("click", async () => {
 $("#export-csv")?.addEventListener("click", async () => {
   try { await downloadKnowledge("csv"); toast("CSV export downloaded."); }
   catch (e) { toast(e.message); }
+});
+
+async function loadApiKeys() {
+  const box = $("#api-keys");
+  if (!box || !state.site) return;
+  try {
+    const { keys } = await req("/api/sites/" + state.site.id + "/api-keys");
+    if (!keys || !keys.length) {
+      box.innerHTML = "<p class='muted tiny'>No API keys yet.</p>";
+      return;
+    }
+    box.innerHTML = keys.map((k) => "<div class='row' data-key='" + escapeHtml(k.id) + "'><span><b>" + escapeHtml(k.name) + "</b> <code>" + escapeHtml(k.key_prefix) + "</code> <span class='muted tiny'>" + escapeHtml(new Date(k.created_at).toLocaleString()) + "</span></span><button type='button' class='btn tiny ghost' data-revoke='" + escapeHtml(k.id) + "'>Revoke</button></div>").join("");
+    box.querySelectorAll("[data-revoke]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await req("/api/sites/" + state.site.id + "/api-keys/" + btn.getAttribute("data-revoke"), { method: "DELETE" });
+        toast("API key revoked.");
+        const once = $("#api-key-once");
+        if (once) { once.hidden = true; once.textContent = ""; }
+        loadApiKeys();
+      });
+    });
+  } catch (e) {
+    box.innerHTML = "<p class='muted tiny'>" + escapeHtml(e.message) + "</p>";
+  }
+}
+$("#api-key-new")?.addEventListener("click", async () => {
+  if (!state.site) return;
+  try {
+    const data = await req("/api/sites/" + state.site.id + "/api-keys", { method: "POST", body: { name: "Search key" } });
+    const once = $("#api-key-once");
+    if (once) {
+      once.hidden = false;
+      once.innerHTML = "Copy this key now — it won’t be shown again: <code id='api-key-raw'></code> <button type='button' class='btn tiny' id='api-key-copy'>Copy</button>";
+      const raw = $("#api-key-raw");
+      if (raw) raw.textContent = data.key;
+      $("#api-key-copy")?.addEventListener("click", () => navigator.clipboard.writeText(data.key).then(() => toast("API key copied")));
+    }
+    toast("API key created. Copy it now — it won’t be shown again.");
+    loadApiKeys();
+  } catch (e) { toast(e.message); }
 });

@@ -28,6 +28,7 @@ import { BOT_MODES, normalizeSupport } from "../lib/modes.js";
 import { normalizeChannels } from "../lib/meta.js";
 import { saveCorrection } from "../lib/corrections.js";
 import { buildKnowledgeExport, exportFilename, knowledgeExportToCsv } from "../lib/knowledgeExport.js";
+import { createApiKey, listApiKeys, revokeApiKey } from "../lib/apiKeys.js";
 import { createOwnerFaqDraft, listFaqDrafts, setFaqDraftStatus } from "../lib/faqDrafts.js";
 import { importFaqRows, parseFaqCsv } from "../lib/faqImport.js";
 import type { Site, Theme } from "../types.js";
@@ -516,6 +517,42 @@ sitesRouter.get("/:id/coverage", async (req, res) => {
     res.json({ coverage: await siteCoverage(site.id) });
   } catch {
     res.status(500).json({ error: "Could not load the coverage map." });
+  }
+});
+
+sitesRouter.get("/:id/api-keys", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try { res.json({ keys: await listApiKeys(site.id) }); }
+  catch { res.status(500).json({ error: "Could not load API keys." }); }
+});
+
+sitesRouter.post("/:id/api-keys", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const made = await createApiKey(site.id, String(req.body?.name || ""));
+    auditFromReq(req, "site.api_key_create", { targetType: "site", targetId: site.id, meta: { keyId: made.key.id, prefix: made.key.key_prefix } }).catch(() => {});
+    res.status(201).json({ key: made.raw, meta: made.key });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status ?? 500;
+    res.status(status).json({ error: (err as Error).message || "Could not create that key." });
+  }
+});
+
+sitesRouter.delete("/:id/api-keys/:kid", async (req, res) => {
+  if (denyIfNotOwner(req, res)) return;
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const ok = await revokeApiKey(site.id, req.params.kid);
+    if (!ok) return res.status(404).json({ error: "Key not found." });
+    auditFromReq(req, "site.api_key_revoke", { targetType: "site", targetId: site.id, meta: { keyId: req.params.kid } }).catch(() => {});
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Could not revoke that key." });
   }
 });
 

@@ -246,15 +246,16 @@ export async function loadSessionHistory(siteId: string, sessionId: string, limi
   return (data || []).slice().reverse().map((r: { role: string; message: string }) => ({ role: r.role, content: r.message }));
 }
 
-export async function retrieveChunks(siteId: string, question: string, history: HistoryTurn[] = [], opts: { staging?: boolean } = {}): Promise<RetrievedChunk[]> {
+export async function retrieveChunks(siteId: string, question: string, history: HistoryTurn[] = [], opts: { staging?: boolean; limit?: number } = {}): Promise<RetrievedChunk[]> {
   const query = rewriteQuery(question, history);
   const [embedding] = await embedTexts([query], "query");
   if (!embedding?.length) return [];
+  const matchCount = Math.min(8, Math.max(1, Math.round(Number(opts.limit) || 6)));
   const hybrid = await getDb().rpc("ghostchat_hybrid_chunks", {
     query_embedding: embedding,
     query_text: query,
     match_site_id: siteId,
-    match_count: 6,
+    match_count: matchCount,
     match_threshold: similarityThreshold(),
   });
   const [{ data, error }, corrections] = await Promise.all([
@@ -262,7 +263,7 @@ export async function retrieveChunks(siteId: string, question: string, history: 
       ? getDb().rpc("ghostchat_match_chunks", {
           query_embedding: embedding,
           match_site_id: siteId,
-          match_count: 6,
+          match_count: matchCount,
           match_threshold: similarityThreshold(),
         })
       : Promise.resolve(hybrid),

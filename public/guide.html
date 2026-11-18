@@ -320,6 +320,7 @@
             <div><dt>Agent credit caps</dt><dd>Workspace owners can cap an agent’s monthly inbox and email copilot use. The visitor widget and the account owner are not capped.</dd></div>
             <div><dt>Language</dt><dd>The dashboard tabs and sidebar can be shown in English, Spanish, French, German, Portuguese, Italian, Dutch or Polish — the same set as the widget.</dd></div>
             <div><dt>Slack alerts</dt><dd>Paste a Slack incoming webhook URL in My account to get a message when a visitor is waiting for a human. GhostChat does not install a Slack app.</dd></div>
+            <div><dt>Search API &amp; MCP</dt><dd>On the Share tab, generate an API key (shown once, stored hashed). <code>POST https://ghostchat.pro/api/v1/search</code> with <code>Authorization: Bearer gcsk_…</code> and a JSON body <code>{ "query": "your question", "top_k": 5 }</code> returns the top knowledge passages for that site. A minimal MCP-compatible endpoint at <code>POST /api/v1/mcp</code> exposes a <code>search</code> tool (initialize, tools/list, tools/call). Both are rate limited. Rotate a key by revoking it and generating a new one.</dd></div>
           </dl>
         </section>
 
