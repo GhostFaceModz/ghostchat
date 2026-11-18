@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { backoffMs, isRetryable, _test, AiUnavailableError } from "../server/src/lib/ai.ts";
+import { backoffMs, isRetryable, _test, AiUnavailableError, FREE_OPENROUTER_FALLBACK } from "../server/src/lib/ai.ts";
 import { chatRateLimit } from "../server/src/routes/chat.ts";
 import { dailyCapCheck, dailyCap } from "../server/src/lib/usage.ts";
 import { HUMAN_REQUEST } from "../server/src/lib/guardrails.ts";
@@ -58,4 +58,31 @@ test("human follow-up form only when handoff is due", () => {
   assert.equal(selectCards({ site, message: "is it free?", handoff: true })[0].type, "form");
   assert.ok(HUMAN_REQUEST.test("can I talk to a human please"));
   assert.ok(!HUMAN_REQUEST.test("recommend a horror film"));
+});
+
+test("retries a 402 from a paid OpenRouter model on a free model", async () => {
+  const calls: Array<{ url: string; body: unknown }> = [];
+  const fake = (async (url: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    calls.push({ url: String(url), body });
+    if (body.model !== FREE_OPENROUTER_FALLBACK) return new Response("no credits", { status: 402 });
+    return new Response("{}", { status: 200 });
+  }) as typeof fetch;
+  const res = await _test.aiFetch(
+    { ...resolved, model: "deepseek/deepseek-v4-flash" },
+    "/chat/completions",
+    { model: "deepseek/deepseek-v4-flash", messages: [] },
+    false,
+    fake,
+  );
+  assert.equal(res.status, 200);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].body.model, FREE_OPENROUTER_FALLBACK);
+});
+
+test("does not loop a 402 from a free OpenRouter model", async () => {
+  let calls = 0;
+  const fake = (async () => { calls++; return new Response("limited", { status: 402 }); }) as typeof fetch;
+  await assert.rejects(_test.aiFetch({ ...resolved, model: FREE_OPENROUTER_FALLBACK }, "/chat/completions", { model: FREE_OPENROUTER_FALLBACK }, false, fake));
+  assert.equal(calls, 1);
 });
