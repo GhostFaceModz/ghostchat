@@ -7,6 +7,7 @@ import { detectInjection, hitsBannedTopic, sanitizeContext, UNSURE_REPLY, HUMAN_
 import { resolveChatModel } from "./models.js";
 import { redactPii } from "./pii.js";
 import { incrementMessages } from "./usage.js";
+import { lookupCachedAnswer, storeCachedAnswer } from "./answerCache.js";
 import { looksHardQuestion } from "./autoRoute.js";
 import { modelCreditCost } from "./credits.js";
 import { selectCards } from "./cards.js";
@@ -43,6 +44,7 @@ export type ChatOutcome = {
   unsure: boolean;
   sources: ChatSource[];
   suggestions: string[];
+  cached?: boolean;
   cards: ConversionCard[];
   /** Site search tool results shown as a card carousel (only ever items the tool returned). */
   results?: ResultCard[];
@@ -414,6 +416,20 @@ export async function answerQuestion(opts: {
   }
 
   const history = await loadSessionHistory(site.id, sessionId).catch(() => [] as HistoryTurn[]);
+  const cached = await lookupCachedAnswer(site.id, message, history).catch(() => null);
+  if (cached) {
+    const assistantLogId = await insertLog({
+      site_id: site.id, session_id: sessionId, role: "assistant",
+      message: cached.answer, sources: cached.sources, was_unsure: false,
+    });
+    await incrementMessages(site.id, 1);
+    return {
+      answer: cached.answer, unsure: false, sources: cached.sources,
+      suggestions: cached.suggestions.slice(0, suggestionLimit(site)),
+      cards: await pickCards(site, sessionId, message, cached.answer, false),
+      userLogId, assistantLogId, cached: true,
+    };
+  }
   let chunks = await retrieveChunks(site.id, message, history);
   let lookup: RetrievedChunk[] | null = null;
   let lookedUp = false;
@@ -475,6 +491,7 @@ export async function answerQuestion(opts: {
     was_unsure: unsure,
   });
   await incrementMessages(site.id, usage.credits || 1);
+  await storeCachedAnswer(site.id, message, { answer: finalAnswer, sources, suggestions }, { unsure, history }).catch(() => {});
   return { answer: finalAnswer, unsure, sources, suggestions, cards: await pickCards(site, sessionId, message, finalAnswer, unsure), userLogId, assistantLogId };
 }
 
@@ -537,6 +554,14 @@ export async function streamAnswer(opts: {
   }
 
   const history = await loadSessionHistory(site.id, sessionId).catch(() => [] as HistoryTurn[]);
+  const cached = await lookupCachedAnswer(site.id, message, history).catch(() => null);
+  if (cached) {
+    onEvent({ type: "token", text: cached.answer });
+    return finish({
+      answer: cached.answer, unsure: false, sources: cached.sources,
+      suggestions: cached.suggestions.slice(0, suggestionLimit(site)),
+    }, { credits: 1 });
+  }
   let chunks = await retrieveChunks(site.id, message, history);
   let lookup: RetrievedChunk[] | null = null;
   let lookedUp = false;
@@ -593,5 +618,6 @@ export async function streamAnswer(opts: {
   }
   const sources = withLookupSource(site, unsure || !citesContext(finalAnswer, chunks) ? [] : pickSources(site, chunks, finalAnswer), lookup, unsure);
   const suggestions = await maybeSuggestions(site, message, finalAnswer, unsure);
+  await storeCachedAnswer(site.id, message, { answer: finalAnswer, sources, suggestions }, { unsure, history }).catch(() => {});
   return finish({ answer: finalAnswer, unsure, sources, suggestions }, { credits: usage.credits || 1 });
 }

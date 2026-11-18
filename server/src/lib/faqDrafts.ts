@@ -1,7 +1,7 @@
 /** Auto-generate FAQ drafts from crawled pages and schema.org FAQPage blocks, for owner approval. */
 import { getDb } from "./supabase.js";
 import { chunkText } from "./chunk.js";
-import { storeChunks } from "./indexer.js";
+import { storeChunks, refreshCounts } from "./indexer.js";
 import type { CrawledPage } from "./crawl.js";
 import type { Site } from "../types.js";
 
@@ -92,6 +92,7 @@ export async function setFaqDraftStatus(site: Pick<Site, "id">, draftId: string,
     }).select("id").single();
     if (de) throw de;
     await storeChunks({ site, documentId: doc.id, sourceType: "faq", chunks });
+    await refreshCounts(site.id);
   }
   const { data: updated, error: ue } = await db.from("ghostchat_faq_drafts").update({ status, updated_at: new Date().toISOString() }).eq("id", draftId).eq("site_id", site.id).select("*").single();
   if (ue) throw ue;

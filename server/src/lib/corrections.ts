@@ -4,6 +4,7 @@ import { embedTexts } from "./ai.js";
 import { resolveEmbeddingModel } from "./models.js";
 import type { RetrievedChunk } from "../types.js";
 import { currentEmbeddingModel } from "./embeddingSpace.js";
+import { bumpKnowledge } from "./answerCache.js";
 
 export type Correction = { id: string; question: string; answer: string; similarity: number };
 
@@ -49,5 +50,6 @@ export async function saveCorrection(siteId: string, input: { question: string; 
     : db.from("ghostchat_corrections").insert(row);
   const { data, error } = await q.select("id, question, answer, log_id, created_at, updated_at").single();
   if (error) throw error;
+  await bumpKnowledge(siteId).catch((err) => console.error("knowledge rev:", (err as Error).message));
   return data;
 }
