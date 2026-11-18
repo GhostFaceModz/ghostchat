@@ -23,6 +23,7 @@ import { normalizeChatForm } from "../lib/forms.js";
 import { BOT_MODES, normalizeSupport } from "../lib/modes.js";
 import { normalizeChannels } from "../lib/meta.js";
 import { saveCorrection } from "../lib/corrections.js";
+import { faqCandidatesFromPages, listFaqDrafts, saveFaqDrafts, setFaqDraftStatus } from "../lib/faqDrafts.js";
 import type { Site, Theme } from "../types.js";
 
 export const sitesRouter = Router();
@@ -278,6 +279,7 @@ sitesRouter.post("/:id/crawl", async (req, res) => {
     const result = await crawlSite(site.url, site.plan, scope);
     // Incremental: only new or changed pages are re-embedded; pages that disappeared are removed. Uploads stay.
     const summary = await indexPages(site, result.pages, { sourceType: "crawl", removeMissing: true, scope });
+    const faqDrafts = await saveFaqDrafts(site.id, faqCandidatesFromPages(result.pages)).catch((err) => { console.error("faq drafts:", (err as Error).message); return 0; });
     const { count: storedCount } = await db.from("ghostchat_chunks").select("id", { count: "exact", head: true }).eq("site_id", site.id).eq("source_type", "crawl");
     const stored = storedCount ?? summary.chunks;
     await db
@@ -296,6 +298,7 @@ sitesRouter.post("/:id/crawl", async (req, res) => {
       pages: result.pages.length,
       chunks: stored,
       changes: summary,
+      faq_drafts: faqDrafts,
       errors: result.errors.slice(0, 10),
     });
   } catch (err) {
@@ -534,4 +537,48 @@ sitesRouter.delete("/:id/corrections/:cid", async (req, res) => {
   const { error } = await getDb().from("ghostchat_corrections").delete().eq("id", req.params.cid).eq("site_id", site.id);
   if (error) return res.status(500).json({ error: "Could not delete the correction." });
   res.json({ ok: true });
+});
+
+sitesRouter.get("/:id/faq-drafts", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  try {
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const drafts = await listFaqDrafts(site.id, status);
+    res.json({ drafts });
+  } catch {
+    res.status(500).json({ error: "Could not load FAQ drafts." });
+  }
+});
+
+sitesRouter.post("/:id/faq-drafts/:did/:action", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  const action = req.params.action;
+  if (action !== "approve" && action !== "reject") return res.status(400).json({ error: "Use approve or reject." });
+  try {
+    const draft = await setFaqDraftStatus(site, req.params.did, action === "approve" ? "approved" : "rejected");
+    if (!draft) return res.status(404).json({ error: "Draft not found." });
+    res.json({ draft });
+  } catch {
+    res.status(500).json({ error: "Could not update that FAQ draft." });
+  }
+});
+
+/** Teach the bot an answer to an unanswered visitor question (stores a correction that is used as a source). */
+sitesRouter.post("/:id/unanswered/:logId/teach", async (req, res) => {
+  const site = await loadOwnedSite(req, req.params.id);
+  if (!site) return res.status(404).json({ error: "Site not found." });
+  const rl = await rateLimitAsync(`fix:${site.id}`, 60, 60 * 60 * 1000);
+  if (!rl.ok) return res.status(429).json({ error: "Too many corrections at once. Try again shortly." });
+  try {
+    const correction = await saveCorrection(site.id, {
+      question: String(req.body?.question || ""),
+      answer: String(req.body?.answer || ""),
+      logId: req.params.logId,
+    });
+    res.status(201).json({ correction });
+  } catch (err) {
+    res.status((err as Error & { status?: number }).status ?? 500).json({ error: "Could not save that answer." });
+  }
 });

@@ -2,13 +2,23 @@ import * as cheerio from "cheerio";
 import { config, PLAN_LIMITS, type Plan } from "../config.js";
 import { chunkText, type TextChunk } from "./chunk.js";
 import { assertPublicHttpUrl, sameOrigin } from "./ssrf.js";
+import { extractJsonLd, discoverStructuredPages, productsToPages, JS_RENDER_SKIPPED as JS_RENDER_NOTE } from "./structuredData.js";
+import { extractPdfText } from "./pdf.js";
+import { extractLinkedDocument } from "./documents.js";
 
-const SKIP_EXT = /\.(pdf|zip|gz|tar|rar|7z|png|jpe?g|gif|webp|svg|ico|mp[34]|wav|avi|mov|wmv|mkv|css|js|mjs|map|woff2?|ttf|eot|json|xml)$/i;
+/** Chromium does not fit free Render RAM. See JS_RENDER_SKIPPED for the paid alternative. */
+export const JS_RENDER_SKIPPED = JS_RENDER_NOTE;
+
+const SKIP_EXT = /\.(zip|gz|tar|rar|7z|png|jpe?g|gif|webp|svg|ico|mp[34]|wav|avi|mov|wmv|mkv|css|js|mjs|map|woff2?|ttf|eot|xml|json)$/i;
+const PDF_EXT = /\.pdf$/i;
+const DOC_EXT = /\.(docx?|rtf|odt|txt|md)$/i;
+const POLITE_MS = process.env.CRAWL_POLITE_MS != null ? Number(process.env.CRAWL_POLITE_MS) : process.env.NODE_ENV === "test" ? 0 : 150;
 
 export type CrawledPage = {
   url: string;
   title: string;
   text: string;
+  sections?: Array<{ heading: string; text: string }>;
 };
 
 export type CrawlResult = {
@@ -17,19 +27,36 @@ export type CrawlResult = {
   errors: string[];
 };
 
-export function extractText(html: string, pageUrl: string): { title: string; text: string; links: string[] } {
+export function extractText(html: string, pageUrl: string): { title: string; text: string; links: string[]; sections: Array<{ heading: string; text: string }>; jsonLdHtml?: string } {
   const $ = cheerio.load(html);
-  $("script, style, noscript, nav, footer, iframe, svg, canvas, form, header").remove();
+  const jsonLdHtml = html;
+  $("script:not([type='application/ld+json']), style, noscript, nav, footer, iframe, svg, canvas, form, header").remove();
   const title =
     $("meta[property='og:title']").attr("content")?.trim() ||
     $("title").first().text().trim() ||
     $("h1").first().text().trim() ||
     pageUrl;
-  const parts: string[] = [];
+  const sections: Array<{ heading: string; text: string }> = [];
+  let currentHeading = title;
+  let bucket: string[] = [];
+  const flush = () => {
+    const text = bucket.join("\n\n").trim();
+    if (text.length >= 40) sections.push({ heading: currentHeading, text });
+    bucket = [];
+  };
   $("h1, h2, h3, h4, p, li, dt, dd, article, section, td, th, blockquote, pre").each((_, el) => {
+    const tag = String($(el).prop("tagName") || "").toLowerCase();
     const t = $(el).text().replace(/\s+/g, " ").trim();
-    if (t.length >= 20) parts.push(t);
+    if (!t) return;
+    if (/^h[1-4]$/.test(tag)) {
+      flush();
+      currentHeading = t;
+      return;
+    }
+    if (t.length >= 20) bucket.push(t);
   });
+  flush();
+  const parts = sections.length ? sections.map((s) => (s.heading && s.heading !== title ? `${s.heading}\n${s.text}` : s.text)) : [];
   let text = parts.join("\n\n");
   if (text.length < 80) {
     text = $("body").text().replace(/\s+/g, " ").trim();
@@ -39,7 +66,7 @@ export function extractText(html: string, pageUrl: string): { title: string; tex
     const href = $(el).attr("href");
     if (href) links.push(href);
   });
-  return { title, text, links };
+  return { title, text, links, sections, jsonLdHtml };
 }
 
 export async function fetchPage(url: URL, timeoutMs = 12000, signal?: AbortSignal): Promise<{ html: string; finalUrl: URL } | null> {
@@ -71,6 +98,58 @@ export async function fetchPage(url: URL, timeoutMs = 12000, signal?: AbortSigna
   }
 }
 
+
+async function politePause(): Promise<void> {
+  if (POLITE_MS > 0) await new Promise((r) => setTimeout(r, POLITE_MS));
+}
+
+async function fetchPdf(url: URL, timeoutMs = 15000): Promise<CrawledPage | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      signal: ctrl.signal,
+      headers: { "user-agent": "GhostChatBot/1.0 (+https://github.com/GhostFaceModz/ghostchat)", accept: "application/pdf,application/octet-stream;q=0.8" },
+    });
+    const ctype = res.headers.get("content-type") || "";
+    if (!res.ok || !(ctype.includes("pdf") || PDF_EXT.test(url.pathname))) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > 8_000_000) return null;
+    const text = await extractPdfText(buf, url.pathname.split("/").pop() || "document.pdf");
+    if (text.length < 40) return null;
+    return { url: res.url || url.href, title: (url.pathname.split("/").pop() || "PDF").replace(/[-_]+/g, " ").replace(/\.pdf$/i, ""), text };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchDocument(url: URL, timeoutMs = 15000): Promise<CrawledPage | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      signal: ctrl.signal,
+      headers: { "user-agent": "GhostChatBot/1.0 (+https://github.com/GhostFaceModz/ghostchat)", accept: "application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/rtf,text/plain,text/markdown,application/octet-stream;q=0.8" },
+    });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > 8_000_000) return null;
+    const name = url.pathname.split("/").pop() || "document";
+    const text = await extractLinkedDocument(buf, name);
+    if (!text || text.length < 40) return null;
+    return { url: res.url || url.href, title: name.replace(/[-_]+/g, " ").replace(/\.(docx?|rtf|odt|txt|md)$/i, ""), text };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export type CrawlScope = { sitemap_url?: string; include?: string[]; exclude?: string[]; page_chunks?: boolean };
 
@@ -164,12 +243,24 @@ export async function crawlSite(startUrl: string, plan: Plan, scope?: CrawlScope
       continue;
     }
     budget--;
+    if (PDF_EXT.test(item.url.pathname) || DOC_EXT.test(item.url.pathname)) {
+      const doc = PDF_EXT.test(item.url.pathname) ? await fetchPdf(item.url) : await fetchDocument(item.url);
+      await politePause();
+      if (doc && inScope(item.url, scope)) pages.push(doc);
+      continue;
+    }
     const fetched = await fetchPage(item.url);
+    await politePause();
     if (!fetched) continue;
     if (fetched.finalUrl.host !== origin.host) continue;
-    const { title, text, links } = extractText(fetched.html, fetched.finalUrl.href);
+    const { title, text, links, sections, jsonLdHtml } = extractText(fetched.html, fetched.finalUrl.href);
     if (text.length >= 80 && inScope(fetched.finalUrl, scope)) {
-      pages.push({ url: fetched.finalUrl.href, title, text });
+      pages.push({ url: fetched.finalUrl.href, title, text, sections });
+      const ld = extractJsonLd(jsonLdHtml || fetched.html, fetched.finalUrl.href);
+      for (const prod of productsToPages(ld.products, fetched.finalUrl.href)) {
+        if (pages.length >= maxPages) break;
+        if (!pages.some((p) => p.url === prod.url && p.title === prod.title)) pages.push(prod);
+      }
     }
     if (item.depth < maxDepth) {
       for (const href of links) {
@@ -180,6 +271,18 @@ export async function crawlSite(startUrl: string, plan: Plan, scope?: CrawlScope
           queue.push({ url: next, depth: item.depth + 1 });
         }
       }
+    }
+  }
+
+  if (pages.length < maxPages) {
+    try {
+      const extra = await discoverStructuredPages(origin, Math.min(maxPages - pages.length, PLAN_LIMITS[plan].maxPages));
+      for (const p of extra) {
+        if (pages.length >= maxPages) break;
+        if (inScope(new URL(p.url), scope) && !pages.some((x) => x.url === p.url && x.title === p.title)) pages.push(p);
+      }
+    } catch {
+      /* feeds are optional */
     }
   }
 
