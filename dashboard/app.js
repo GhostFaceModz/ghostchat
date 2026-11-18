@@ -547,6 +547,23 @@ $$(".checklist [data-goto]").forEach((btn) => btn.addEventListener("click", () =
 
 $("#copy-key").addEventListener("click", () => navigator.clipboard.writeText($("#site-key").value).then(() => toast("Site key copied")));
 $("#copy-embed").addEventListener("click", () => navigator.clipboard.writeText($("#embed").value).then(() => toast("Snippet copied")));
+$("#shopify-snippet")?.addEventListener("click", () => {
+  if (!state.site) return;
+  const key = state.site.site_key || "";
+  fetch("/integrations/ghostchat.liquid").then((r) => r.ok ? r.text() : Promise.reject()).then((tpl) => {
+    const body = key && /^gc_[A-Za-z0-9_-]+$/.test(key) ? tpl.replace('data-id="YOUR_SITE_KEY"', 'data-id="' + key + '"') : tpl;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([body], { type: "text/plain" }));
+    a.download = "ghostchat.liquid";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }).catch(() => {
+    const a = document.createElement("a");
+    a.href = "/integrations/ghostchat.liquid";
+    a.download = "ghostchat.liquid";
+    a.click();
+  });
+});
 $("#copy-share").addEventListener("click", () => navigator.clipboard.writeText($("#share-link").value).then(() => toast("Link copied")));
 
 $("#site-basics").addEventListener("submit", async (ev) => {

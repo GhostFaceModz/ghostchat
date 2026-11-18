@@ -18,3 +18,6 @@ tmp/
 # Built widget (generated on npm run build)
 widget/widget.min.js
 widget/version.txt
+
+# Built WordPress zip / copied Shopify snippet (npm run build:integrations)
+public/integrations/

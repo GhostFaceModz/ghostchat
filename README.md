@@ -192,6 +192,7 @@ Still to build:
 - [x] **Staging / test widget** for unpublished training (`gc_stg_` key and /test-widget.html)
 - [x] **Team audit log** (workspace actions only — no chat messages or visitor content)
 - [x] **Widget accessibility pass** (focus trap, Escape, aria-modal, restore focus, reduced motion)
+- [x] **WordPress plugin and Shopify snippet** (dashboard download only — no app-store listings)
 - [ ] Server-side TTS / STT beyond the browser voice mode
 
 ## License
