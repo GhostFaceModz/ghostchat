@@ -127,6 +127,16 @@ export async function toolTurn(site: Site, sessionId: string, message: string, d
       return null;
     }
   }
+  if (intent.filters.sort && items.length) {
+    const kind = intent.filters.type === "tv" ? "shows" : "movies";
+    const label = intent.filters.sort === "trending" ? "trending" : intent.filters.sort === "popular" ? "popular" : intent.filters.sort === "best" ? "best" : "top";
+    const cards: ResultCard[] = items.slice(0, 6).map((it) => ({ ...it, why: it.subtitle || null, cta: tool.button_label }));
+    const lead = cards[0];
+    const answer = /\brecommend\b/i.test(message) && lead
+      ? `${lead.title} is a strong pick from the ${label} ${kind} on ${site.name}.`
+      : `Here are ${label} ${kind} on ${site.name}:`;
+    return { answer, results: cards, suggestions: [], intent, tool: tool.name };
+  }
   if (!items.length) {
     return {
       answer: "I couldn't find a close match in the catalogue. Want to try a broader search, like dropping the year or the mood?",

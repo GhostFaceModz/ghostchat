@@ -1,5 +1,5 @@
 import { getDb } from "./supabase.js";
-import { embedTexts, completeChat, streamChat, type ChatUsage } from "./ai.js";
+import { embedTexts, completeChat, streamChat, isFreeOpenRouterModel, paidCreditsBlocked, type ChatUsage } from "./ai.js";
 
 export const AI_FALLBACK_REPLY = "Sorry, I'm having trouble replying right now. Please try again in a minute.";
 import { liveOnline, liveSettings } from "./live.js";
@@ -72,6 +72,47 @@ export function sourceLimit(site: Pick<Site, "max_sources">): number {
 export function suggestionLimit(site: Pick<Site, "max_suggestions">): number {
   const n = Number(site.max_suggestions ?? 2);
   return Number.isInteger(n) && n >= 0 && n <= 3 ? n : 2;
+}
+
+/** "2+2?" and similar off-site arithmetic. A live site crawl cannot answer these. */
+export function isOffsiteMath(message: string): boolean {
+  const m = String(message || "").trim();
+  if (!m || m.length > 40) return false;
+  const stripped = m.replace(/^(?:what(?:'s| is)|whats|calculate|compute)\s+/i, "").replace(/[?.!\s]+$/g, "").trim();
+  return /\d/.test(stripped) && /[+\-*/x×÷]/.test(stripped) && /^[\d\s.+\-*/x×÷=()]+$/.test(stripped);
+}
+
+/** Chips shipped with `done`. Starters only — never an LLM call, so the stream can close immediately. */
+export function streamDoneSuggestions(site: Pick<Site, "starter_questions" | "max_suggestions">, unsure: boolean): string[] {
+  const n = suggestionLimit(site);
+  if (!n) return [];
+  const starters = (site.starter_questions || []).filter(Boolean).slice(0, n);
+  if (unsure) return (starters.length ? starters : ["Can someone from the team help me?", "Where can I find more details?"]).slice(0, n);
+  return starters;
+}
+
+/** Free deploys and a recent paid 402 must not spend a second OpenRouter call on follow-up chips. */
+export function shouldSkipSuggestionLlm(site: Pick<Site, "chat_model">): boolean {
+  const env = process.env.OPENROUTER_MODEL?.trim() || "";
+  if (isFreeOpenRouterModel(env) || paidCreditsBlocked()) return true;
+  return isFreeOpenRouterModel(String(site.chat_model || ""));
+}
+
+/**
+ * Write the assistant log, emit `done`, then run follow-up work without holding the SSE response.
+ * `after` is not awaited — a hanging memory/cache/usage call cannot delay `res.end()`.
+ */
+export async function releaseStreamDone(opts: {
+  suggestions: string[];
+  insertLog: () => Promise<string>;
+  emit: (event: Record<string, unknown>) => void;
+  payload: Record<string, unknown>;
+  after?: () => Promise<void> | void;
+}): Promise<string> {
+  const assistantLogId = await opts.insertLog();
+  opts.emit({ ...opts.payload, type: "done", suggestions: opts.suggestions, assistantLogId });
+  if (opts.after) void Promise.resolve(opts.after()).catch((err) => console.error("post-done:", (err as Error).message));
+  return assistantLogId;
 }
 
 const normUrl = (u: string) => { try { const x = new URL(u); x.hash = ""; x.search = ""; return (x.host + x.pathname.replace(/\/+$/, "")).toLowerCase(); } catch { return u.toLowerCase(); } };
@@ -367,19 +408,23 @@ export async function maybeSuggestions(site: Site, question: string, answer: str
   const n = suggestionLimit(site);
   if (!n) return [];
   const starters = (site.starter_questions || []).filter(Boolean).slice(0, n);
-  if (unsure) return (starters.length ? starters : ["Can someone from the team help me?", "Where can I find more details?"]).slice(0, n);
+  if (unsure || shouldSkipSuggestionLlm(site)) return starters;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const raw = await completeChat(
-      [
-        {
-          role: "system",
-          content:
-            `Suggest ${n} short follow-up question${n > 1 ? "s" : ""} a website visitor might ask next. Return a JSON array of strings only. No preamble. Each question under 80 characters. Stay on the site topic.`,
-        },
-        { role: "user", content: `Question: ${question}\nAnswer: ${answer}` },
-      ],
-      { maxTokens: 40 + 45 * n, temperature: 0.5, site },
-    );
+    const raw = await Promise.race([
+      completeChat(
+        [
+          {
+            role: "system",
+            content:
+              `Suggest ${n} short follow-up question${n > 1 ? "s" : ""} a website visitor might ask next. Return a JSON array of strings only. No preamble. Each question under 80 characters. Stay on the site topic.`,
+          },
+          { role: "user", content: `Question: ${question}\nAnswer: ${answer}` },
+        ],
+        { maxTokens: 40 + 45 * n, temperature: 0.5, site },
+      ),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("suggestion timeout")), 1500); }),
+    ]);
     const jsonStart = raw.indexOf("[");
     const jsonEnd = raw.lastIndexOf("]");
     if (jsonStart >= 0 && jsonEnd > jsonStart) {
@@ -390,6 +435,8 @@ export async function maybeSuggestions(site: Site, question: string, answer: str
     }
   } catch {
     // fall through to starters
+  } finally {
+    if (timer) clearTimeout(timer);
   }
   return starters;
 }
@@ -616,7 +663,7 @@ export async function answerQuestion(opts: {
   let chunks = await retrieveChunks(site.id, message, history, { staging: Boolean(site.staging) });
   let lookup: RetrievedChunk[] | null = null;
   let lookedUp = false;
-  if (needsLookup(site, chunks)) { lookedUp = true; lookup = await runLookup(site, sessionId, message); if (lookup) chunks = [...lookup, ...chunks]; }
+  if (!isOffsiteMath(message) && needsLookup(site, chunks)) { lookedUp = true; lookup = await runLookup(site, sessionId, message); if (lookup) chunks = [...lookup, ...chunks]; }
   if (!chunks.length && answerMode(site) === "strict") {
     const assistantLogId = await insertLog({
       site_id: site.id,
@@ -645,7 +692,7 @@ export async function answerQuestion(opts: {
       modelMessages(buildSystemPrompt(site, chunks, ctx), history, message),
       { site, primary: true, hard, usage },
     );
-    if (isUnsureAnswer(answer) && !lookedUp) {
+    if (!isOffsiteMath(message) && isUnsureAnswer(answer) && !lookedUp) {
       lookedUp = true;
       lookup = await runLookup(site, sessionId, message);
       if (lookup) {
@@ -696,30 +743,41 @@ export async function streamAnswer(opts: {
   onEvent({ type: "meta", userLogId });
 
   const usage: ChatUsage = { provider: "", model: "", credits: modelCreditCost(site.chat_provider, site.chat_model) };
-  const finish = async (partial: Omit<ChatOutcome, "userLogId" | "assistantLogId" | "cards"> & { cards?: ChatOutcome["cards"] }, opt: { charge?: boolean; credits?: number } = {}) => {
-    const assistantLogId = await insertLog({
-      site_id: site.id,
-      session_id: sessionId,
-      role: "assistant",
-      message: logText(partial.answer, partial.results ?? []),
-      sources: partial.sources,
-      was_unsure: partial.unsure,
+  const historyRef: { turns: HistoryTurn[] } = { turns: [] };
+  const finish = async (partial: Omit<ChatOutcome, "userLogId" | "assistantLogId" | "cards"> & { cards?: ChatOutcome["cards"] }, opt: { charge?: boolean; credits?: number; cache?: boolean } = {}) => {
+    let cards: ChatOutcome["cards"] = partial.cards ?? [];
+    if (!partial.cards) {
+      try { cards = await pickCards(site, sessionId, message, partial.answer, partial.unsure); }
+      catch { cards = []; }
+    }
+    const assistantLogId = await releaseStreamDone({
+      suggestions: partial.suggestions,
+      insertLog: () => insertLog({
+        site_id: site.id,
+        session_id: sessionId,
+        role: "assistant",
+        message: logText(partial.answer, partial.results ?? []),
+        sources: partial.sources,
+        was_unsure: partial.unsure,
+      }),
+      emit: (event) => onEvent({
+        ...event,
+        answer: partial.answer,
+        unsure: partial.unsure,
+        sources: partial.sources,
+        cards,
+        results: partial.results ?? [],
+        userLogId,
+      }),
+      payload: {},
+      after: async () => {
+        if (opt.charge !== false) await incrementMessages(site.id, opt.credits ?? 1);
+        if (opt.cache && !site.staging) {
+          await storeCachedAnswer(site.id, message, { answer: partial.answer, sources: partial.sources, suggestions: partial.suggestions }, { unsure: partial.unsure, history: historyRef.turns });
+        }
+      },
     });
-    if (opt.charge !== false) await incrementMessages(site.id, opt.credits ?? 1);
-    const cards = partial.cards ?? await pickCards(site, sessionId, message, partial.answer, partial.unsure);
-    const outcome: ChatOutcome = { ...partial, cards, userLogId, assistantLogId };
-    onEvent({
-      type: "done",
-      answer: outcome.answer,
-      unsure: outcome.unsure,
-      sources: outcome.sources,
-      suggestions: outcome.suggestions,
-      cards,
-      results: outcome.results ?? [],
-      userLogId,
-      assistantLogId,
-    });
-    return outcome;
+    return { ...partial, cards, userLogId, assistantLogId };
   };
 
   const greet = trivialGreetingReply(site, message);
@@ -752,6 +810,7 @@ export async function streamAnswer(opts: {
   }
 
   const history = await loadSessionHistory(site.id, sessionId).catch(() => [] as HistoryTurn[]);
+  historyRef.turns = history;
   const cached = site.staging ? null : await lookupCachedAnswer(site.id, message, history).catch(() => null);
   if (cached) {
     onEvent({ type: "token", text: cached.answer });
@@ -763,14 +822,14 @@ export async function streamAnswer(opts: {
   let chunks = await retrieveChunks(site.id, message, history, { staging: Boolean(site.staging) });
   let lookup: RetrievedChunk[] | null = null;
   let lookedUp = false;
-  if (needsLookup(site, chunks)) { lookedUp = true; lookup = await runLookup(site, sessionId, message, onEvent); if (lookup) chunks = [...lookup, ...chunks]; }
+  if (!isOffsiteMath(message) && needsLookup(site, chunks)) { lookedUp = true; lookup = await runLookup(site, sessionId, message, onEvent); if (lookup) chunks = [...lookup, ...chunks]; }
   if (!chunks.length && answerMode(site) === "strict") {
     onEvent({ type: "token", text: UNSURE_REPLY });
     return finish({
       answer: UNSURE_REPLY,
       unsure: true,
       sources: [],
-      suggestions: await maybeSuggestions(site, message, UNSURE_REPLY, true),
+      suggestions: streamDoneSuggestions(site, true),
     });
   }
 
@@ -789,7 +848,7 @@ export async function streamAnswer(opts: {
   try {
     await generate();
     if (!answer.trim()) throw new Error("empty stream");
-    if (isUnsureAnswer(answer) && !lookedUp) {
+    if (!isOffsiteMath(message) && isUnsureAnswer(answer) && !lookedUp) {
       lookedUp = true;
       lookup = await runLookup(site, sessionId, message, onEvent);
       if (lookup) {
@@ -818,7 +877,7 @@ export async function streamAnswer(opts: {
     onEvent({ type: "token", text: finalAnswer });
   }
   const sources = withLookupSource(site, unsure || !citesContext(finalAnswer, chunks) ? [] : pickSources(site, chunks, finalAnswer), lookup, unsure);
-  const suggestions = await maybeSuggestions(site, message, finalAnswer, unsure);
-  if (!site.staging) await storeCachedAnswer(site.id, message, { answer: finalAnswer, sources, suggestions }, { unsure, history }).catch(() => {});
-  return finish({ answer: finalAnswer, unsure, sources, suggestions }, { credits: usage.credits || 1 });
+  // Starters only. maybeSuggestions() is a second completeChat walk and was holding `done` for 30–50s.
+  const suggestions = streamDoneSuggestions(site, unsure);
+  return finish({ answer: finalAnswer, unsure, sources, suggestions }, { credits: usage.credits || 1, cache: true });
 }

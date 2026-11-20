@@ -54,8 +54,8 @@ test("OAuth landing URL puts a short-lived code in the fragment, not the session
   assert.equal(await redeemAuthTicket(code), null);
 });
 
-test("widget cache is long, and longer when versioned", () => {
-  assert.equal(widgetCacheControl(""), "public, max-age=86400");
+test("widget cache is short unless the URL is versioned", () => {
+  assert.equal(widgetCacheControl(""), "public, max-age=60, must-revalidate");
   assert.equal(widgetCacheControl("abc123"), "public, max-age=31536000, immutable");
 });
 

@@ -31,10 +31,10 @@ export function widgetVersion(repoRoot?: string): string {
   }
 }
 
-/** Long cache when the URL is versioned (?v=hash); still a full day without, so both paths stay consistent. */
+/** Long cache when the URL is versioned (?v=hash). Unversioned embeds revalidate within a minute so a fixed widget.js is not stuck for a day. */
 export function widgetCacheControl(versionQuery: string): string {
   if (versionQuery && versionQuery !== "dev") return "public, max-age=31536000, immutable";
-  return "public, max-age=86400";
+  return "public, max-age=60, must-revalidate";
 }
 
 export function widgetSrc(origin = "https://ghostchat.pro", root?: string): string {
