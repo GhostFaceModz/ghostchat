@@ -8,14 +8,14 @@ import type { Site } from "../server/src/types.js";
 
 const ghostflix: SearchTool = {
   id: "gf", name: "GhostFlix picks", kind: "json",
-  url_template: "https://ghostflix.example/api/public/picks?q={query}&similar={similar_to}&genre={genre}&mood={mood}&type={type}&yf={year_from}&yt={year_to}&lang={language}",
+  url_template: "https://ghostflix.uk/api/public/picks?q={query}&similar={similar_to}&genre={genre}&mood={mood}&type={type}&yf={year_from}&yt={year_to}&lang={language}",
   items_path: "results", fields: { title: "title", url: "url", image: "poster", rating: "rating", year: "year", subtitle: "genres.0", description: "overview" },
   intents: ["recommend", "find"], button_label: "Watch on GhostFlix", enabled: true,
 };
 const body = { results: [
-  { title: "Midsommar", year: 2019, rating: 7.1, poster: "https://img.example/m.jpg", url: "https://ghostflix.example/title/movie/530385", genres: ["Horror"], overview: "A couple travels to Sweden…" },
+  { title: "Midsommar", year: 2019, rating: 7.1, poster: "https://img.example/m.jpg", url: "https://ghostflix.uk/title/movie/530385", genres: ["Horror"], overview: "A couple travels to Sweden…" },
   { title: "The Witch", year: 2015, rating: 6.9, poster: "/w.jpg", url: "/title/movie/310131", genres: ["Horror"], overview: "New England, 1630." },
-  { title: "", url: "https://ghostflix.example/x" },
+  { title: "", url: "https://ghostflix.uk/x" },
   { title: "Bad link", url: "javascript:alert(1)" },
 ] };
 
@@ -43,7 +43,7 @@ test("rule fallback understands 'a horror film like Hereditary' and decades", ()
 });
 
 test("URL templates encode values and drop empty params", () => {
-  assert.equal(fillTemplate(ghostflix.url_template, { similar_to: "Hereditary", genre: "horror & gore" }), "https://ghostflix.example/api/public/picks?similar=Hereditary&genre=horror%20%26%20gore");
+  assert.equal(fillTemplate(ghostflix.url_template, { similar_to: "Hereditary", genre: "horror & gore" }), "https://ghostflix.uk/api/public/picks?similar=Hereditary&genre=horror%20%26%20gore");
   assert.equal(fillTemplate("https://x.com/s?q={query}", {}), "https://x.com/s");
   assert.equal(fillTemplate("https://x.com/{secret}?q={query}", { query: "a" }), "https://x.com/?q=a", "unknown placeholders are blanked");
 });
@@ -51,10 +51,10 @@ test("URL templates encode values and drop empty params", () => {
 test("field mapping: dot paths, relative links resolved, unsafe or empty items dropped", () => {
   assert.equal(getPath({ a: { b: [{ c: 5 }] } }, "a.b.0.c"), 5);
   assert.equal(getPath({ a: { b: [{ c: 5 }] } }, "a.b[0].c"), 5);
-  const items = mapItems(body, ghostflix, "https://ghostflix.example/api/public/picks");
+  const items = mapItems(body, ghostflix, "https://ghostflix.uk/api/public/picks");
   assert.deepEqual(items.map((i) => i.title), ["Midsommar", "The Witch"]);
-  assert.equal(items[1].url, "https://ghostflix.example/title/movie/310131");
-  assert.equal(items[1].image, "https://ghostflix.example/w.jpg");
+  assert.equal(items[1].url, "https://ghostflix.uk/title/movie/310131");
+  assert.equal(items[1].image, "https://ghostflix.uk/w.jpg");
   assert.equal(items[0].subtitle, "Horror");
 });
 
@@ -64,9 +64,9 @@ test("runTool calls the filled URL and returns mapped items; feeds are filtered 
   const out = await runTool(ghostflix, { similar_to: "Hereditary", genre: "horror" }, fetcher);
   assert.match(called, /similar=Hereditary&genre=horror$/);
   assert.equal(out.length, 2);
-  const feed = filterFeed(mapItems(body, ghostflix, "https://ghostflix.example/"), { query: "witch" });
+  const feed = filterFeed(mapItems(body, ghostflix, "https://ghostflix.uk/"), { query: "witch" });
   assert.deepEqual(feed.map((i) => i.title), ["The Witch"]);
-  assert.deepEqual(filterFeed(mapItems(body, ghostflix, "https://ghostflix.example/"), { similar_to: "Midsommar", genre: "horror" }).map((i) => i.title), ["The Witch"], "never the compared title");
+  assert.deepEqual(filterFeed(mapItems(body, ghostflix, "https://ghostflix.uk/"), { similar_to: "Midsommar", genre: "horror" }).map((i) => i.title), ["The Witch"], "never the compared title");
 });
 
 test("tools from the dashboard are validated (https, public host only)", async () => {
@@ -80,7 +80,7 @@ test("tools from the dashboard are validated (https, public host only)", async (
 
 test("the model only picks result numbers; titles always come from the tool", async () => {
   const site = { name: "GhostFlix" } as Site;
-  const items = mapItems(body, ghostflix, "https://ghostflix.example/");
+  const items = mapItems(body, ghostflix, "https://ghostflix.uk/");
   const ask = (async () => JSON.stringify({ intro: "Try these unsettling slow-burns.", picks: [{ n: 2, why: "Folk horror dread" }, { n: 9, why: "made up" }, { n: 2, why: "dup" }, { n: 1, why: "Daylight horror" }] })) as never;
   const { intro, cards } = await composePicks(site, "horror like Hereditary", items, ghostflix, ask);
   assert.equal(intro, "Try these unsettling slow-burns.");
@@ -91,7 +91,7 @@ test("the model only picks result numbers; titles always come from the tool", as
   assert.equal(r2.cards.length, 2, "falls back to the tool's order");
   const broken = (async () => { throw new Error("down"); }) as never;
   assert.equal((await composePicks(site, "x", items, ghostflix, broken)).cards[0].title, "Midsommar");
-  assert.match(logText("Hi", cards), /- \[The Witch \(2015\)\]\(https:\/\/ghostflix\.example\/title\/movie\/310131\)/);
+  assert.match(logText("Hi", cards), /- \[The Witch \(2015\)\]\(https:\/\/ghostflix\.uk\/title\/movie\/310131\)/);
 });
 
 test("crawl scope: include/exclude path prefixes and one chunk per page", () => {
@@ -125,6 +125,20 @@ test("rules understand a 2025 stoner comedy and don't treat 'like a stoner movie
   assert.equal(i.filters.year_to, 2025);
   assert.equal(i.filters.type, "movie");
   assert.equal(i.filters.similar_to, undefined);
+});
+
+test("list movies like snatch, including typos, is a similar-title recommendation", () => {
+  for (const phrase of ["List movies too watch like snatch", "Liat movies too watch like snatch", "moives similiar to snatch"]) {
+    const i = ruleIntent(phrase);
+    assert.equal(i.intent, "recommend", phrase);
+    assert.equal(i.filters.similar_to?.toLowerCase(), "snatch", phrase);
+    assert.equal(i.filters.type, "movie", phrase);
+  }
+  const show = ruleIntent("shwos similar to The Office");
+  assert.equal(show.intent, "recommend");
+  assert.equal(show.filters.type, "tv");
+  assert.match(show.filters.similar_to || "", /office/i);
+  assert.equal(ruleIntent("do you have snatch").intent, "find");
 });
 
 test("between 2024 and 2025 is a year range, and Hereditary is still a title", () => {
@@ -170,7 +184,73 @@ test("toolTurn retries a wider search and tells the visitor it relaxed, instead 
   assert.ok(calls >= 2);
   assert.match(out!.answer, /close matches|nearby years/i);
   assert.equal(out!.results[0].title, "Midsommar");
-  assert.ok(out!.results[0].url.startsWith("https://ghostflix.example/"));
+  assert.ok(out!.results[0].url.startsWith("https://ghostflix.uk/"));
+});
+
+test("movies like snatch use TMDB recommendations and GhostFlix links without an LLM call", async () => {
+  const prev = process.env.TMDB_API_KEY;
+  process.env.TMDB_API_KEY = "test-key";
+  const urls: string[] = [];
+  const fetcher = (async (url: string) => {
+    urls.push(url);
+    if (url.includes("/search/movie")) {
+      return new Response(JSON.stringify({ results: [{ id: 107, title: "Snatch", vote_count: 8000, release_date: "2000-09-01" }] }));
+    }
+    if (url.includes("/recommendations")) {
+      return new Response(JSON.stringify({ results: [
+        { id: 100, title: "Lock, Stock and Two Smoking Barrels", vote_average: 8.2, overview: "A card game gone wrong.", release_date: "1998-08-28" },
+        { id: 101, title: "RocknRolla", vote_average: 7.1, overview: "A London mob mix-up.", release_date: "2008-09-05" },
+        { id: 102, title: "The Gentlemen", vote_average: 7.8, overview: "A marijuana empire up for sale.", release_date: "2019-12-03" },
+        { id: 103, title: "Layer Cake", vote_average: 7.2, overview: "A dealer wants out.", release_date: "2004-10-01" },
+      ] }));
+    }
+    return new Response(JSON.stringify({ results: [] }));
+  }) as unknown as typeof fetch;
+  try {
+    const site = { id: "site-1", name: "GhostFlix", url: "https://ghostflix.uk", search_tools: [ghostflix] } as Site;
+    const out = await toolTurn(site, "s1", "List movies too watch like snatch", {
+      fetcher,
+      ask: (async () => { throw new Error("similar titles should not call the model"); }) as never,
+    });
+    assert.ok(out);
+    assert.match(out!.answer, /Lock, Stock and Two Smoking Barrels/);
+    assert.match(out!.answer, /\[RocknRolla\]\(https:\/\/ghostflix\.uk\/title\/movie\/101\)/);
+    assert.match(out!.answer, /The Gentlemen/);
+    assert.match(out!.answer, /Layer Cake/);
+    assert.match(out!.answer, /8\.2\/10/);
+    assert.equal(out!.results[0].title, "Lock, Stock and Two Smoking Barrels");
+    assert.equal(out!.results[0].url, "https://ghostflix.uk/title/movie/100");
+    assert.ok(urls.some((u) => u.includes("/movie/107/recommendations")));
+    assert.equal(urls.some((u) => u.includes("ghostflix.uk")), false);
+  } finally {
+    if (prev === undefined) delete process.env.TMDB_API_KEY;
+    else process.env.TMDB_API_KEY = prev;
+  }
+});
+
+test("a TMDB miss falls back to the catalogue similar search", async () => {
+  const prev = process.env.TMDB_API_KEY;
+  process.env.TMDB_API_KEY = "test-key";
+  const fetcher = (async (url: string) => {
+    if (url.includes("themoviedb.org")) return new Response(JSON.stringify({ results: [] }));
+    return new Response(JSON.stringify({ results: [
+      { title: "Lock, Stock and Two Smoking Barrels", year: 1998, rating: 8.2, url: "https://ghostflix.uk/title/movie/100", overview: "A card game gone wrong." },
+    ] }));
+  }) as unknown as typeof fetch;
+  try {
+    const site = { id: "site-1", name: "GhostFlix", url: "https://ghostflix.uk", search_tools: [ghostflix] } as Site;
+    const out = await toolTurn(site, "s1", "Liat movies too watch like snatch", {
+      fetcher,
+      ask: (async () => { throw new Error("catalogue similar list should not call the model"); }) as never,
+    });
+    assert.ok(out);
+    assert.match(out!.answer, /Lock, Stock/);
+    assert.match(out!.answer, /https:\/\/ghostflix\.uk\/title\/movie\/100/);
+    assert.equal(out!.intent.filters.similar_to?.toLowerCase(), "snatch");
+  } finally {
+    if (prev === undefined) delete process.env.TMDB_API_KEY;
+    else process.env.TMDB_API_KEY = prev;
+  }
 });
 
 test("toolTurn does not invent titles when the catalogue is empty; it asks to widen the search", async () => {

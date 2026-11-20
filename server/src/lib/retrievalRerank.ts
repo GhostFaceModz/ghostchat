@@ -34,14 +34,15 @@ export function isLegalQuestion(question: string): boolean {
   return /\b(privacy(\s+policy)?|terms(\s+of\s+service)?|cookie|cookies|gdpr|legal (notice|policy|terms)|imprint|data protection|\btos\b)\b/i.test(question);
 }
 
+/** True only when the visitor is asking what the site/product is. Greetings, "help", and lookups are not overview questions. */
 export function isBroadQuestion(question: string): boolean {
   const q = question.trim();
-  if (/\b(what can (you|it|this|they|[a-z0-9][\w '.-]{0,40}) do|what does .{0,40}\bdo\b|what (is|are) (you|this|it|ghostchat|[a-z0-9][\w '.-]{0,40})|tell me about|who are you|how does (it|this|your|the) work|what('?s| is) this (site|page|product|app|bot)|features|capabilit(y|ies)|what do you (do|offer))\b/i.test(q)) {
+  if (/\b(what can (you|it|this|they|[a-z0-9][\w '.-]{0,40}) do|what does .{0,40}\bdo\b|what (is|are) (you|this|it|ghostchat|[a-z0-9][\w '.-]{0,40})|tell me about|who are you|how does (it|this|your|the) work|what('?s| is) this (site|page|product|app|bot)|capabilit(y|ies)|what do you (do|offer)|about (the )?(site|app|product|you))\b/i.test(q)) {
     return true;
   }
-  // Don't treat "how much" / "how do I" as broad — those have their own boosts.
+  // Don't treat "how much" / "how do I" / greetings / "help" as an overview.
   const words = q.split(/\s+/).filter(Boolean);
-  return words.length <= 5 && /^(what|what'?s|who|tell|explain|features|help|hi|hello)\b/i.test(q);
+  return words.length <= 6 && /^(what|what'?s|who|tell|explain|features|about)\b/i.test(q) && !/\b(price|cost|much)\b/i.test(q);
 }
 
 export function isPricingQuestion(question: string): boolean {
@@ -72,7 +73,7 @@ export function adjustedScore(question: string, chunk: RetrievedChunk, legalQues
   let score = Number(chunk.similarity) || 0;
   if (isLegalUrl(chunk.url) && !legalQuestion) score -= 0.35;
   const broad = isBroadQuestion(question);
-  if (isHomeUrl(chunk.url) || isOverviewChunk(chunk)) score += broad ? 0.22 : 0.08;
+  if (broad && (isHomeUrl(chunk.url) || isOverviewChunk(chunk))) score += 0.22;
   if (isPricingQuestion(question) && (hasPriceSignal(chunk) || isPricingUrl(chunk.url))) score += 0.25;
   if (isSetupQuestion(question) && hasSetupSignal(chunk)) score += 0.2;
   if (/\b(q:\s|faq|questions?, answered)\b/i.test(`${chunk.heading || ""} ${chunk.content || ""}`.slice(0, 200))) score += 0.08;
@@ -91,7 +92,7 @@ function dedupe(chunks: RetrievedChunk[]): RetrievedChunk[] {
   return out;
 }
 
-/** Reorder and trim a candidate pool. Always keeps a couple of homepage/about chunks when available. */
+/** Reorder and trim a candidate pool. Homepage/about chunks are injected only for real overview questions. */
 export function rerankChunks(
   question: string,
   chunks: RetrievedChunk[],
@@ -99,7 +100,8 @@ export function rerankChunks(
 ): RetrievedChunk[] {
   const keep = Math.min(8, Math.max(1, Math.round(Number(opts.keep) || 6)));
   const legalQ = isLegalQuestion(question);
-  const overview = (opts.overview || []).filter((c) => c && (c.content || "").trim());
+  const broad = isBroadQuestion(question);
+  const overview = broad ? (opts.overview || []).filter((c) => c && (c.content || "").trim()) : [];
   const pool = dedupe([
     ...chunks,
     ...overview.map((c) => ({ ...c, similarity: Number(c.similarity) > 0 ? c.similarity : 0.55 })),
@@ -115,8 +117,8 @@ export function rerankChunks(
     picked.push(c);
   }
 
-  if (!legalQ) {
-    const want = isBroadQuestion(question) ? 3 : 2;
+  if (!legalQ && broad) {
+    const want = 2;
     const overviewPool = dedupe([
       ...overview,
       ...pool.filter((c) => isHomeUrl(c.url) || isOverviewChunk(c)),
@@ -130,7 +132,7 @@ export function rerankChunks(
       }
       const evictIdx = picked.map((_, i) => i).reverse().find((i) => isLegalUrl(picked[i].url) || !(isHomeUrl(picked[i].url) || isOverviewChunk(picked[i])));
       if (picked.length >= keep && evictIdx != null) picked.splice(evictIdx, 1);
-      const insertAt = Math.min(isBroadQuestion(question) ? 1 : 2, picked.length);
+      const insertAt = Math.min(1, picked.length);
       picked.splice(insertAt, 0, o);
       inserted++;
       if (picked.length > keep) {
