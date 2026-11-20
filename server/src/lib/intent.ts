@@ -1,5 +1,6 @@
 import { backgroundChatModel, completeChat } from "./ai.js";
 import { DEFAULT_CHAT_MODEL } from "./models.js";
+import { fixTypos } from "./queryRewrite.js";
 
 export type IntentKind = "recommend" | "find" | "howto" | "account" | "support" | "other";
 export type IntentFilters = {
@@ -56,7 +57,10 @@ const GENERIC_LIKE = /^(?:a|an|the)?\s*(?:good|great|fun|funny|nice|cool|new)?\s
 function captureTitle(message: string): string | undefined {
   const like = message.match(/\b(?:like|similar to|such as)\s+["“']?([^"”'?.!,]{2,60})/i);
   if (!like) return undefined;
-  const title = like[1].replace(/\b(please|pls|thanks)\b.*$/i, "").trim();
+  const title = like[1]
+    .replace(/\b(please|pls|thanks|on here|on this site|for me)\b.*$/i, "")
+    .replace(/\bto watch\b.*$/i, "")
+    .trim();
   if (!title || GENERIC_LIKE.test(title) || /^(?:a|an)\s+/i.test(title)) return undefined;
   return title;
 }
@@ -73,33 +77,41 @@ function captureYears(m: string, f: IntentFilters) {
 }
 
 export function ruleIntent(message: string): Intent {
-  const m = message.toLowerCase();
+  const normalized = fixTypos(message);
+  const m = normalized.toLowerCase();
   const f: IntentFilters = {};
-  const like = captureTitle(message);
-  if (like) f.similar_to = like;
+  const media = /\b(films?|movies?|shows?|series|games?|watch)\b/.test(m);
+  const like = captureTitle(normalized);
+  if (like && (media || /\b(similar|recommend|suggest)\b/.test(m))) f.similar_to = like;
   const g = m.match(GENRE_WORD);
   if (g) f.genre = g[1];
   const mood = m.match(MOOD_WORD);
   if (mood) f.mood = mood[1].replace(/\s+/g, " ");
-  if (/\b(series|tv|shows?)\b/.test(m)) f.type = "tv"; else if (/\b(film|movie)s?\b/.test(m)) f.type = "movie";
+  const wantsTv = /\b(series|tv|shows?)\b/.test(m);
+  const wantsMovie = /\b(films?|movies?)\b/.test(m);
+  if (wantsTv && !wantsMovie) f.type = "tv";
+  else if (wantsMovie) f.type = "movie";
+  else if (wantsTv) f.type = "tv";
   captureYears(m, f);
   const rated = m.match(/\b(?:rated\s+|rating\s+|at least\s+|over\s+|above\s+|)\s*(\d(?:\.\d)?)\s*(?:\+|stars?|\/10)\b/);
   if (rated) { const n = Number(rated[1]); if (n >= 1 && n <= 10) f.rating = n; }
   let intent: IntentKind = "other";
   const rank = m.match(/\b(trending|popular|top|best|highest[- ]rated|most[- ]watched)\b/);
-  const media = /\b(movies?|films?|shows?|series|tv|titles?)\b/.test(m) || /\bghostflix\b/.test(m);
-  if (rank && media) {
+  const catalogue = media || /\b(tv|titles?|ghostflix)\b/.test(m);
+  if (rank && catalogue) {
     const word = rank[1].replace(/[- ]/g, "");
     f.sort = word === "trending" ? "trending" : word === "popular" ? "popular" : word === "best" || word === "highestrated" ? "best" : "top";
   }
   const rec = /\b(recommend|suggest|something to watch|what should i watch|any good|similar to|in the mood for)\b/.test(m)
+    || (/\blist\b/.test(m) && media)
+    || (/\b(?:like|similar to)\b/.test(m) && media)
     || /\bfind me (?:a|an|some|good)\b/.test(m)
     || (/\b(find|search)\b/.test(m) && !!(f.genre || f.mood || f.year_from) && !f.similar_to);
   if (f.sort) intent = "recommend";
-  else if (rec && (f.genre || f.mood || f.similar_to || f.year_from || /\b(watch|film|movie|show|series)\b/.test(m))) intent = "recommend";
+  else if (rec && (f.genre || f.mood || f.similar_to || f.year_from || media)) intent = "recommend";
   else if (/\b(find|search|is there|do you have|where can i (?:watch|find))\b/.test(m)) {
     intent = "find";
-    f.query = message.replace(/^.*?\b(find|search for|search|is there|do you have|where can i (?:watch|find))\b/i, "").replace(/[?.!]+$/, "").trim().slice(0, 80) || undefined;
+    f.query = normalized.replace(/^.*?\b(find|search for|search|is there|do you have|where can i (?:watch|find))\b/i, "").replace(/[?.!]+$/, "").trim().slice(0, 80) || undefined;
     if (!f.query) delete f.query;
   }
   else if (/\b(how (?:do|can|to)|where is|can i)\b/.test(m)) intent = "howto";
@@ -123,13 +135,21 @@ const SYSTEM = `You classify a website visitor's chat message. Reply with ONE JS
 - clarify: ONE short friendly question, only if intent is recommend and the request is truly vague (no genre, mood, title, year or type at all). Otherwise null.
 - options: only with clarify, 2-3 short answers the visitor could tap (under 30 characters each), fitting this site.`;
 
-export async function classifyIntent(message: string, history: Array<{ role: "user" | "assistant"; content: string }> = []): Promise<Intent> {
-  const ruled = ruleIntent(message);
-  // Top / popular / trending catalogue asks are fully described by the rules. Skip the model.
-  if (ruled.intent === "recommend" && ruled.filters.sort) return ruled;
+/** Rules already named the route, so skip the intent model (saves a free-tier call). */
+export function rulesMatchIntent(message: string): boolean {
+  return ruleIntent(message).intent !== "other";
+}
+
+export async function classifyIntent(
+  message: string,
+  history: Array<{ role: "user" | "assistant"; content: string }> = [],
+  ask: typeof completeChat = completeChat,
+): Promise<Intent> {
+  const rules = ruleIntent(message);
+  if (rules.intent !== "other") return rules;
   try {
     const recent = history.slice(-4).map((h) => `${h.role}: ${h.content.slice(0, 300)}`).join("\n");
-    const raw = await completeChat(
+    const raw = await ask(
       [
         { role: "system", content: SYSTEM },
         { role: "user", content: `${recent ? `Recent chat:\n${recent}\n\n` : ""}Message: ${message.slice(0, 600)}` },
@@ -139,12 +159,6 @@ export async function classifyIntent(message: string, history: Array<{ role: "us
     const parsed = parseJsonObject(raw);
     if (parsed) {
       const ai = normalizeIntent(parsed, "ai");
-      const rules = ruleIntent(message);
-      // Small models sometimes answer "other"/"find" for a clear recommendation: trust the keyword rules then.
-      if (rules.intent === "recommend" && (ai.intent === "other" || ai.intent === "find")) {
-        return { ...rules, filters: { ...ai.filters, ...rules.filters }, source: "rules" };
-      }
-      if (ai.intent === "other" && rules.intent !== "other") return { ...rules, source: "rules" };
       const filters = { ...rules.filters, ...ai.filters };
       for (const k of Object.keys(rules.filters) as (keyof IntentFilters)[]) {
         if (filters[k] == null && rules.filters[k] != null) (filters as IntentFilters)[k] = rules.filters[k] as never;

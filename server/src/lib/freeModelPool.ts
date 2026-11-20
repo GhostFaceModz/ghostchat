@@ -2,7 +2,10 @@
 export const FREE_POOL_SIZE = 10;
 export const FREE_MODEL_TIMEOUT_MS = Number(process.env.FREE_MODEL_TIMEOUT_MS) || 10_000;
 export const FREE_POOL_REFRESH_MS = Number(process.env.FREE_POOL_REFRESH_MS) || 60 * 60 * 1000;
-const COOLDOWN_MS = [5 * 60_000, 10 * 60_000, 15 * 60_000];
+/** Transient failures (429, timeout, empty, 402) cool off briefly so one bad minute can't wipe the pool. */
+const TRANSIENT_COOLDOWN_MS = [60_000, 120_000, 180_000];
+/** A real 400 (bad request) backs off a few minutes. Reasoning-mandatory 400s are not recorded as failures. */
+const BAD_REQUEST_COOLDOWN_MS = 3 * 60_000;
 const NOT_FOUND_COOLDOWN_MS = 60 * 60_000;
 const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 
@@ -12,20 +15,19 @@ const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
  * `openrouter/free` is a late fallback router, not a first pick (it often returns empty).
  */
 export const PREFERRED_FREE_MODELS = [
-  "nvidia/nemotron-3-ultra-550b-a55b:free",
   "google/gemma-4-31b-it:free",
   "google/gemma-4-26b-a4b-it:free",
+  "inclusionai/ling-3.2-flash:free",
+  "dots-studio/dots-3-note-preview:free",
+  "liquid/lfm-3-1.7b:free",
+  "particle-ai/particle-1:free",
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "baidu/ernie-5.5-flash-preview:free",
+  "recursive/flint-v1.0:free",
+  "openrouter/free",
   "nvidia/nemotron-3.5-super-vl:free",
   "nvidia/nemotron-3.5-lightning:free",
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-  "inclusionai/ling-3.2-flash:free",
-  "baidu/ernie-5.5-flash-preview:free",
-  "thinkingmachines/inkling-2-small:free",
-  "particle-ai/particle-1:free",
-  "recursive/flint-v1.0:free",
-  "openrouter/free",
-  "dots-studio/dots-3-note-preview:free",
-  "liquid/lfm-3-1.7b:free",
   "cohere/north-mini-code:free",
 ];
 
@@ -125,6 +127,21 @@ export function nextFreeInPool(current: string, used: string[] = [], now = Date.
   return availableFreeModels([], now).find((id) => !skip.has(id));
 }
 
+/**
+ * When every free model is cooling, try the last model that actually answered,
+ * otherwise the one whose cooldown ends soonest. One rescue per request — callers
+ * pass models already tried in `used`.
+ */
+export function bestEffortFreeModel(used: string[] = [], now = Date.now()): string | undefined {
+  const ready = availableFreeModels(used, now);
+  if (ready.length) return ready[0];
+  const skip = new Set(used);
+  const pool = currentFreePoolIds().filter((id) => !skip.has(id));
+  if (!pool.length) return undefined;
+  if (lastAnswered && pool.includes(lastAnswered.model)) return lastAnswered.model;
+  return pool.slice().sort((a, b) => member(a).cooldownUntil - member(b).cooldownUntil)[0];
+}
+
 export function recordPoolSuccess(id: string, now = Date.now()): void {
   const m = member(id);
   m.failCount = 0;
@@ -139,9 +156,11 @@ export function recordPoolFailure(id: string, reason: PoolFailureReason, now = D
   const m = member(id);
   m.failCount += 1;
   m.lastError = reason;
-  const ms = reason === "404" || reason === "400"
+  const ms = reason === "404"
     ? NOT_FOUND_COOLDOWN_MS
-    : COOLDOWN_MS[Math.min(m.failCount - 1, COOLDOWN_MS.length - 1)];
+    : reason === "400"
+      ? BAD_REQUEST_COOLDOWN_MS
+      : TRANSIENT_COOLDOWN_MS[Math.min(m.failCount - 1, TRANSIENT_COOLDOWN_MS.length - 1)];
   m.cooldownUntil = now + ms;
   console.warn(`openrouter pool cooldown ${id} for ${Math.round(ms / 1000)}s after ${reason}`);
 }

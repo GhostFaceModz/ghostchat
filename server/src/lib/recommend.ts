@@ -1,6 +1,7 @@
 import { completeChat } from "./ai.js";
-import { classifyIntent, parseJsonObject, type Intent } from "./intent.js";
+import { classifyIntent, ruleIntent, parseJsonObject, type Intent } from "./intent.js";
 import { pickTool, runSearch, relaxFilters, relaxedNote, toolsFor, type SearchTool, type ToolItem } from "./siteTools.js";
+import { formatSimilarList, shouldLookupSimilar, supportsDirectTmdb, tmdbSimilarTitles } from "./similarTitles.js";
 import { getDb } from "./supabase.js";
 import type { Site } from "../types.js";
 
@@ -83,8 +84,9 @@ Reply with ONE JSON object only: {"intro": string, "picks": [{"n": number, "why"
 export async function toolTurn(site: Site, sessionId: string, message: string, deps: { classify?: typeof classifyIntent; fetcher?: typeof fetch; ask?: typeof completeChat } = {}): Promise<ToolTurn | null> {
   const tools = toolsFor(site);
   if (!tools.length) return null;
-  const history = await recentHistory(site.id, sessionId, message);
-  const intent = await (deps.classify || classifyIntent)(message, history);
+  const ruled = ruleIntent(message);
+  const history = ruled.intent !== "other" ? [] : await recentHistory(site.id, sessionId, message);
+  const intent = ruled.intent !== "other" ? ruled : await (deps.classify || classifyIntent)(message, history);
   if (process.env.GC_DEBUG_TOOLS) console.log("tool intent", JSON.stringify(intent));
   if (intent.intent === "recommend" && intent.clarify) {
     return { answer: intent.clarify, results: [], suggestions: intent.options, intent, tool: null };
@@ -94,19 +96,36 @@ export async function toolTurn(site: Site, sessionId: string, message: string, d
   let items: ToolItem[] = [];
   let note: string | null = null;
   let kind = "exact";
-  try {
-    const attempts = relaxFilters(intent.filters);
-    for (const attempt of attempts) {
-      const found = await runSearch(tool, attempt.filters, deps.fetcher);
-      if (!found.items.length) continue;
-      items = found.items;
-      kind = found.match === "relaxed" ? "relaxed" : attempt.kind;
-      note = found.note || (kind !== "exact" ? relaxedNote(kind === "relaxed" ? attempt.kind : kind, intent.filters) : null);
-      break;
+  if (shouldLookupSimilar(message, intent.filters) && supportsDirectTmdb(site.url)) {
+    try {
+      const similar = await tmdbSimilarTitles(intent.filters.similar_to || "", {
+        type: intent.filters.type,
+        siteUrl: site.url,
+        fetcher: deps.fetcher,
+      });
+      if (similar.length) {
+        items = similar;
+        kind = "exact";
+      }
+    } catch (err) {
+      console.warn("tmdb similar failed:", (err as Error).message);
     }
-  } catch (err) {
-    console.warn(`site tool ${tool.name} failed:`, (err as Error).message);
-    return null;
+  }
+  if (!items.length) {
+    try {
+      const attempts = relaxFilters(intent.filters);
+      for (const attempt of attempts) {
+        const found = await runSearch(tool, attempt.filters, deps.fetcher);
+        if (!found.items.length) continue;
+        items = found.items;
+        kind = found.match === "relaxed" ? "relaxed" : attempt.kind;
+        note = found.note || (kind !== "exact" ? relaxedNote(kind === "relaxed" ? attempt.kind : kind, intent.filters) : null);
+        break;
+      }
+    } catch (err) {
+      console.warn(`site tool ${tool.name} failed:`, (err as Error).message);
+      return null;
+    }
   }
   if (intent.filters.sort && items.length) {
     const kind = intent.filters.type === "tv" ? "shows" : "movies";
@@ -126,6 +145,15 @@ export async function toolTurn(site: Site, sessionId: string, message: string, d
       intent,
       tool: tool.name,
     };
+  }
+  if (intent.filters.similar_to) {
+    const cards: ResultCard[] = items.slice(0, 6).map((it) => ({
+      ...it,
+      why: (it.description || it.subtitle || "").replace(/\s+/g, " ").trim().slice(0, 110) || null,
+      cta: tool.button_label,
+    }));
+    const list = formatSimilarList(intent.filters.similar_to, cards);
+    return { answer: note ? `${note}\n\n${list}` : list, results: cards, suggestions: [], intent, tool: tool.name };
   }
   const { intro, cards } = await composePicks(site, message, items, tool, deps.ask, note);
   return { answer: intro, results: cards, suggestions: [], intent, tool: tool.name };
