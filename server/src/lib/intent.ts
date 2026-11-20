@@ -1,4 +1,4 @@
-import { completeChat } from "./ai.js";
+import { backgroundChatModel, completeChat } from "./ai.js";
 import { DEFAULT_CHAT_MODEL } from "./models.js";
 
 export type IntentKind = "recommend" | "find" | "howto" | "account" | "support" | "other";
@@ -13,6 +13,7 @@ export type IntentFilters = {
   actors?: string[];
   language?: string;
   rating?: number;
+  sort?: "top" | "best" | "popular" | "trending";
 };
 export type Intent = { intent: IntentKind; filters: IntentFilters; clarify: string | null; options: string[]; source: "ai" | "rules" };
 
@@ -39,6 +40,7 @@ export function normalizeIntent(raw: unknown, source: Intent["source"] = "ai"): 
   if (/^[a-z]{2}$/.test(lang)) filters.language = lang; else if (LANGS[lang]) filters.language = LANGS[lang];
   const rating = Number(f.rating ?? f.rating_min);
   if (Number.isFinite(rating) && rating >= 1 && rating <= 10) filters.rating = Math.round(rating * 10) / 10;
+  if (f.sort === "top" || f.sort === "best" || f.sort === "popular" || f.sort === "trending") filters.sort = f.sort;
   const clarify = intent === "recommend" && !hasFilters(filters) ? str(o.clarify, 140) || null : null;
   const options = clarify && Array.isArray(o.options) ? o.options.map((x) => str(x, 40)).filter(Boolean).slice(0, 3) : [];
   return { intent, filters, clarify, options, source };
@@ -79,15 +81,22 @@ export function ruleIntent(message: string): Intent {
   if (g) f.genre = g[1];
   const mood = m.match(MOOD_WORD);
   if (mood) f.mood = mood[1].replace(/\s+/g, " ");
-  if (/\b(series|tv|show)\b/.test(m)) f.type = "tv"; else if (/\b(film|movie)s?\b/.test(m)) f.type = "movie";
+  if (/\b(series|tv|shows?)\b/.test(m)) f.type = "tv"; else if (/\b(film|movie)s?\b/.test(m)) f.type = "movie";
   captureYears(m, f);
   const rated = m.match(/\b(?:rated\s+|rating\s+|at least\s+|over\s+|above\s+|)\s*(\d(?:\.\d)?)\s*(?:\+|stars?|\/10)\b/);
   if (rated) { const n = Number(rated[1]); if (n >= 1 && n <= 10) f.rating = n; }
   let intent: IntentKind = "other";
+  const rank = m.match(/\b(trending|popular|top|best|highest[- ]rated|most[- ]watched)\b/);
+  const media = /\b(movies?|films?|shows?|series|tv|titles?)\b/.test(m) || /\bghostflix\b/.test(m);
+  if (rank && media) {
+    const word = rank[1].replace(/[- ]/g, "");
+    f.sort = word === "trending" ? "trending" : word === "popular" ? "popular" : word === "best" || word === "highestrated" ? "best" : "top";
+  }
   const rec = /\b(recommend|suggest|something to watch|what should i watch|any good|similar to|in the mood for)\b/.test(m)
     || /\bfind me (?:a|an|some|good)\b/.test(m)
     || (/\b(find|search)\b/.test(m) && !!(f.genre || f.mood || f.year_from) && !f.similar_to);
-  if (rec && (f.genre || f.mood || f.similar_to || f.year_from || /\b(watch|film|movie|show|series)\b/.test(m))) intent = "recommend";
+  if (f.sort) intent = "recommend";
+  else if (rec && (f.genre || f.mood || f.similar_to || f.year_from || /\b(watch|film|movie|show|series)\b/.test(m))) intent = "recommend";
   else if (/\b(find|search|is there|do you have|where can i (?:watch|find))\b/.test(m)) {
     intent = "find";
     f.query = message.replace(/^.*?\b(find|search for|search|is there|do you have|where can i (?:watch|find))\b/i, "").replace(/[?.!]+$/, "").trim().slice(0, 80) || undefined;
@@ -115,6 +124,9 @@ const SYSTEM = `You classify a website visitor's chat message. Reply with ONE JS
 - options: only with clarify, 2-3 short answers the visitor could tap (under 30 characters each), fitting this site.`;
 
 export async function classifyIntent(message: string, history: Array<{ role: "user" | "assistant"; content: string }> = []): Promise<Intent> {
+  const ruled = ruleIntent(message);
+  // Top / popular / trending catalogue asks are fully described by the rules. Skip the model.
+  if (ruled.intent === "recommend" && ruled.filters.sort) return ruled;
   try {
     const recent = history.slice(-4).map((h) => `${h.role}: ${h.content.slice(0, 300)}`).join("\n");
     const raw = await completeChat(
@@ -122,7 +134,7 @@ export async function classifyIntent(message: string, history: Array<{ role: "us
         { role: "system", content: SYSTEM },
         { role: "user", content: `${recent ? `Recent chat:\n${recent}\n\n` : ""}Message: ${message.slice(0, 600)}` },
       ],
-      { maxTokens: 220, temperature: 0, json: true, fast: true, site: { chat_model: process.env.INTENT_MODEL || DEFAULT_CHAT_MODEL } },
+      { maxTokens: 220, temperature: 0, json: true, fast: true, site: { chat_provider: "openrouter", chat_model: backgroundChatModel(process.env.INTENT_MODEL) || DEFAULT_CHAT_MODEL } },
     );
     const parsed = parseJsonObject(raw);
     if (parsed) {

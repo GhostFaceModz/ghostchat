@@ -1188,8 +1188,9 @@
   }
 
   function addFeedback(row, logId, text) {
-    if (!logId) return;
+    if (!logId && !text) return;
     var wrap = el("div", { class: "gc-fb" });
+    if (text) {
     var copyBtn = el("button", { type: "button", title: "Copy", "aria-label": "Copy reply", html: ICONS.copy });
     copyBtn.addEventListener("click", function () {
       try { if (navigator.clipboard) navigator.clipboard.writeText(text || ""); } catch (e) {}
@@ -1197,7 +1198,8 @@
       setTimeout(function () { copyBtn.innerHTML = ICONS.copy; copyBtn.classList.remove("on"); }, 1400);
     });
     wrap.appendChild(copyBtn);
-    ["up", "down"].forEach(function (rating) {
+    }
+    if (logId) ["up", "down"].forEach(function (rating) {
       var b = el("button", { type: "button", class: "gc-rate", html: rating === "up" ? ICONS.up : ICONS.down, title: rating === "up" ? "Helpful" : "Not helpful", "aria-label": rating === "up" ? "Helpful" : "Not helpful", "aria-pressed": "false" });
       b.addEventListener("click", function () {
         wrap.querySelectorAll("button.gc-rate").forEach(function (x) { x.classList.remove("on"); x.setAttribute("aria-pressed", "false"); });
@@ -1210,7 +1212,7 @@
       });
       wrap.appendChild(b);
     });
-    if (canSpeak()) {
+    if (text && canSpeak()) {
       var speakBtn = el("button", { type: "button", class: "gc-speak", title: t("listen"), "aria-label": t("listen"), "aria-pressed": "false", html: ICONS.speaker });
       speakBtn.addEventListener("click", function () { startSpeak(text, speakBtn); });
       wrap.appendChild(speakBtn);
@@ -1485,12 +1487,76 @@
     void row;
   }
 
+  function consumeSseLines(buf) {
+    var lines = String(buf || "").split("\n");
+    var rest = lines.pop();
+    return { lines: lines, rest: rest == null ? "" : rest };
+  }
+  function takeCompleteSseLines(buf, handleLine) {
+    var parsed = consumeSseLines(buf);
+    for (var i = 0; i < parsed.lines.length; i++) handleLine(parsed.lines[i]);
+    return parsed.rest;
+  }
+  function drainSseBuffer(buf, handleLine) {
+    var rest = takeCompleteSseLines(buf, handleLine);
+    if (rest && String(rest).trim()) handleLine(rest);
+    return "";
+  }
+  function feedbackButtonIds(logId, text) {
+    if (!logId && !text) return [];
+    var ids = [];
+    if (text) ids.push("copy");
+    if (logId) { ids.push("up"); ids.push("down"); }
+    if (text) ids.push("speak");
+    return ids;
+  }
+  function syncSendLocked(sending) {
+    return !!sending;
+  }
+  function createStreamWatchdog(opts) {
+    var idleMs = opts.idleMs == null ? 10000 : opts.idleMs;
+    var ceilingMs = opts.ceilingMs == null ? 30000 : opts.ceilingMs;
+    var idleTimer = null;
+    var ceilingTimer = null;
+    var stopped = false;
+    var sawText = false;
+    function clear() {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (ceilingTimer) clearTimeout(ceilingTimer);
+      idleTimer = null;
+      ceilingTimer = null;
+    }
+    function fire(reason) {
+      if (stopped) return;
+      stopped = true;
+      clear();
+      opts.onStall(reason);
+    }
+    return {
+      start: function () {
+        if (stopped) return;
+        ceilingTimer = setTimeout(function () { fire("ceiling"); }, ceilingMs);
+      },
+      received: function (hasText) {
+        if (stopped) return;
+        if (hasText) sawText = true;
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = null;
+        if (sawText) idleTimer = setTimeout(function () { fire("idle"); }, idleMs);
+      },
+      stop: function () {
+        stopped = true;
+        clear();
+      }
+    };
+  }
+
   function sendMessage(text) {
     var message = (text || input.value || "").trim();
     if (!message || state.sending) return;
     input.value = "";
     state.sending = true;
-    sendBtn.disabled = true;
+    sendBtn.disabled = syncSendLocked(true);
     clearSuggestions();
     var thread = state.tab === "support" ? "support" : "assistant";
     var pane = thread === "support" ? msgsSupport : msgs;
@@ -1517,6 +1583,63 @@
       bubble = row.querySelector(".gc-bubble");
     }
 
+    var buf = "";
+    var activeReader = null;
+    var watch = createStreamWatchdog({
+      idleMs: 10000,
+      ceilingMs: 30000,
+      onStall: function () { stallStream(); }
+    });
+    watch.start();
+
+    function handleLine(line) {
+      var ln = String(line || "").trim();
+      if (ln.indexOf("data:") !== 0) return;
+      var data = ln.slice(5).trim();
+      if (!data) return;
+      try {
+        var ev = JSON.parse(data);
+        if (ev.type === "token" && ev.text) {
+          ensureRow();
+          acc += ev.text;
+          bubble.innerHTML = renderMarkdown(acc);
+          scrollDown();
+        } else if (ev.type === "status" && ev.status === "checking") {
+          if (!row) {
+            var tb = typing.querySelector(".gc-bubble");
+            if (tb) tb.innerHTML = '<div class="gc-status"><div class="gc-typing"><i></i><i></i><i></i></div><span>' + escapeHtml(t("checking")) + "</span></div>";
+          } else if (bubble) {
+            bubble.innerHTML = '<div class="gc-status"><div class="gc-typing"><i></i><i></i><i></i></div><span>' + escapeHtml(t("checking")) + "</span></div>";
+          }
+          scrollDown();
+        } else if (ev.type === "reset") {
+          acc = "";
+          if (bubble) bubble.innerHTML = "";
+        } else if (ev.type === "live") {
+          gotLive = true;
+          enterLive(ev);
+        } else if (ev.type === "done") {
+          finish(ev);
+        } else if (ev.type === "error") {
+          ensureRow();
+          acc = ev.error || "I couldn't reply just now.";
+          if (bubble) bubble.innerHTML = renderMarkdown(acc);
+        }
+      } catch (e) {}
+    }
+
+    function stallStream() {
+      if (finished) return;
+      try { if (activeReader) activeReader.cancel(); } catch (e) {}
+      buf = drainSseBuffer(buf, handleLine);
+      if (!acc) {
+        ensureRow();
+        acc = t("err") || "The reply stalled. Please try again.";
+        if (bubble) bubble.innerHTML = renderMarkdown(acc);
+      }
+      finish(null);
+    }
+
     fetch(API_BASE + "/api/chat", {
       method: "POST",
       headers: { "content-type": "application/json", accept: "text/event-stream" },
@@ -1540,96 +1663,75 @@
           finish(null);
         });
       }
-      var reader = res.body.getReader();
+      activeReader = res.body.getReader();
       var decoder = new TextDecoder();
-      var buf = "";
       function pump() {
-        return reader.read().then(function (part) {
-          if (part.done) return finish(null);
+        return activeReader.read().then(function (part) {
+          if (part.done) {
+            if (!finished) buf = drainSseBuffer(buf, handleLine);
+            return finish(null);
+          }
           buf += decoder.decode(part.value, { stream: true });
-          var lines = buf.split("\n");
-          buf = lines.pop() || "";
-          lines.forEach(function (line) {
-            var ln = line.trim();
-            if (ln.indexOf("data:") !== 0) return;
-            var data = ln.slice(5).trim();
-            if (!data) return;
-            try {
-              var ev = JSON.parse(data);
-              if (ev.type === "token" && ev.text) {
-                ensureRow();
-                acc += ev.text;
-                bubble.innerHTML = renderMarkdown(acc);
-                scrollDown();
-              } else if (ev.type === "status" && ev.status === "checking") {
-                // Live site lookup: show "Checking the site…" while the bot reads fresh pages.
-                if (!row) {
-                  var tb = typing.querySelector(".gc-bubble");
-                  if (tb) tb.innerHTML = '<div class="gc-status"><div class="gc-typing"><i></i><i></i><i></i></div><span>' + escapeHtml(t("checking")) + "</span></div>";
-                } else if (bubble) {
-                  bubble.innerHTML = '<div class="gc-status"><div class="gc-typing"><i></i><i></i><i></i></div><span>' + escapeHtml(t("checking")) + "</span></div>";
-                }
-                scrollDown();
-              } else if (ev.type === "reset") {
-                acc = "";
-                if (bubble) bubble.innerHTML = "";
-              } else if (ev.type === "live") {
-                gotLive = true;
-                enterLive(ev);
-              } else if (ev.type === "done") {
-                finish(ev);
-              } else if (ev.type === "error") {
-                ensureRow();
-                acc = ev.error || "I couldn't reply just now.";
-                bubble.innerHTML = renderMarkdown(acc);
-              }
-            } catch (e) {}
-          });
+          buf = takeCompleteSseLines(buf, handleLine);
+          if (finished) return;
+          watch.received(!!acc);
           return pump();
         });
       }
       return pump();
     }).catch(function () {
-      ensureRow();
-      bubble.innerHTML = escapeHtml(t("reach"));
-      finish(null);
+      try {
+        if (finished) return;
+        ensureRow();
+        if (!acc) {
+          acc = t("reach");
+          if (bubble) bubble.innerHTML = escapeHtml(acc);
+        }
+        finish(null);
+      } finally {
+        if (state.sending) {
+          state.sending = false;
+          sendBtn.disabled = syncSendLocked(false);
+          setThinking(false);
+        }
+      }
     });
 
     function finish(ev) {
       if (finished) return;
-      if (thread === "support" || (!ev && gotLive && !acc)) {
-        finished = true;
-        typing.remove();
-        setThinking(false);
-        state.sending = false;
-        sendBtn.disabled = false;
-        return;
-      }
       finished = true;
-      ensureRow();
-      setThinking(false);
-      state.sending = false;
-      sendBtn.disabled = false;
-      if (ev && ev.answer && !acc) {
-        acc = ev.answer;
-        bubble.innerHTML = renderMarkdown(acc);
+      try { watch.stop(); } catch (e) {}
+      try {
+        if (thread === "support" || (!ev && gotLive && !acc)) {
+          typing.remove();
+          return;
+        }
+        ensureRow();
+        if (ev && ev.answer && !acc) {
+          acc = ev.answer;
+          if (bubble) bubble.innerHTML = renderMarkdown(acc);
+        }
+        if (row) {
+          if (ev && ev.results) addResults(row, ev.results);
+          if (ev && ev.sources) addSources(row, ev.sources);
+          if (ev && ev.cards) addCards(row, ev.cards);
+        }
+        if (ev && ev.suggestions) addSuggestions(ev.suggestions);
+        if (ev && ev.answer) state.replies++;
+        if (/\b(thanks|thank you|cheers|that'?s all|solved|fixed|sorted|gracias|merci|danke|obrigad|grazie|bedankt|dzięki)\b/i.test(message)) maybeCsat(false);
+        var spoken = acc || (ev && ev.answer) || "";
+        if (ev && ev.assistantLogId) state.lastLogId = ev.assistantLogId;
+        if (row && spoken) addFeedback(row, (ev && ev.assistantLogId) || "", spoken);
+        if (row && (state.usedVoice || state.voiceOutput)) startSpeak(spoken, row.querySelector(".gc-speak"));
+        state.usedVoice = false;
+        playPop();
+        if (!state.open) setUnread(true);
+        scrollDown();
+      } finally {
+        state.sending = false;
+        sendBtn.disabled = syncSendLocked(state.sending);
+        setThinking(false);
       }
-      if (ev && ev.results) addResults(row, ev.results);
-      if (ev && ev.sources) addSources(row, ev.sources);
-      if (ev && ev.suggestions) addSuggestions(ev.suggestions);
-      if (ev && ev.cards) addCards(row, ev.cards);
-      if (ev && ev.answer) state.replies++;
-      if (/\b(thanks|thank you|cheers|that'?s all|solved|fixed|sorted|gracias|merci|danke|obrigad|grazie|bedankt|dzięki)\b/i.test(message)) maybeCsat(false);
-      if (ev && ev.assistantLogId) {
-        state.lastLogId = ev.assistantLogId;
-        addFeedback(row, ev.assistantLogId, acc || ev.answer);
-      }
-      var spoken = acc || (ev && ev.answer) || "";
-      if (state.usedVoice || state.voiceOutput) startSpeak(spoken, row.querySelector(".gc-speak"));
-      state.usedVoice = false;
-      playPop();
-      if (!state.open) setUnread(true);
-      scrollDown();
     }
   }
 
@@ -1678,7 +1780,12 @@
   tabClose.addEventListener("click", function () { markSupportDone(); });
   endBtn.addEventListener("click", function () { endLiveChat("end"); });
   sendBtn.addEventListener("click", function () { sendMessage(); });
-  input.addEventListener("input", visitorTyping);
+  function syncSendBtn() {
+    if (!state.sending) sendBtn.disabled = syncSendLocked(false);
+  }
+  input.addEventListener("input", function () { visitorTyping(); syncSendBtn(); });
+  input.addEventListener("keyup", syncSendBtn);
+  input.addEventListener("change", syncSendBtn);
   input.addEventListener("keydown", function (ev) {
     if (ev.key === "Enter" && !ev.shiftKey) {
       ev.preventDefault();

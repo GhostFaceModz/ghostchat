@@ -29,7 +29,7 @@ services:
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_MODEL
-        value: deepseek/deepseek-v4-flash
+        value: google/gemma-4-31b-it:free
       - key: AI_PROVIDER
         value: openrouter
       - key: EMBEDDING_PROVIDER

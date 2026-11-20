@@ -20,6 +20,24 @@ import type { Site } from "../types.js";
 
 export const chatRouter = Router();
 
+/** Test seams. Production leaves these unset. */
+export const chatTestHooks: {
+  loadSite?: (siteKey: string) => Promise<Site | null>;
+  streamAnswer?: typeof streamAnswer;
+  answerQuestion?: typeof answerQuestion;
+  assertCanSend?: typeof assertCanSend;
+} = {};
+
+/** SSE comment so proxies and mobile browsers don't drop an idle stream before the first token. */
+export function startSseHeartbeat(write: (chunk: string) => void, ended: () => boolean, intervalMs = 8000): () => void {
+  const timer = setInterval(() => {
+    if (ended()) return;
+    try { write(": ping\n\n"); } catch { /* response already closed */ }
+  }, intervalMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
 async function loadSiteByKey(siteKey: string): Promise<Site | null> {
   return loadSiteByPublicKey(siteKey);
 }
@@ -44,7 +62,7 @@ export async function chatRateLimit(ip: string, siteKey: string, sessionId: stri
   return null;
 }
 
-chatRouter.post("/", async (req, res) => {
+chatRouter.post(["/", "/stream"], async (req, res) => {
   const siteKey = String(req.body?.siteKey || req.body?.site_key || "");
   const message = String(req.body?.message || "").trim();
   const sessionId = String(req.body?.sessionId || req.body?.session_id || "").trim() || "anon";
@@ -62,7 +80,7 @@ chatRouter.post("/", async (req, res) => {
     return res.status(429).json({ error: limited.message, retryAfter: limited.retryAfterSec });
   }
 
-  const site = await loadSiteByKey(siteKey);
+  const site = await (chatTestHooks.loadSite ?? loadSiteByKey)(siteKey);
   if (!site) return res.status(404).json({ error: "Unknown site key." });
 
   // Visitor language (reply in it) and returning-visitor memory (anonymous id, opt-out respected).
@@ -120,7 +138,7 @@ chatRouter.post("/", async (req, res) => {
   }
 
   try {
-    await assertCanSend(site, isAutoModel(site.chat_model) ? 1 : modelCreditCost(site.chat_provider, site.chat_model));
+    await (chatTestHooks.assertCanSend ?? assertCanSend)(site, isAutoModel(site.chat_model) ? 1 : modelCreditCost(site.chat_provider, site.chat_model));
   } catch (err) {
     const status = (err as Error & { status?: number }).status ?? 400;
     return res.status(status).json({ error: (err as Error).message });
@@ -131,12 +149,15 @@ chatRouter.post("/", async (req, res) => {
     res.setHeader("content-type", "text/event-stream; charset=utf-8");
     res.setHeader("cache-control", "no-cache, no-transform");
     res.setHeader("connection", "keep-alive");
+    res.setHeader("x-accel-buffering", "no");
     res.flushHeaders?.();
     const send = (event: Record<string, unknown>) => {
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
     };
+    const heartbeatMs = Number(process.env.SSE_HEARTBEAT_MS) || 8000;
+    const stopHeartbeat = startSseHeartbeat((chunk) => { if (!res.writableEnded) res.write(chunk); }, () => Boolean(res.writableEnded), heartbeatMs);
     try {
-      const outcome = await streamAnswer({ site, message, sessionId, pageUrl, ctx, onEvent: send });
+      const outcome = await (chatTestHooks.streamAnswer ?? streamAnswer)({ site, message, sessionId, pageUrl, ctx, onEvent: send });
       remember();
       if (outcome.unsure && liveOnline(site)) {
         const reason = shouldStartLive(site, message, await countUnsure(site.id, sessionId));
@@ -149,8 +170,10 @@ chatRouter.post("/", async (req, res) => {
     } catch (err) {
       console.error("chat route failed:", (err as Error).message);
       send({ type: "error", error: "Sorry, I'm having trouble replying right now. Please try again in a minute." });
+    } finally {
+      stopHeartbeat();
+      if (!res.writableEnded) res.end();
     }
-    res.end();
     return;
   }
 

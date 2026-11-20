@@ -20,7 +20,7 @@ export type SearchTool = {
 };
 export type ToolItem = { title: string; url: string; image: string | null; subtitle: string | null; rating: number | null; description: string | null; year: number | null };
 
-export const PLACEHOLDERS = ["query", "genre", "mood", "year_from", "year_to", "similar_to", "type", "language", "actors", "rating", "keyword"] as const;
+export const PLACEHOLDERS = ["query", "genre", "mood", "year_from", "year_to", "similar_to", "type", "language", "actors", "rating", "keyword", "sort"] as const;
 const TOOL_INTENTS: IntentKind[] = ["recommend", "find", "howto", "account", "support", "other"];
 const MAX_TOOLS = 3;
 const MAX_BYTES = 1_500_000;

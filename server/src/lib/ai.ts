@@ -5,6 +5,7 @@ import { modelCreditCost } from "./credits.js";
 
 import {
   FREE_MODEL_TIMEOUT_MS,
+  FREE_OPENROUTER_FALLBACK,
   availableFreeModels,
   currentFreePoolIds,
   nextFreeInPool,
@@ -16,6 +17,26 @@ export { FREE_OPENROUTER_FALLBACK, FREE_OPENROUTER_FALLBACKS, poolHealth, startF
 
 export function isFreeOpenRouterModel(model: string): boolean {
   return model.endsWith(":free") || model === "openrouter/free";
+}
+
+/** Models that used to be the cold-start default and 402 when the key has no paid credits. */
+export function isLegacyPaidDefault(model: string): boolean {
+  return /(?:^|\/)deepseek-v4-flash$/.test(model) || /(?:^|\/)gpt-4o-mini$/.test(model);
+}
+
+export function paidCreditsBlocked(): boolean {
+  return Date.now() < paidCreditSkipUntil;
+}
+
+/**
+ * Helper calls (intent, suggestions) must not open on a paid id when this deploy is free-first
+ * or paid credits were just exhausted. That first paid request is the cold-boot 402.
+ */
+export function backgroundChatModel(explicit?: string | null): string {
+  const env = process.env.OPENROUTER_MODEL?.trim() || "";
+  if (isFreeOpenRouterModel(env)) return env;
+  if (paidCreditsBlocked()) return availableFreeModels()[0] || FREE_OPENROUTER_FALLBACK;
+  return (explicit || process.env.INTENT_MODEL || env || "").trim();
 }
 import { embedInActiveSpace } from "./embeddingSpace.js";
 
@@ -67,6 +88,12 @@ function withModel(body: unknown, model: string): unknown {
 }
 
 async function aiFetch(resolved: ResolvedModel, path: string, body: unknown, stream = false, fetchImpl: typeof fetch = fetch, usedFree: string[] = [], tracker?: { model: string }, allowSwitch = true): Promise<Response> {
+  const envModel = process.env.OPENROUTER_MODEL?.trim() || "";
+  // Cold boot: paidCreditSkipUntil is still 0, so the old default would 402 once before the skip kicks in.
+  if (allowSwitch && resolved.provider === "openrouter" && isFreeOpenRouterModel(envModel) && isLegacyPaidDefault(String(resolved.model))) {
+    if (tracker) tracker.model = envModel;
+    return aiFetch({ ...resolved, model: envModel }, path, withModel(body, envModel), stream, fetchImpl, usedFree, tracker, allowSwitch);
+  }
   if (tracker) tracker.model = String(resolved.model);
   if (!resolved.apiKey) {
     throw new Error(`No API key is configured for ${resolved.provider}.`);
@@ -336,32 +363,70 @@ export async function* streamChat(
     opts.usage.model = tracker.model;
     opts.usage.credits = modelCreditCost(usage.provider, tracker.model);
   }
-  const reader = res.body!.getReader();
+  if (!res.body) throw new AiUnavailableError(`${resolved.provider} did not return a stream`);
+  yield* streamOpenRouterAttempt(res.body);
+}
+
+type SseDelta = { choices?: Array<{ delta?: { content?: string } }> };
+
+/** Split a provider SSE buffer into complete lines plus any partial tail. `[DONE]` ends the attempt. */
+export function pullSseTokens(buffer: string): { rest: string; tokens: string[]; done: boolean } {
+  const lines = buffer.split(/\r?\n/);
+  let rest = lines.pop() ?? "";
+  const tokens: string[] = [];
+  let done = false;
+  const take = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) return;
+    const data = trimmed.slice(5).trim();
+    if (data === "[DONE]") { done = true; return; }
+    try {
+      const token = (JSON.parse(data) as SseDelta).choices?.[0]?.delta?.content;
+      if (token) tokens.push(token);
+    } catch {
+      // ignore partial SSE chunks
+    }
+  };
+  for (const line of lines) {
+    take(line);
+    if (done) break;
+  }
+  // A chunk often ends on `data: [DONE]` with no trailing newline. Don't wait for TCP EOF to notice.
+  if (!done && /^data:\s*\[DONE\]\s*$/.test(rest.trim())) {
+    done = true;
+    rest = "";
+  }
+  return { rest, tokens, done };
+}
+
+/**
+ * Read one OpenRouter SSE body. Returns as soon as `data: [DONE]` arrives and cancels the reader,
+ * instead of blocking until the upstream socket closes.
+ */
+export async function* streamOpenRouterAttempt(body: ReadableStream<Uint8Array>, idleMs = 20_000): AsyncGenerator<string> {
+  const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  const IDLE_MS = 20_000;
-  while (true) {
-    let idle: ReturnType<typeof setTimeout> | undefined;
-    const { done, value } = await Promise.race([
-      reader.read(),
-      new Promise<never>((_, reject) => { idle = setTimeout(() => { reader.cancel().catch(() => {}); reject(new AiUnavailableError("The AI stream stalled")); }, IDLE_MS); }),
-    ]).finally(() => clearTimeout(idle));
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith("data:")) continue;
-      const data = trimmed.slice(5).trim();
-      if (data === "[DONE]") return;
-      try {
-        const json = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> };
-        const token = json.choices?.[0]?.delta?.content;
-        if (token) yield token;
-      } catch {
-        // ignore partial SSE chunks
-      }
+  try {
+    while (true) {
+      let idle: ReturnType<typeof setTimeout> | undefined;
+      const { done, value } = await Promise.race([
+        reader.read(),
+        new Promise<never>((_, reject) => {
+          idle = setTimeout(() => {
+            reader.cancel().catch(() => {});
+            reject(new AiUnavailableError("The AI stream stalled"));
+          }, idleMs);
+        }),
+      ]).finally(() => clearTimeout(idle));
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parsed = pullSseTokens(buffer);
+      buffer = parsed.rest;
+      for (const token of parsed.tokens) yield token;
+      if (parsed.done) break;
     }
+  } finally {
+    await reader.cancel().catch(() => {});
   }
 }
