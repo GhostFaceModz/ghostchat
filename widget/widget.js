@@ -73,7 +73,7 @@
 
   // UI strings for the main languages (the bot itself replies in whatever language the visitor writes).
   var I18N = {
-    en: { ph: "Ask a question…", send: "Send message", checking: "Checking the site…", online: "AI assistant · Online", subSupport: "Support · Online", subInstant: "We reply instantly", htGhostChat: "GhostChat", htGhostChatSupport: "GhostChat Support", htSupport: "Support", htHelpCenter: "Help Center", htCustomerCare: "Customer Care", htLiveHelp: "Live Help", htSalesAssistant: "Sales Assistant", pb: "Powered by", add: "Add to your website →", err: "I couldn't reply just now. Please try again in a moment.", reach: "I couldn't reach the assistant just now. Please try again.", followTitle: "Want a human to follow up?", followSub: "Leave your email and the team will get back to you.", thanks: "Thanks! The team will follow up by email.", ticket: "Ticket created. The team will reply by email.", sendErr: "Could not send just now.", email: "you@email.com", mem: "This chat remembers your preferences on this device.", forget: "Forget me", memOff: "Memory is off for this chat.", memOn: "Turn on", csatQ: "How did we do?", csatThanks: "Thanks for the feedback!", speak: "Ask by voice", listening: "Listening…", micBlocked: "Voice input isn't available here. You can type instead.", readAloud: "Read replies aloud", listen: "Listen", stopReading: "Stop reading", min: "Minimise chat", greetClose: "Dismiss", tabAi: "Assistant", tabSupport: "Support", endChat: "End chat with agent", connecting: "Connecting you to a support agent…", joined: "{name} joined", openSupport: "Open Support", stayAi: "Stay with Assistant", cancelWait: "Cancel", dismiss: "Dismiss", backAi: "You're back with the AI assistant.", csatComment: "A comment (optional)", csatSend: "Send review", supportPh: "Message the team…", skipReview: "Skip review", closeSupport: "Close support chat", ended: "This support chat has ended." },
+    en: { ph: "Ask a question…", send: "Send message", checking: "Checking the site…", online: "AI assistant · Online", subSupport: "Support · Online", subInstant: "We reply instantly", htGhostChat: "GhostChat", htGhostChatSupport: "GhostChat Support", htSupport: "Support", htHelpCenter: "Help Center", htCustomerCare: "Customer Care", htLiveHelp: "Live Help", htSalesAssistant: "Sales Assistant", pb: "Powered by", add: "Add to your website →", err: "I couldn't reply just now. Please try again in a moment.", reach: "I couldn't reach the assistant just now. Please try again.", followTitle: "Want a human to follow up?", followSub: "Leave your email and the team will get back to you.", thanks: "Thanks! The team will follow up by email.", ticket: "Ticket created. The team will reply by email.", sendErr: "Could not send just now.", email: "you@email.com", mem: "This chat remembers your preferences on this device.", forget: "Forget me", memOff: "Memory is off for this chat.", memOn: "Turn on", csatQ: "How did we do?", csatThanks: "Thanks for the feedback!", speak: "Ask by voice", listening: "Listening…", micBlocked: "Voice input isn't available here. You can type instead.", micStop: "Stop listening", micUnsupported: "This browser can't do voice input. Try Chrome on Android or desktop, or just type.", micInsecure: "Voice input needs a secure (https) page. You can type instead.", micDenied: "Microphone access is blocked. Allow the microphone for this site in your browser settings, then tap the mic again.", micNoMic: "No microphone was found. Check your microphone and try again.", micNoSpeech: "I didn't hear anything. Tap the mic and try again.", micNet: "Voice recognition couldn't connect. Check your connection or type instead.", micFailed: "The microphone couldn't start. Tap the mic to try again.", readAloud: "Read replies aloud", listen: "Listen", stopReading: "Stop reading", min: "Minimise chat", greetClose: "Dismiss", tabAi: "Assistant", tabSupport: "Support", endChat: "End chat with agent", connecting: "Connecting you to a support agent…", joined: "{name} joined", openSupport: "Open Support", stayAi: "Stay with Assistant", cancelWait: "Cancel", dismiss: "Dismiss", backAi: "You're back with the AI assistant.", csatComment: "A comment (optional)", csatSend: "Send review", supportPh: "Message the team…", skipReview: "Skip review", closeSupport: "Close support chat", ended: "This support chat has ended." },
     es: { ph: "Haz una pregunta…", send: "Enviar mensaje", checking: "Consultando el sitio…", online: "Asistente IA · En línea", subSupport: "Soporte · En línea", subInstant: "Respondemos al instante", htGhostChat: "GhostChat", htGhostChatSupport: "Soporte GhostChat", htSupport: "Soporte", htHelpCenter: "Centro de ayuda", htCustomerCare: "Atención al cliente", htLiveHelp: "Ayuda en vivo", htSalesAssistant: "Asistente de ventas", pb: "Con la tecnología de", add: "Añádelo a tu web →", err: "No he podido responder ahora. Inténtalo de nuevo en un momento.", reach: "No he podido conectar con el asistente. Inténtalo de nuevo.", followTitle: "¿Quieres que una persona te responda?", followSub: "Deja tu correo y el equipo se pondrá en contacto.", thanks: "¡Gracias! El equipo te escribirá por correo.", ticket: "Ticket creado. El equipo te responderá por correo.", sendErr: "No se pudo enviar ahora.", email: "tu@correo.com", mem: "Este chat recuerda tus preferencias en este dispositivo.", forget: "Olvidarme", memOff: "La memoria está desactivada.", memOn: "Activar", csatQ: "¿Qué tal te hemos ayudado?", csatThanks: "¡Gracias por tu opinión!", speak: "Preguntar por voz", listening: "Escuchando…", micBlocked: "La voz no está disponible aquí. Puedes escribir.", readAloud: "Leer respuestas en voz alta", listen: "Escuchar", stopReading: "Dejar de leer", min: "Minimizar chat", greetClose: "Cerrar", tabAi: "Asistente", tabSupport: "Soporte", endChat: "Terminar chat con el agente", connecting: "Conectándote con un agente de soporte…", joined: "{name} se unió", openSupport: "Abrir Soporte", stayAi: "Seguir con el Asistente", cancelWait: "Cancelar", dismiss: "Cerrar", backAi: "Has vuelto con el asistente de IA.", csatComment: "Un comentario (opcional)", csatSend: "Enviar reseña", supportPh: "Escribe al equipo…", skipReview: "Omitir reseña", closeSupport: "Cerrar chat de soporte", ended: "Este chat de soporte ha terminado." },
     fr: { ph: "Posez une question…", send: "Envoyer", checking: "Je consulte le site…", online: "Assistant IA · En ligne", subSupport: "Assistance · En ligne", subInstant: "Nous répondons immédiatement", htGhostChat: "GhostChat", htGhostChatSupport: "Assistance GhostChat", htSupport: "Assistance", htHelpCenter: "Centre d’aide", htCustomerCare: "Service client", htLiveHelp: "Aide en direct", htSalesAssistant: "Assistant commercial", pb: "Propulsé par", add: "Ajoutez-le à votre site →", err: "Je n'ai pas pu répondre. Réessayez dans un instant.", reach: "Impossible de joindre l'assistant. Réessayez.", followTitle: "Besoin qu'une personne vous recontacte ?", followSub: "Laissez votre e-mail et l'équipe vous répondra.", thanks: "Merci ! L'équipe vous répondra par e-mail.", ticket: "Ticket créé. L'équipe vous répondra par e-mail.", sendErr: "Envoi impossible pour le moment.", email: "vous@email.com", mem: "Ce chat mémorise vos préférences sur cet appareil.", forget: "M'oublier", memOff: "La mémoire est désactivée.", memOn: "Activer", csatQ: "Comment avons-nous fait ?", csatThanks: "Merci pour votre avis !", speak: "Poser par la voix", listening: "J'écoute…", micBlocked: "La saisie vocale n'est pas disponible ici.", readAloud: "Lire les réponses", listen: "Écouter", stopReading: "Arrêter la lecture", min: "Réduire le chat", greetClose: "Fermer", tabAi: "Assistant", tabSupport: "Support", endChat: "Terminer le chat avec l'agent", connecting: "Connexion à un agent du support…", joined: "{name} a rejoint", openSupport: "Ouvrir le Support", stayAi: "Rester avec l'Assistant", cancelWait: "Annuler", dismiss: "Fermer", backAi: "Vous êtes de retour avec l'assistant IA.", csatComment: "Un commentaire (facultatif)", csatSend: "Envoyer l'avis", supportPh: "Écrire à l'équipe…", skipReview: "Passer l'avis", closeSupport: "Fermer le chat support", ended: "Ce chat de support est terminé." },
     de: { ph: "Stell eine Frage…", send: "Senden", checking: "Ich sehe auf der Website nach…", online: "KI-Assistent · Online", subSupport: "Support · Online", subInstant: "Wir antworten sofort", htGhostChat: "GhostChat", htGhostChatSupport: "GhostChat Support", htSupport: "Support", htHelpCenter: "Hilfecenter", htCustomerCare: "Kundenservice", htLiveHelp: "Live-Hilfe", htSalesAssistant: "Verkaufsassistent", pb: "Bereitgestellt von", add: "Auf deiner Website einbauen →", err: "Ich konnte gerade nicht antworten. Bitte versuch es gleich noch einmal.", reach: "Der Assistent ist gerade nicht erreichbar.", followTitle: "Soll sich jemand bei dir melden?", followSub: "Hinterlass deine E-Mail, das Team meldet sich.", thanks: "Danke! Das Team meldet sich per E-Mail.", ticket: "Ticket erstellt. Das Team antwortet per E-Mail.", sendErr: "Senden gerade nicht möglich.", email: "du@email.de", mem: "Dieser Chat merkt sich deine Vorlieben auf diesem Gerät.", forget: "Vergessen", memOff: "Gedächtnis ist aus.", memOn: "Einschalten", csatQ: "Wie war die Hilfe?", csatThanks: "Danke für dein Feedback!", speak: "Per Sprache fragen", listening: "Ich höre zu…", micBlocked: "Spracheingabe ist hier nicht verfügbar.", readAloud: "Antworten vorlesen", listen: "Anhören", stopReading: "Vorlesen beenden", min: "Chat minimieren", greetClose: "Schließen", tabAi: "Assistent", tabSupport: "Support", endChat: "Chat mit dem Agenten beenden", connecting: "Du wirst mit einem Support-Agenten verbunden…", joined: "{name} ist beigetreten", openSupport: "Support öffnen", stayAi: "Beim Assistenten bleiben", cancelWait: "Abbrechen", dismiss: "Schließen", backAi: "Du bist wieder beim KI-Assistenten.", csatComment: "Kommentar (optional)", csatSend: "Bewertung senden", supportPh: "Nachricht an das Team…", skipReview: "Bewertung überspringen", closeSupport: "Support-Chat schließen", ended: "Dieser Support-Chat ist beendet." },
@@ -635,6 +635,7 @@
       maybeGreet();
       if (!state._openedOnce) { state._openedOnce = true; trackEvent("ghostchat_open"); }
     } else {
+      teardownVoice();
       var back = lastFocus && typeof lastFocus.focus === "function" ? lastFocus : launcher;
       lastFocus = null;
       try { back.focus(); } catch (e) { try { launcher.focus(); } catch (e2) {} }
@@ -975,9 +976,19 @@
     s = s.replace(/(\*\*|__)(.*?)\1/g, "$2");
     s = s.replace(/(\*|_)(.*?)\1/g, "$2");
     s = s.replace(/^>\s?/gm, "");
-    s = s.replace(/^\s*[-*+]\s+/gm, "");
-    s = s.replace(/^\s*\d+\.\s+/gm, "");
+    s = s.replace(/^\s*[-*+\u2022]\s+/gm, "");
+    s = s.replace(/^\s*\d+[.)]\s+/gm, "");
     s = s.replace(/<[^>]+>/g, " ");
+    // Line breaks become sentence pauses so lists and paragraphs don't run together.
+    s = s.replace(/([^.!?:;,\s])[ \t]*\n+[ \t]*/g, "$1. ");
+    s = s.replace(/\s*\n+\s*/g, " ");
+    s = s.replace(/\s&\s/g, " and ");
+    s = s.replace(/\u00A3\s?(\d[\d,]*(?:\.\d+)?)/g, "$1 pounds");
+    s = s.replace(/\$\s?(\d[\d,]*(?:\.\d+)?)/g, "$1 dollars");
+    s = s.replace(/\u20AC\s?(\d[\d,]*(?:\.\d+)?)/g, "$1 euros");
+    s = s.replace(/(\d)\s?%/g, "$1 percent");
+    s = s.replace(/\s[-\u2013\u2014]{1,2}\s/g, ", ");
+    s = s.replace(/\u2026/g, "...");
     try { s = s.replace(/\p{Extended_Pictographic}/gu, ""); } catch (e) {
       s = s.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "");
     }
@@ -1036,6 +1047,9 @@
     if (/^(Samantha|Daniel|Moira|Karen|Tessa|Serena|Martha|Kate|Arthur|Allison|Ava|Nicky|Gordon|Rishi|Fiona|Veena|Zoe|Kyoko|Mei-Jia|Ting-Ting|Sin-Ji)\b/i.test(name)) score += 30;
     if (/\b(Premium|Enhanced|Neural|Wavenet)\b/i.test(name)) score += 12;
     if (voice.localService === false) score += 6;
+    var vuri = String(voice.voiceURI || "");
+    if (/network/i.test(vuri) || /network/i.test(name)) score += 14;
+    else if (/-local\b/i.test(vuri) && voice.localService !== false) score -= 4;
     if (wantBase === "en" && /en-GB/i.test(vlang)) score += 8;
     if (/\b(compact|eloquence|eSpeak|Fred|Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Good News|Jester|Organ|Pipe|Trinoids|Whisper|Zarvox|Kathy|Junior|Princess|Ralph|Dummy)\b/i.test(name)) score -= 50;
     return score;
@@ -1082,13 +1096,17 @@
     btn.setAttribute("aria-label", t("listen"));
   }
   function stopSpeak() {
+    speakToken++;
     speakQueue = [];
     if (speakTimer) { clearInterval(speakTimer); speakTimer = null; }
     try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
     clearSpeakUi(speakingBtn);
     speakingBtn = null;
   }
+  var IS_ANDROID = /Android/i.test(navigator.userAgent || "");
   function watchSpeak() {
+    // Android Chrome treats pause() as a cancel, and our chunks are short, so only nudge on desktop.
+    if (IS_ANDROID) return;
     if (speakTimer) clearInterval(speakTimer);
     // Chrome cuts off utterances around 15s; Safari can stall. Nudge both.
     speakTimer = setInterval(function () {
@@ -1107,11 +1125,17 @@
     }
     var chunk = speakQueue.shift();
     var u = new SpeechSynthesisUtterance(chunk.text);
-    u.rate = 1.02;
+    u.rate = 1;
+    u.pitch = 1;
+    u.volume = 1;
     u.lang = chunk.lang;
     if (chunk.voice) u.voice = chunk.voice;
-    u.onend = function () { speakNextChunk(); };
-    u.onerror = function () { stopSpeak(); };
+    u.onend = function () { setTimeout(speakNextChunk, 60); };
+    u.onerror = function (ev) {
+      var why = ev && ev.error;
+      if (why === "interrupted" || why === "canceled") return;
+      stopSpeak();
+    };
     try { window.speechSynthesis.speak(u); watchSpeak(); } catch (e) { stopSpeak(); }
   }
   function startSpeak(text, btn) {
@@ -1123,12 +1147,10 @@
       return;
     }
     stopSpeak();
+    stopListening(false);
     var lang = detectSpeechLang(clean, fallbackSpeechLang());
-    var voices = [];
-    try { voices = window.speechSynthesis.getVoices() || []; } catch (e) {}
-    var voice = pickSpeechVoice(voices, lang);
-    var chunks = splitSpeechChunks(clean, 220);
-    speakQueue = chunks.map(function (part) { return { text: part, lang: lang, voice: voice }; });
+    var chunks = splitSpeechChunks(clean, 200);
+    var token = ++speakToken;
     speakingBtn = btn || null;
     if (btn) {
       btn.classList.add("gc-speaking");
@@ -1136,7 +1158,30 @@
       btn.setAttribute("title", t("stopReading"));
       btn.setAttribute("aria-label", t("stopReading"));
     }
-    speakNextChunk();
+    // Chrome loads its voice list late; without waiting we'd fall back to the plain default voice.
+    whenVoicesReady(function (voices) {
+      if (token !== speakToken) return;
+      var voice = pickSpeechVoice(voices, lang);
+      speakQueue = chunks.map(function (part) { return { text: part, lang: lang, voice: voice }; });
+      speakNextChunk();
+    });
+  }
+  var speakToken = 0;
+  function whenVoicesReady(cb) {
+    var done = false;
+    function fin() {
+      if (done) return;
+      done = true;
+      try { window.speechSynthesis.removeEventListener("voiceschanged", fin); } catch (e) {}
+      var v = [];
+      try { v = window.speechSynthesis.getVoices() || []; } catch (e) {}
+      cb(v);
+    }
+    var have = [];
+    try { have = window.speechSynthesis.getVoices() || []; } catch (e) {}
+    if (have.length) { fin(); return; }
+    try { window.speechSynthesis.addEventListener("voiceschanged", fin); } catch (e) {}
+    setTimeout(fin, 1200);
   }
   function speak(text, force) {
     if (!(state.voiceOutput || force) || !window.speechSynthesis) return;
@@ -1144,48 +1189,138 @@
   }
 
   function canListen() {
-    return state.voice && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    // Keep the mic visible whenever voice mode is on, so unsupported browsers get a clear message on tap.
+    return !!state.voice;
   }
 
-  var activeRec = null;
-  function stopListening() {
-    micBtn.classList.remove("gc-listening");
-    micBtn.setAttribute("aria-pressed", "false");
-    input.placeholder = t("ph");
+  // Voice input is a small state machine: idle -> starting -> listening -> idle.
+  // Every exit path (tap, silence, error, close, page leave) goes through endListening(),
+  // which is idempotent and always releases the microphone.
+  var micSession = null;
+  var micState = "idle";
+  function setMicUi(mode) {
+    micState = mode;
+    var on = mode !== "idle";
+    micBtn.classList.toggle("gc-listening", on);
+    micBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    micBtn.setAttribute("data-state", mode);
+    var label = on ? t("micStop") : t("speak");
+    micBtn.setAttribute("aria-label", label);
+    micBtn.title = label;
+    input.placeholder = on ? t("listening") : t("ph");
+  }
+  function clearMicTimers(sess) {
+    ["startT", "silenceT", "noSpeechT", "maxT", "stopT"].forEach(function (k) {
+      if (sess[k]) { clearTimeout(sess[k]); sess[k] = null; }
+    });
+  }
+  function endListening(sess, send, message) {
+    if (!sess || sess.done) return;
+    sess.done = true;
+    clearMicTimers(sess);
+    var rec = sess.rec;
+    if (rec) {
+      rec.onresult = rec.onerror = rec.onend = rec.onstart = rec.onspeechstart = rec.onaudiostart = null;
+      try { rec.abort(); } catch (e) {}
+      try { rec.stop(); } catch (e) {}
+    }
+    if (micSession === sess) micSession = null;
+    setMicUi("idle");
+    var said = (sess.text || "").trim();
+    if (message) addSystem(t(message));
+    if (send && said) { state.usedVoice = true; sendMessage(said); }
+    else if (!send) { if (said && !message) input.value = said; }
+  }
+  // Public: stop whatever is listening. send=true submits what was heard so far.
+  function stopListening(send) {
+    if (micSession) endListening(micSession, !!send);
+    else if (micState && micState !== "idle") setMicUi("idle");
   }
   function startListening() {
+    if (micSession) {
+      // Second tap = stop now and send what we have.
+      var cur = micSession;
+      if (cur.text && cur.text.trim()) endListening(cur, true);
+      else endListening(cur, false);
+      return;
+    }
     var Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Ctor) { addSystem(t("micBlocked")); return; }
-    if (activeRec) { try { activeRec.stop(); } catch (e) {} return; }
+    if (!Ctor) { addSystem(t("micUnsupported")); return; }
+    if (window.isSecureContext === false) { addSystem(t("micInsecure")); return; }
+    stopSpeak();
     var rec;
-    try { rec = new Ctor(); } catch (e) { addSystem(t("micBlocked")); return; }
-    activeRec = rec;
+    try { rec = new Ctor(); } catch (e) { addSystem(t("micFailed")); return; }
+    var sess = { rec: rec, text: "", done: false, heard: false };
+    micSession = sess;
     rec.lang = state.speechLang || (state.multilingual ? (navigator.language || "en-GB") : (document.documentElement.lang || "en-GB"));
+    rec.continuous = false;
     rec.interimResults = true;
     rec.maxAlternatives = 1;
-    var finalText = "";
+    function armSilence() {
+      if (sess.silenceT) clearTimeout(sess.silenceT);
+      // Once words have come in, finish after a short pause so the mic never lingers.
+      sess.silenceT = setTimeout(function () { requestStop(sess); }, 1600);
+    }
+    rec.onstart = function () {
+      if (sess.done) return;
+      if (sess.startT) { clearTimeout(sess.startT); sess.startT = null; }
+      setMicUi("listening");
+      sess.noSpeechT = setTimeout(function () {
+        if (!sess.heard) endListening(sess, false, "micNoSpeech");
+      }, 9000);
+    };
     rec.onresult = function (ev) {
-      var interim = "";
-      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+      if (sess.done) return;
+      // Rebuild from every result: Android Chrome repeats results, so appending would duplicate words.
+      var fin = "", interim = "";
+      for (var i = 0; i < ev.results.length; i++) {
         var r = ev.results[i];
-        if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
+        if (r.isFinal) fin += r[0].transcript; else interim += r[0].transcript;
       }
-      input.value = (finalText + " " + interim).trim();
+      sess.text = (fin + " " + interim).replace(/\s+/g, " ").trim();
+      if (sess.text) {
+        sess.heard = true;
+        if (sess.noSpeechT) { clearTimeout(sess.noSpeechT); sess.noSpeechT = null; }
+        input.value = sess.text;
+        armSilence();
+      }
     };
     rec.onerror = function (ev) {
-      if (ev && (ev.error === "not-allowed" || ev.error === "service-not-allowed" || ev.error === "audio-capture")) addSystem(t("micBlocked"));
+      if (sess.done) return;
+      var code = ev && ev.error;
+      if (code === "aborted") return;
+      var msg = "";
+      if (code === "not-allowed" || code === "service-not-allowed") msg = "micDenied";
+      else if (code === "audio-capture") msg = "micNoMic";
+      else if (code === "network") msg = "micNet";
+      else if (code === "no-speech") msg = sess.heard ? "" : "micNoSpeech";
+      else msg = sess.heard ? "" : "micFailed";
+      // Keep anything already heard so the visitor can still send it.
+      endListening(sess, !msg && !!sess.text, msg || undefined);
     };
     rec.onend = function () {
-      activeRec = null;
-      stopListening();
-      var said = (finalText || input.value || "").trim();
-      if (said) { state.usedVoice = true; sendMessage(said); }
+      if (sess.done) return;
+      endListening(sess, true, sess.heard ? undefined : "micNoSpeech");
     };
-    micBtn.classList.add("gc-listening");
-    micBtn.setAttribute("aria-pressed", "true");
-    input.placeholder = t("listening");
-    try { rec.start(); } catch (e) { activeRec = null; stopListening(); addSystem(t("micBlocked")); }
+    setMicUi("starting");
+    // Hard caps so a stuck recogniser can never leave a hot mic.
+    sess.startT = setTimeout(function () { endListening(sess, false, "micFailed"); }, 25000);
+    sess.maxT = setTimeout(function () { requestStop(sess); }, 40000);
+    try { rec.start(); } catch (e) { endListening(sess, false, "micFailed"); }
   }
+  function requestStop(sess) {
+    if (!sess || sess.done) return;
+    try { sess.rec.stop(); } catch (e) {}
+    // If the engine never fires onend, release the mic ourselves.
+    if (!sess.stopT) sess.stopT = setTimeout(function () { endListening(sess, true); }, 1500);
+  }
+  function teardownVoice() {
+    stopListening(false);
+    stopSpeak();
+  }
+  window.addEventListener("pagehide", teardownVoice);
+  window.addEventListener("beforeunload", teardownVoice);
+  document.addEventListener("visibilitychange", function () { if (document.hidden) teardownVoice(); });
 
   function addFeedback(row, logId, text) {
     if (!logId && !text) return;
@@ -1554,6 +1689,7 @@
   function sendMessage(text) {
     var message = (text || input.value || "").trim();
     if (!message || state.sending) return;
+    if (micSession) stopListening(false);
     input.value = "";
     state.sending = true;
     sendBtn.disabled = syncSendLocked(true);
