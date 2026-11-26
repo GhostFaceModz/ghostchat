@@ -140,3 +140,34 @@ test("read-aloud is a separate owner setting, default on, and does not change vo
   assert.match(dashJs, /read_aloud_enabled: \$\("#theme-form"\)\.read_aloud_enabled/);
   assert.match(dashJs, /voice_enabled: \$\("#theme-form"\)\.voice_enabled/);
 });
+
+test("cleanSpeechText turns symbols and line breaks into natural speech", () => {
+  const clean = speech.cleanSpeechText("Plans:\n- Free\n- Pro for £19 & Business $49\nSave 20% today – limited.");
+  assert.match(clean, /Plans:/);
+  assert.match(clean, /Free\. Pro for 19 pounds and Business 49 dollars\. Save 20 percent today, limited\./);
+  assert.equal(clean.includes("£"), false);
+  assert.equal(clean.includes("&"), false);
+});
+
+test("pickSpeechVoice prefers Android network voices over local ones", () => {
+  const voices = [
+    { name: "English United Kingdom", lang: "en-GB", voiceURI: "en-gb-x-gba-local", localService: true },
+    { name: "English United Kingdom", lang: "en-GB", voiceURI: "en-gb-x-gbd-network", localService: false },
+  ];
+  const v = speech.pickSpeechVoice(voices, "en-GB") as { voiceURI: string };
+  assert.equal(v.voiceURI, "en-gb-x-gbd-network");
+});
+
+test("voice input is a state machine that always releases the mic", () => {
+  assert.match(widget, /continuous = false/);
+  assert.match(widget, /function endListening\(sess, send, message\)/);
+  assert.match(widget, /rec\.abort\(\)/);
+  assert.match(widget, /window\.addEventListener\("pagehide", teardownVoice\)/);
+  assert.match(widget, /document\.addEventListener\("visibilitychange", function \(\) \{ if \(document\.hidden\) teardownVoice\(\); \}\)/);
+  assert.match(widget, /teardownVoice\(\);\s*\n\s*var back = lastFocus/);
+  assert.match(widget, /micUnsupported:/);
+  assert.match(widget, /micDenied:/);
+  assert.match(widget, /micNoSpeech:/);
+  assert.match(widget, /whenVoicesReady/);
+  assert.doesNotMatch(widget, /getUserMedia/);
+});
